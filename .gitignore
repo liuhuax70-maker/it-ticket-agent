@@ -1,0 +1,36 @@
+# CodeBuddy
+.codebuddy/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+env/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# 环境变量与密钥
+.env
+.env.*
+!.env.example
+
+# 数据与模型
+data/
+*.sqlite
+*.db
+checkpoints/
+
+# 日志
+*.log
+logs/
+
+# IDE / 编辑器
+.idea/
+.vscode/
+
+# 系统
+.DS_Store
+Thumbs.db
