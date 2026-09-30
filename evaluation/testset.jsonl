@@ -1,0 +1,20 @@
+{"id": "Q01", "type": "lexical", "question": "ERR-4041 是什么错误，应该怎么处理？", "reference_answer": "ERR-4041 表示令牌已过期。请在客户端执行「退出登录」清理本地令牌后重新登录；若频繁出现，请检查服务器时间是否与 NTP 同步。", "expected_chunk_ids": ["manual-login-module#2", "T-1002#0"]}
+{"id": "Q02", "type": "lexical", "question": "ERR-5002 报错是什么原因？", "reference_answer": "ERR-5002 表示认证网关超时，通常由网络抖动引起，建议 30 秒后重试，并确认到认证网关的网络是否稳定。", "expected_chunk_ids": ["manual-login-module#3", "T-1003#0"]}
+{"id": "Q03", "type": "lexical", "question": "ERR-4011 是什么错误？", "reference_answer": "ERR-4011 表示账号或密码错误；连续 5 次失败会锁定账号 15 分钟。", "expected_chunk_ids": ["manual-login-module#2", "T-1004#0", "faq-common-questions#3"]}
+{"id": "Q04", "type": "lexical", "question": "升级到 v1.3.0 之后为什么所有同事都被强制退出登录？", "reference_answer": "这是预期行为。v1.3.0 将令牌签名算法从 HS256 变更为 RS256，旧令牌全部失效，因此所有用户需要重新登录一次。", "expected_chunk_ids": ["T-1001#0", "manual-login-module#3", "faq-common-questions#4"]}
+{"id": "Q05", "type": "lexical", "question": "登录模块手册适用于哪些版本？", "reference_answer": "适用于 v1.2.0 至 v1.3.5；低于 v1.2.0 的版本行为可能不同，请参考归档手册。", "expected_chunk_ids": ["manual-login-module#0"]}
+{"id": "Q06", "type": "lexical", "question": "升级到 v1.3.0 后管理员需要做什么？", "reference_answer": "管理员需要确认 migrate_auth.py 已成功执行，并核对 config 目录是否已备份。", "expected_chunk_ids": ["faq-common-questions#4", "T-1001#0", "manual-login-module#3"]}
+{"id": "Q07", "type": "lexical", "question": "migrate_auth.py 是什么脚本，什么时候需要执行？", "reference_answer": "migrate_auth.py 是认证迁移脚本，从 v1.2.x 升级到 v1.3.0 时需要执行；执行前应备份 config 目录。", "expected_chunk_ids": ["manual-login-module#3", "faq-common-questions#4"]}
+{"id": "Q08", "type": "lexical", "question": "v1.2.0 之前的版本可以用这份手册吗？", "reference_answer": "不适用。低于 v1.2.0 的版本行为可能不同，请参考归档手册。", "expected_chunk_ids": ["manual-login-module#0"]}
+{"id": "Q09", "type": "lexical", "question": "ERR-4041 频繁出现和 NTP 有什么关系？", "reference_answer": "ERR-4041 频繁出现时应检查服务器时间是否与 NTP 同步，时间不同步会导致令牌被判为过期。", "expected_chunk_ids": ["manual-login-module#2", "T-1002#0", "manual-login-module#4"]}
+{"id": "Q10", "type": "lexical", "question": "令牌签名算法在 v1.3.0 有什么变化？", "reference_answer": "v1.3.0 将令牌签名算法由 HS256 变更为 RS256，旧令牌全部失效。", "expected_chunk_ids": ["manual-login-module#3", "T-1001#0"]}
+{"id": "Q11", "type": "semantic", "question": "登录时提示令牌过期了，我该怎么办？", "reference_answer": "请在客户端执行「退出登录」清理本地令牌后重新登录；若仍然报错，检查服务器时间是否与 NTP 同步。", "expected_chunk_ids": ["manual-login-module#2", "T-1002#0"]}
+{"id": "Q12", "type": "semantic", "question": "密码输错太多次账号被锁了，要等多久？", "reference_answer": "连续 5 次密码错误会锁定账号 15 分钟，请等待锁定期结束后重试，或联系管理员解锁。", "expected_chunk_ids": ["T-1004#0", "manual-login-module#2"]}
+{"id": "Q13", "type": "semantic", "question": "为什么一直收不到验证邮件？", "reference_answer": "请先检查垃圾邮件目录，确认邮箱地址拼写是否正确，企业邮箱可能拦截外部发信，可在 5 分钟后重试发送。", "expected_chunk_ids": ["faq-common-questions#0", "T-1005#0"]}
+{"id": "Q14", "type": "semantic", "question": "改了密码以后，其他设备还需要重新登录吗？", "reference_answer": "需要。密码重置会撤销该账号下所有有效令牌，所有已登录设备都需要重新登录。", "expected_chunk_ids": ["faq-common-questions#1"]}
+{"id": "Q15", "type": "semantic", "question": "你们的产品支持哪些浏览器？", "reference_answer": "推荐使用 Chrome 100 及以上版本、Edge 100 及以上版本；不支持 IE 与 Firefox 90 以下版本。", "expected_chunk_ids": ["faq-common-questions#2"]}
+{"id": "Q16", "type": "semantic", "question": "我确定密码没输错，为什么还是提示账号或密码错误？", "reference_answer": "请检查是否开启大写锁定、输入法是否为全角字符；另外账号若已因连续失败被锁定也会返回相同错误码，请等待 15 分钟后重试。", "expected_chunk_ids": ["faq-common-questions#3", "manual-login-module#2"]}
+{"id": "Q17", "type": "semantic", "question": "登录令牌的有效期是多久？", "reference_answer": "令牌有效期默认 8 小时，到期后需要重新登录。", "expected_chunk_ids": ["manual-login-module#1"]}
+{"id": "Q18", "type": "semantic", "question": "认证网关偶尔连不上，应该如何排查？", "reference_answer": "认证网关超时多由网络抖动引起，建议 30 秒后重试，并确认到认证网关的网络是否可达、服务器时间是否与 NTP 同步。", "expected_chunk_ids": ["T-1003#0", "manual-login-module#4", "manual-login-module#3"]}
+{"id": "Q19", "type": "semantic", "question": "登录失败时我应该按什么步骤排查？", "reference_answer": "依次确认到认证网关的网络是否可达、服务器时间是否与 NTP 同步、令牌是否已过期、账号是否因连续失败被锁定。", "expected_chunk_ids": ["manual-login-module#4"]}
+{"id": "Q20", "type": "semantic", "question": "升级失败了会不会影响线上环境？", "reference_answer": "若迁移失败，系统会自动回滚到升级前状态；日志中仍会保留 ERR-4041 记录，属于正常现象。", "expected_chunk_ids": ["manual-login-module#3", "manual-login-module#4"]}

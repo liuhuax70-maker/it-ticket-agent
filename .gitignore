@@ -23,6 +23,9 @@ data/
 *.db
 checkpoints/
 
+# 评估产物（每次运行都会生成带时间戳的报告）
+evaluation/reports/
+
 # 日志
 *.log
 logs/
