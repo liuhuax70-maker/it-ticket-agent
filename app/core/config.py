@@ -26,14 +26,17 @@ class Settings(BaseSettings):
     log_level: str = "INFO"
 
     # ---- Milvus ----
-    milvus_host: str = "localhost"
+    # 用 127.0.0.1 而非 localhost：后者可能优先解析到 IPv6 ::1 导致连接挂起
+    milvus_host: str = "127.0.0.1"
     milvus_port: int = 19530
     milvus_collection: str = "kb_chunks"
 
     # ---- Ollama / 生成 ----
-    ollama_base_url: str = "http://localhost:11434"
-    llm_model: str = "qwen2.5:7b"
-    embedding_model: str = "qwen3-embedding"
+    ollama_base_url: str = "http://127.0.0.1:11434"
+    llm_model: str = "qwen3.5:9b"
+    embedding_model: str = "qwen3-embedding:0.6b"
+    embedding_dim: int = 1024
+    reranker_model: str = "dengcao/Qwen3-Reranker-4B:Q5_K_M"
 
     # ---- 检索参数 ----
     top_n_dense: int = 20

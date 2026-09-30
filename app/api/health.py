@@ -5,6 +5,7 @@
 """
 
 import asyncio
+import socket
 from urllib.parse import urlparse
 
 from fastapi import APIRouter, Request
@@ -18,19 +19,34 @@ _PROBE_TIMEOUT = 1.0
 
 
 async def _check_tcp(host: str, port: int, timeout: float = _PROBE_TIMEOUT) -> str:
-    """TCP 连通性探测，返回 up / down。"""
+    """TCP 连通性探测，返回 up / down。
+
+    注意：`localhost` 常优先解析为 IPv6 `::1`，而服务可能只监听 IPv4 `127.0.0.1`，
+    此时直接连接会一直挂起到超时。因此这里先做 DNS 解析，**逐个地址尝试**，
+    任一成功即视为 up（等价于 happy-eyeballs 的简化版）。
+    """
+    loop = asyncio.get_running_loop()
     try:
-        _, writer = await asyncio.wait_for(
-            asyncio.open_connection(host, port), timeout=timeout
-        )
+        infos = await loop.getaddrinfo(host, port, type=socket.SOCK_STREAM)
+    except OSError:
+        return "down"
+
+    for family, _socktype, _proto, _canon, sockaddr in infos:
+        try:
+            _, writer = await asyncio.wait_for(
+                asyncio.open_connection(sockaddr[0], sockaddr[1], family=family),
+                timeout=timeout,
+            )
+        except Exception:  # noqa: BLE001 - 单个地址失败就试下一个
+            continue
         writer.close()
         try:
             await writer.wait_closed()
         except Exception:  # noqa: BLE001 - 关闭异常不影响判定
             pass
         return "up"
-    except Exception:  # noqa: BLE001 - 任何异常都视为不可用
-        return "down"
+
+    return "down"
 
 
 @router.get("/health", response_model=ApiResponse[dict], summary="健康检查")
