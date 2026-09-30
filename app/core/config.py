@@ -45,6 +45,9 @@ class Settings(BaseSettings):
     top_k: int = 5
     rrf_k: int = 60
     rerank_enabled: bool = False
+    #: 单通道超时（秒）；超时则该通道降级。
+    #: 设计文档给的是 2s，但本地 embedding 首次调用含模型加载，故放宽到 5s。
+    channel_timeout_seconds: float = 5.0
 
     # ---- 编排 / 会话 ----
     checkpointer_backend: str = "sqlite"

@@ -33,7 +33,21 @@ def reciprocal_rank_fusion(
     for ranked in ranked_lists:
         for rank, chunk in enumerate(ranked, start=1):
             scores[chunk.chunk_id] += 1.0 / (k + rank)
-            by_id.setdefault(chunk.chunk_id, chunk)
+            existing = by_id.get(chunk.chunk_id)
+            if existing is None:
+                by_id[chunk.chunk_id] = chunk
+            else:
+                # 同一片段出现在多路时，保留两路的原始分数（便于观测各路贡献）
+                by_id[chunk.chunk_id] = existing.model_copy(
+                    update={
+                        "dense_score": existing.dense_score
+                        if existing.dense_score is not None
+                        else chunk.dense_score,
+                        "sparse_score": existing.sparse_score
+                        if existing.sparse_score is not None
+                        else chunk.sparse_score,
+                    }
+                )
 
     ordered = sorted(by_id.values(), key=lambda c: scores[c.chunk_id], reverse=True)
 
