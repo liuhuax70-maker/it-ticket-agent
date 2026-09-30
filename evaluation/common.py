@@ -29,10 +29,13 @@ class EvalItem:
     """一条评估样本。"""
 
     id: str
-    type: str  # lexical（专有名词/错误码/版本号） | semantic（语义化提问）
+    type: str  # lexical（专有名词/错误码/版本号） | semantic（语义化提问）| negative
     question: str
     reference_answer: str
     expected_chunk_ids: list[str] = field(default_factory=list)
+    #: manual（人工编写，可信度最高）| synthetic（模型生成并通过原话校验）
+    #: 两者分开统计，避免「合成样本刷量」掩盖真实质量
+    source: str = "manual"
 
 
 @dataclass

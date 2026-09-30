@@ -24,3 +24,177 @@
 {"id": "N04", "type": "negative", "question": "打印机驱动在哪里下载？", "reference_answer": "知识库中没有打印机驱动相关资料，应回答「根据现有资料无法确定」并建议转人工。", "expected_chunk_ids": []}
 {"id": "N05", "type": "negative", "question": "这个产品每年license费用是多少钱？", "reference_answer": "知识库中没有报价相关资料，应回答「根据现有资料无法确定」并建议转人工。", "expected_chunk_ids": []}
 {"id": "N06", "type": "negative", "question": "在哪里可以查到这个月的工资条？", "reference_answer": "知识库中没有工资条查询相关资料，应回答「根据现有资料无法确定」并建议转人工。", "expected_chunk_ids": []}
+{"id": "S001", "type": "semantic", "question": "升级 v1.3.0 后令牌签名算法从 HS256 改为 RS256，旧令牌失效的具体原因是什么？", "reference_answer": "v1.3.0 将令牌签名算法从 HS256 改为 RS256，旧令牌全部失效", "expected_chunk_ids": ["T-1001#0"], "source": "synthetic"}
+{"id": "S002", "type": "semantic", "question": "强制所有用户重新登录一次的预期行为依据是什么？", "reference_answer": "这是预期行为。v1.3.0 将令牌签名算法从 HS256 改为 RS256，旧令牌全部失效", "expected_chunk_ids": ["T-1001#0"], "source": "synthetic"}
+{"id": "S003", "type": "semantic", "question": "升级后确认 migrate_auth.py 已成功执行的通知对象是谁？", "reference_answer": "请通知管理员确认 migrate_auth.py 已成功执行", "expected_chunk_ids": ["T-1001#0"], "source": "synthetic"}
+{"id": "S004", "type": "semantic", "question": "登录一直提示令牌过期了怎么办？", "reference_answer": "请执行「退出登录」以清理本地令牌后重新登录", "expected_chunk_ids": ["T-1002#0"], "source": "synthetic"}
+{"id": "S005", "type": "semantic", "question": "如果退出登录再登还是报错，是不是服务器时间不对？", "reference_answer": "若仍然报错，请检查服务器时间是否与 NTP 同步。", "expected_chunk_ids": ["T-1002#0"], "source": "synthetic"}
+{"id": "S006", "type": "semantic", "question": "遇到令牌过期的错误提示该怎么处理？", "reference_answer": "ERR-4041 表示令牌已过期。请执行「退出登录」以清理本地令牌后重新登录", "expected_chunk_ids": ["T-1002#0"], "source": "synthetic"}
+{"id": "S007", "type": "lexical", "question": "升级认证网关后偶尔出现 ERR-5002，需要等多久再试？", "reference_answer": "建议 30 秒后重试", "expected_chunk_ids": ["T-1003#0"], "source": "synthetic"}
+{"id": "S008", "type": "lexical", "question": "换了新路由器后连接认证网关报 ERR-5002，可能是什么原因？", "reference_answer": "多由网络抖动引起", "expected_chunk_ids": ["T-1003#0"], "source": "synthetic"}
+{"id": "S009", "type": "lexical", "question": "遇到认证网关间歇性超时 ERR-5002，除了重试还要检查什么？", "reference_answer": "并确认到认证网关的网络是否稳定", "expected_chunk_ids": ["T-1003#0"], "source": "synthetic"}
+{"id": "S010", "type": "lexical", "question": "ERR-4011 错误码触发后，账号被锁定的具体时长是多少？", "reference_answer": "连续 5 次密码错误会返回 ERR-4011 并锁定账号 15 分钟", "expected_chunk_ids": ["T-1004#0"], "source": "synthetic"}
+{"id": "S011", "type": "semantic", "question": "遇到连续输错密码导致账号锁定，除了等待还能采取什么措施？", "reference_answer": "请等待锁定期结束后重试，或联系管理员解锁。", "expected_chunk_ids": ["T-1004#0"], "source": "synthetic"}
+{"id": "S012", "type": "semantic", "question": "我注册时填的邮箱好像没收到验证信，连垃圾邮件箱里也没看到，是不是地址写错了？", "reference_answer": "请确认邮箱地址拼写是否正确", "expected_chunk_ids": ["T-1005#0"], "source": "synthetic"}
+{"id": "S013", "type": "semantic", "question": "明明垃圾箱都查过了还是收不到验证邮件，会不会是公司邮箱把外面的信给拦截了？", "reference_answer": "并检查企业邮箱是否拦截了外部发信", "expected_chunk_ids": ["T-1005#0"], "source": "synthetic"}
+{"id": "S014", "type": "semantic", "question": "刚才一直点发送都没反应，现在还能再试一次吗？", "reference_answer": "可在 5 分钟后重试发送", "expected_chunk_ids": ["T-1005#0"], "source": "synthetic"}
+{"id": "S015", "type": "lexical", "question": "升级了电脑系统后连不上 VPN，提示 ERR-7001，证书是不是过期了？", "reference_answer": "ERR-7001 表示个人证书已过期。", "expected_chunk_ids": ["T-1006#0"], "source": "synthetic"}
+{"id": "S016", "type": "lexical", "question": "收到 ERR-7001 错误时，这个证书的有效期原本是多久？", "reference_answer": "证书有效期为 12 个月。", "expected_chunk_ids": ["T-1006#0"], "source": "synthetic"}
+{"id": "S017", "type": "lexical", "question": "遇到 ERR-7001 提示证书有问题，我具体应该去哪里重新签发证书？", "reference_answer": "请在内网门户重新签发证书并导入客户端。", "expected_chunk_ids": ["T-1006#0"], "source": "synthetic"}
+{"id": "S018", "type": "lexical", "question": "Outlook 配置报错 ERR-3102 具体代表什么含义？", "reference_answer": "ERR-3102 表示 IMAP 认证失败。", "expected_chunk_ids": ["T-1007#0"], "source": "synthetic"}
+{"id": "S019", "type": "lexical", "question": "遇到 ERR-3102 错误时，第三方客户端为何无法使用域密码？", "reference_answer": "第三方客户端不能使用域密码，请在网页端生成应用专用密码后重新配置。", "expected_chunk_ids": ["T-1007#0"], "source": "synthetic"}
+{"id": "S020", "type": "lexical", "question": "解决 ERR-3102 认证失败的正确操作步骤是什么？", "reference_answer": "请在网页端生成应用专用密码后重新配置。", "expected_chunk_ids": ["T-1007#0"], "source": "synthetic"}
+{"id": "S021", "type": "semantic", "question": "终端防护客户端提示病毒库过期了，超过几天没更新算过期？", "reference_answer": "ERR-8801 表示病毒库已过期（超过 7 天未更新）。", "expected_chunk_ids": ["T-1008#0"], "source": "synthetic"}
+{"id": "S022", "type": "semantic", "question": "遇到病毒库很久没更新的情况，我应该先检查什么网络环境？", "reference_answer": "请确认能访问内网更新服务器 update.corp.example.com", "expected_chunk_ids": ["T-1008#0"], "source": "synthetic"}
+{"id": "S023", "type": "semantic", "question": "病毒库显示过期后，我需要在客户端做什么操作来修复？", "reference_answer": "然后在客户端手动触发更新。", "expected_chunk_ids": ["T-1008#0"], "source": "synthetic"}
+{"id": "S024", "type": "semantic", "question": "公司电脑升级系统后，能正常访问百度谷歌，但打不开内部 OA 和邮件系统，这是怎么回事？", "reference_answer": "多为 DNS 解析失败。请确认网卡 DNS 未被手动改成公网 DNS（如 8.8.8.8），内网域名必须由公司 DNS 解析。", "expected_chunk_ids": ["T-1009#0"], "source": "synthetic"}
+{"id": "S025", "type": "semantic", "question": "我为了上网速度把网卡 DNS 设置成了 8.8.8.8，结果现在所有内网系统都打不开了，该怎么改回来？", "reference_answer": "请确认网卡 DNS 未被手动改成公网 DNS（如 8.8.8.8），内网域名必须由公司 DNS 解析。", "expected_chunk_ids": ["T-1009#0"], "source": "synthetic"}
+{"id": "S026", "type": "semantic", "question": "MFA 双因素认证在更换设备后无法自助重置的机制依据哪条规定？", "reference_answer": "MFA 不支持自助重置。", "expected_chunk_ids": ["T-1010#0"], "source": "synthetic"}
+{"id": "S027", "type": "semantic", "question": "连上公司 VPN 时提示错误，说我的会话数太多了，这是怎么回事？", "reference_answer": "单个账号最多 3 个并发会话。", "expected_chunk_ids": ["T-1011#0"], "source": "synthetic"}
+{"id": "S028", "type": "semantic", "question": "我在手机上已经断开了，但电脑还是连不上，是不是因为别的地方还占着名额？", "reference_answer": "请先在门户断开其他设备的会话后再连接。", "expected_chunk_ids": ["T-1011#0"], "source": "synthetic"}
+{"id": "S029", "type": "semantic", "question": "为什么我明明只开了一台设备，系统却告诉我会话数超限了？", "reference_answer": "ERR-7002 表示并发会话数超限，单个账号最多 3 个并发会话。", "expected_chunk_ids": ["T-1011#0"], "source": "synthetic"}
+{"id": "S030", "type": "semantic", "question": "刚换了新电脑登录内网门户后，发现无法访问目标系统，需要走什么流程申请权限？", "reference_answer": "在内网门户提交权限申请单，选择目标系统与角色，由直属主管审批后自动开通。", "expected_chunk_ids": ["faq-account-permission#0"], "source": "synthetic"}
+{"id": "S031", "type": "semantic", "question": "我在内网门户提交了系统权限申请单，但还没收到开通通知，标准情况下多久能办好？", "reference_answer": "标准角色开通时效为 1 个工作日。", "expected_chunk_ids": ["faq-account-permission#0"], "source": "synthetic"}
+{"id": "S032", "type": "semantic", "question": "同事离职后，他的账号会被怎么处理？", "reference_answer": "系统会冻结账号并转移其名下的资源与审批待办。", "expected_chunk_ids": ["faq-account-permission#2"], "source": "synthetic"}
+{"id": "S033", "type": "semantic", "question": "主管在门户发起离职交接流程后，冻结的账号能保留多久？", "reference_answer": "冻结账号保留 90 天后注销。", "expected_chunk_ids": ["faq-account-permission#2"], "source": "synthetic"}
+{"id": "S034", "type": "semantic", "question": "我换了新电脑登录系统后，明明没输错密码却提示账号被锁定，这是怎么回事？", "reference_answer": "若未主动输错仍被锁定，请检查是否有脚本或定时任务在使用旧密码。", "expected_chunk_ids": ["faq-account-permission#3"], "source": "synthetic"}
+{"id": "S035", "type": "semantic", "question": "刚才连续输错了五次验证码，现在进不去系统，需要等多久才能重试？", "reference_answer": "连续 5 次认证失败会锁定 15 分钟。", "expected_chunk_ids": ["faq-account-permission#3"], "source": "synthetic"}
+{"id": "S036", "type": "semantic", "question": "MFA 绑定丢失场景下，必须由哪类人员进行人工核验才能完成重置？", "reference_answer": "自助重置不支持，必须由服务台人工核验。", "expected_chunk_ids": ["faq-account-permission#4"], "source": "synthetic"}
+{"id": "S037", "type": "semantic", "question": "若邮箱地址拼写确认无误后仍未收到验证邮件，建议等待多久重试？", "reference_answer": "并在 5 分钟后重试。", "expected_chunk_ids": ["faq-common-questions#0"], "source": "synthetic"}
+{"id": "S038", "type": "semantic", "question": "企业邮箱拦截外部发信导致无法收到验证邮件时，应如何操作？", "reference_answer": "企业邮箱可能拦截外部发信。", "expected_chunk_ids": ["faq-common-questions#0"], "source": "synthetic"}
+{"id": "S039", "type": "semantic", "question": "我把公司账号密码改了，以前登录过的那台旧电脑还能继续用吗？", "reference_answer": "不能。", "expected_chunk_ids": ["faq-common-questions#1"], "source": "synthetic"}
+{"id": "S040", "type": "semantic", "question": "修改了密码之后，之前已经成功登录的设备会不会自动失效？", "reference_answer": "密码重置会撤销该账号下所有有效令牌，所有已登录设备都需要重新登录。", "expected_chunk_ids": ["faq-common-questions#1"], "source": "synthetic"}
+{"id": "S041", "type": "semantic", "question": "换了新密码后，我手里那些旧设备是不是都得重新输一遍密码才能进系统？", "reference_answer": "所有已登录设备都需要重新登录。", "expected_chunk_ids": ["faq-common-questions#1"], "source": "synthetic"}
+{"id": "S042", "type": "semantic", "question": "公司刚把办公电脑从 Windows 7 升级到 Windows 11，换了新系统后网页打不开，请问现在应该用哪个浏览器？", "reference_answer": "推荐使用 Chrome 100 及以上版本、Edge 100 及以上版本。", "expected_chunk_ids": ["faq-common-questions#2"], "source": "synthetic"}
+{"id": "S043", "type": "semantic", "question": "我还在用 IE 浏览器访问内部系统，提示无法加载页面，是不是因为浏览器版本不支持？", "reference_answer": "不支持 IE 与 Firefox 90 以下版本。", "expected_chunk_ids": ["faq-common-questions#2"], "source": "synthetic"}
+{"id": "S044", "type": "lexical", "question": "错误码 ERR-4011 是否代表账号因连续失败被锁定？", "reference_answer": "另外，若账号已因连续失败被锁定，也会返回相同错误码", "expected_chunk_ids": ["faq-common-questions#3"], "source": "synthetic"}
+{"id": "S045", "type": "lexical", "question": "遇到 ERR-4011 时，输入法状态应调整为哪种字符模式？", "reference_answer": "请检查是否开启了大写锁定，以及输入法是否为全角字符。", "expected_chunk_ids": ["faq-common-questions#3"], "source": "synthetic"}
+{"id": "S046", "type": "lexical", "question": "账号被锁定后，针对 ERR-4011 错误需要等待多久才能重试？", "reference_answer": "请等待 15 分钟后重试。", "expected_chunk_ids": ["faq-common-questions#3"], "source": "synthetic"}
+{"id": "S047", "type": "semantic", "question": "我升级完系统后一直进不去后台，是不是需要重新登录？", "reference_answer": "所有用户需要重新登录一次", "expected_chunk_ids": ["faq-common-questions#4"], "source": "synthetic"}
+{"id": "S048", "type": "semantic", "question": "我是管理员，升级前有没有必要先备份配置目录？", "reference_answer": "并核对 config 目录是否已备份", "expected_chunk_ids": ["faq-common-questions#4"], "source": "synthetic"}
+{"id": "S049", "type": "semantic", "question": "升级完成后，管理员怎么确认迁移脚本执行成功了？", "reference_answer": "管理员需要确认 migrate_auth.py 已成功执行", "expected_chunk_ids": ["faq-common-questions#4"], "source": "synthetic"}
+{"id": "S050", "type": "semantic", "question": "最近家里换了新路由器后，手机和电脑在客厅总是断网，是不是频段的问题？", "reference_answer": "优先确认是否处在信号盲区，可尝试切换到 5GHz 频段。", "expected_chunk_ids": ["faq-network-issues#0"], "source": "synthetic"}
+{"id": "S051", "type": "semantic", "question": "我在公司会议室发现好几台笔记本同时连不上 Wi-Fi，可能是 AP 太忙了吗？", "reference_answer": "若同一位置多台设备同时掉线，多为 AP 过载，请提交工单并注明楼层与 AP 编号。", "expected_chunk_ids": ["faq-network-issues#0"], "source": "synthetic"}
+{"id": "S052", "type": "semantic", "question": "排查内网访问慢时，tracert 命令显示的跳数超过多少通常说明绕行外网？", "reference_answer": "可在客户端执行 tracert 查看跳数，超过 8 跳通常说明绕行外网。", "expected_chunk_ids": ["faq-network-issues#1"], "source": "synthetic"}
+{"id": "S053", "type": "semantic", "question": "为什么我手机能正常用微信，但是访问公司内网的网页就显示打不开？", "reference_answer": "通常是 DNS 解析失败。", "expected_chunk_ids": ["faq-network-issues#2"], "source": "synthetic"}
+{"id": "S054", "type": "semantic", "question": "我在设置里把 DNS 服务器地址改成了公网的，导致内网页面无法打开，该怎么恢复？", "reference_answer": "请确认 DNS 服务器地址未被手动修改为公网 DNS", "expected_chunk_ids": ["faq-network-issues#2"], "source": "synthetic"}
+{"id": "S055", "type": "semantic", "question": "公司内网的域名为什么在我的电脑上解析不了，只能访问外网？", "reference_answer": "内网域名必须由公司 DNS 解析。", "expected_chunk_ids": ["faq-network-issues#2"], "source": "synthetic"}
+{"id": "S056", "type": "semantic", "question": "公司电脑升级系统后，有线网络突然提示 IP 冲突，该怎么处理？", "reference_answer": "多为手工设置了静态 IP。请将网卡改回自动获取（DHCP），或向网络组申请保留地址。", "expected_chunk_ids": ["faq-network-issues#3"], "source": "synthetic"}
+{"id": "S057", "type": "semantic", "question": "访客网络接入的独立 SSID 是什么？", "reference_answer": "访客网络为独立 SSID", "expected_chunk_ids": ["faq-network-issues#4"], "source": "synthetic"}
+{"id": "S058", "type": "semantic", "question": "接待人获取一次性密码的有效时长是多少？", "reference_answer": "密码 8 小时内有效", "expected_chunk_ids": ["faq-network-issues#4"], "source": "synthetic"}
+{"id": "S059", "type": "semantic", "question": "访客接入公司网络前需由谁在系统中登记？", "reference_answer": "需由接待人在访客管理系统登记后", "expected_chunk_ids": ["faq-network-issues#4"], "source": "synthetic"}
+{"id": "S060", "type": "semantic", "question": "我现在的客户端是 v5.1 版本，能不能用这本手册？", "reference_answer": "本手册适用于终端防护客户端 v5.0.1 至 v5.2.0。", "expected_chunk_ids": ["manual-endpoint-protection#0"], "source": "synthetic"}
+{"id": "S061", "type": "semantic", "question": "听说旧版客户端不更新功能了，我的是 v4.x 还能升级吗？", "reference_answer": "v4.x 客户端已进入维护期，不再提供新特性。", "expected_chunk_ids": ["manual-endpoint-protection#0"], "source": "synthetic"}
+{"id": "S062", "type": "semantic", "question": "刚换了新电脑接入公司网络，发现杀毒软件没自动扫描文件，这是怎么回事？", "reference_answer": "病毒防护默认开启实时扫描", "expected_chunk_ids": ["manual-endpoint-protection#1"], "source": "synthetic"}
+{"id": "S063", "type": "semantic", "question": "为什么我安装了行为监控模块，但系统并没有开始记录我的操作日志？", "reference_answer": "行为监控需管理员在控制台下发策略后生效", "expected_chunk_ids": ["manual-endpoint-protection#1"], "source": "synthetic"}
+{"id": "S064", "type": "semantic", "question": "我想确认一下终端防护平台客户端具体包含哪几个功能模块？", "reference_answer": "客户端包含病毒防护、行为监控、外设管控与漏洞修复四个模块", "expected_chunk_ids": ["manual-endpoint-protection#1"], "source": "synthetic"}
+{"id": "S065", "type": "lexical", "question": "终端防护平台报错 ERR-8801 是什么意思，如何处理？", "reference_answer": "ERR-8801：病毒库已过期。病毒库超过 7 天未更新会触发该错误，请在内网更新服务器同步最新病毒库。", "expected_chunk_ids": ["manual-endpoint-protection#2"], "source": "synthetic"}
+{"id": "S066", "type": "lexical", "question": "遇到 ERR-8804 错误时，被隔离的文件该如何恢复？", "reference_answer": "ERR-8804：文件被隔离。疑似威胁文件会被移入隔离区，可从客户端「隔离区」恢复并加入白名单。", "expected_chunk_ids": ["manual-endpoint-protection#2"], "source": "synthetic"}
+{"id": "S067", "type": "lexical", "question": "出现 ERR-8809 错误通常由什么原因导致？", "reference_answer": "ERR-8809：客户端离线。多为 agent 服务被停止或内网更新服务器不可达，请检查 agent 进程状态。", "expected_chunk_ids": ["manual-endpoint-protection#2"], "source": "synthetic"}
+{"id": "S068", "type": "semantic", "question": "文件被隔离后能保存多久？如果时间到了会自动处理吗？", "reference_answer": "被隔离文件保留 30 天，逾期自动清除。", "expected_chunk_ids": ["manual-endpoint-protection#3"], "source": "synthetic"}
+{"id": "S069", "type": "semantic", "question": "确认某个文件是安全的之后，怎么把它从隔离区拿出来并加入白名单？", "reference_answer": "确认安全的文件可在隔离区恢复并加入白名单。", "expected_chunk_ids": ["manual-endpoint-protection#3"], "source": "synthetic"}
+{"id": "S070", "type": "semantic", "question": "我想把文件加到白名单里，需要我自己直接操作吗？", "reference_answer": "白名单条目需管理员审批。", "expected_chunk_ids": ["manual-endpoint-protection#3"], "source": "synthetic"}
+{"id": "S071", "type": "semantic", "question": "公司刚升级了终端防护平台，现在软件无法自动更新，可能是网络连通性问题吗？", "reference_answer": "确认能访问内网更新服务器 update.corp.example.com。", "expected_chunk_ids": ["manual-endpoint-protection#4"], "source": "synthetic"}
+{"id": "S072", "type": "semantic", "question": "为什么我的设备一直提示病毒库版本过旧，需要检查什么时间范围？", "reference_answer": "确认病毒库更新时间在 7 天以内。", "expected_chunk_ids": ["manual-endpoint-protection#4"], "source": "synthetic"}
+{"id": "S073", "type": "semantic", "question": "排查防护失效时，第一步应该检查哪个核心服务是否正在运行？", "reference_answer": "确认 agent 服务（epp-agent）处于运行状态。", "expected_chunk_ids": ["manual-endpoint-protection#4"], "source": "synthetic"}
+{"id": "S074", "type": "semantic", "question": "v1.3.5 版本的登录模块是否适用本手册？", "reference_answer": "本手册适用于 v1.2.0 至 v1.3.5。", "expected_chunk_ids": ["manual-login-module#0"], "source": "synthetic"}
+{"id": "S075", "type": "semantic", "question": "令牌过期后系统返回的提示代码是什么？", "reference_answer": "到期后需要重新登录", "expected_chunk_ids": ["manual-login-module#1"], "source": "synthetic"}
+{"id": "S076", "type": "semantic", "question": "认证网关校验失败时，访问令牌的默认有效期是多少小时？", "reference_answer": "令牌有效期默认 8 小时", "expected_chunk_ids": ["manual-login-module#1"], "source": "synthetic"}
+{"id": "S077", "type": "semantic", "question": "用户输入企业邮箱与密码后，系统会调用哪个组件进行校验？", "reference_answer": "系统调用认证网关校验", "expected_chunk_ids": ["manual-login-module#1"], "source": "synthetic"}
+{"id": "S078", "type": "semantic", "question": "我刚才一直点退出又登录还是提示令牌过期，是不是服务器时间没同步？", "reference_answer": "若频繁出现，请检查服务器时间是否与 NTP 同步。", "expected_chunk_ids": ["manual-login-module#2"], "source": "synthetic"}
+{"id": "S079", "type": "semantic", "question": "为什么我连输了几次密码后账号突然锁定了？", "reference_answer": "连续 5 次失败会锁定账号 15 分钟。", "expected_chunk_ids": ["manual-login-module#2"], "source": "synthetic"}
+{"id": "S080", "type": "semantic", "question": "刚才网络一卡就提示认证网关超时，等会儿再试行不行？", "reference_answer": "通常由网络抖动引起，建议 30 秒后重试。", "expected_chunk_ids": ["manual-login-module#2"], "source": "synthetic"}
+{"id": "S081", "type": "semantic", "question": "公司服务器从 v1.2.x 升级到 v1.3.0 后，我为什么无法登录系统了？", "reference_answer": "从 v1.2.x 升级到 v1.3.0 后，令牌签名算法由 HS256 变更为 RS256，旧令牌全部失效，因此所有用户需要重新登录一次。", "expected_chunk_ids": ["manual-login-module#3"], "source": "synthetic"}
+{"id": "S082", "type": "semantic", "question": "执行升级操作时，如果迁移脚本失败了系统会怎么处理？", "reference_answer": "若迁移失败，系统会自动回滚到升级前状态，但日志中仍会保留 ERR-4041 记录，属于正常现象。", "expected_chunk_ids": ["manual-login-module#3"], "source": "synthetic"}
+{"id": "S083", "type": "semantic", "question": "在进行版本升级之前，我需要先做哪些准备工作？", "reference_answer": "备份 config 目录。\n2. 执行 migrate_auth.py 脚本。\n3. 重启认证服务。", "expected_chunk_ids": ["manual-login-module#3"], "source": "synthetic"}
+{"id": "S084", "type": "semantic", "question": "服务器时间偏差导致登录失败时，应执行什么操作？", "reference_answer": "确认服务器时间与 NTP 同步。", "expected_chunk_ids": ["manual-login-module#4"], "source": "synthetic"}
+{"id": "S085", "type": "semantic", "question": "令牌过期后出现的登录拒绝错误如何处理？", "reference_answer": "检查令牌是否已过期。", "expected_chunk_ids": ["manual-login-module#4"], "source": "synthetic"}
+{"id": "S086", "type": "semantic", "question": "我现在的邮件系统升级到了 v3.4.2，请问能不能用这本手册来配置？", "reference_answer": "本手册适用于邮件系统 v3.4.2 及以上版本。", "expected_chunk_ids": ["manual-mail-client#0"], "source": "synthetic"}
+{"id": "S087", "type": "semantic", "question": "为什么我看网上的教程说要用旧版认证方式，但我查手册发现好像不一样？", "reference_answer": "v3.2.x 及更早版本使用旧版认证，配置方式不同。", "expected_chunk_ids": ["manual-mail-client#0"], "source": "synthetic"}
+{"id": "S088", "type": "semantic", "question": "刚换了新手机想配置公司邮箱，收件服务器地址和端口应该填什么？", "reference_answer": "收件服务器（IMAP）地址为 mail.corp.example.com，端口 993，需启用 SSL。", "expected_chunk_ids": ["manual-mail-client#1"], "source": "synthetic"}
+{"id": "S089", "type": "semantic", "question": "在旧版邮件客户端上设置发件服务器时，SMTP 的端口号是多少？", "reference_answer": "发件服务器（SMTP）地址为 mail.corp.example.com，端口 465，需启用 SSL。", "expected_chunk_ids": ["manual-mail-client#1"], "source": "synthetic"}
+{"id": "S090", "type": "semantic", "question": "配置公司邮箱时，IMAP 和 SMTP 连接都需要开启哪种安全协议？", "reference_answer": "收件服务器（IMAP）地址为 mail.corp.example.com，端口 993，需启用 SSL。发件服务器（SMTP）地址为 mail.corp.example.com，端口 465，需启用 SSL。", "expected_chunk_ids": ["manual-mail-client#1"], "source": "synthetic"}
+{"id": "S091", "type": "lexical", "question": "遇到 ERR-3102 错误时，第三方客户端应如何生成密码？", "reference_answer": "ERR-3102：IMAP 认证失败。第三方客户端需在网页端生成应用专用密码，直接使用域密码会被拒绝。", "expected_chunk_ids": ["manual-mail-client#2"], "source": "synthetic"}
+{"id": "S092", "type": "semantic", "question": "单封邮件附件的上限是多少 MB？", "reference_answer": "ERR-3105：附件超出限制。单封邮件附件上限为 50 MB，超出请使用文件中转站。", "expected_chunk_ids": ["manual-mail-client#2"], "source": "synthetic"}
+{"id": "S093", "type": "lexical", "question": "发信被拒收（ERR-3108）通常是因为什么？", "reference_answer": "ERR-3108：发信被拒收。多因收件人地址拼写错误或触发外发频率限制（每分钟 30 封）。", "expected_chunk_ids": ["manual-mail-client#2"], "source": "synthetic"}
+{"id": "S094", "type": "semantic", "question": "我想用旧一点的 Outlook 2010 来配置邮箱，行不行？", "reference_answer": "不支持 Outlook 2010 及更早版本，因其不支持 OAuth 认证。", "expected_chunk_ids": ["manual-mail-client#3"], "source": "synthetic"}
+{"id": "S095", "type": "semantic", "question": "除了 Outlook，还有什么推荐的客户端可以用？", "reference_answer": "推荐使用 Outlook 2019 及以上版本或 Thunderbird 115 及以上版本。", "expected_chunk_ids": ["manual-mail-client#3"], "source": "synthetic"}
+{"id": "S096", "type": "semantic", "question": "换了新手机后收不到邮件提示密码错误，是不是因为用了域密码而不是专用密码？", "reference_answer": "确认使用的是应用专用密码而非域密码。", "expected_chunk_ids": ["manual-mail-client#4"], "source": "synthetic"}
+{"id": "S097", "type": "semantic", "question": "附件上传时一直卡在进度条不动，会不会是文件太大了导致无法发送？", "reference_answer": "确认附件总大小未超过 50 MB。", "expected_chunk_ids": ["manual-mail-client#4"], "source": "synthetic"}
+{"id": "S098", "type": "semantic", "question": "配置好邮箱后连接不上服务器，可能是 SSL 没开或者被防火墙拦住了吗？", "reference_answer": "确认 SSL 已启用且端口未被公司防火墙拦截。", "expected_chunk_ids": ["manual-mail-client#4"], "source": "synthetic"}
+{"id": "S099", "type": "semantic", "question": "本手册适用的 VPN 客户端版本号范围是多少？", "reference_answer": "本手册适用于 VPN 客户端 v2.1.0 至 v2.4.3。", "expected_chunk_ids": ["manual-vpn-access#0"], "source": "synthetic"}
+{"id": "S100", "type": "semantic", "question": "我下载了客户端并导入证书后，第一次连不上，需要输什么信息才能建立隧道？", "reference_answer": "首次连接需要输入域账号与动态口令", "expected_chunk_ids": ["manual-vpn-access#1"], "source": "synthetic"}
+{"id": "S101", "type": "semantic", "question": "VPN 连上之后，访问互联网流量是走 VPN 还是走本地网络？", "reference_answer": "公网流量仍走本地网络", "expected_chunk_ids": ["manual-vpn-access#1"], "source": "synthetic"}
+{"id": "S102", "type": "semantic", "question": "申请完权限下载客户端后，默认情况下哪些网段的流量会被转发？", "reference_answer": "默认分流规则只转发内网网段", "expected_chunk_ids": ["manual-vpn-access#1"], "source": "synthetic"}
+{"id": "S103", "type": "semantic", "question": "升级了操作系统后，发现无法连接 VPN，提示隧道建立失败，这通常是什么原因？", "reference_answer": "多为本地防火墙拦截 UDP 500 或 4500 端口，请确认出站规则。", "expected_chunk_ids": ["manual-vpn-access#2"], "source": "synthetic"}
+{"id": "S104", "type": "semantic", "question": "换了新设备登录时提示证书已过期，我该怎么办？", "reference_answer": "证书有效期为 12 个月，过期后需在门户重新签发并导入。", "expected_chunk_ids": ["manual-vpn-access#2"], "source": "synthetic"}
+{"id": "S105", "type": "semantic", "question": "我在两台不同设备上同时使用同一个账号连接 VPN，其中一台连不上显示并发会话数超限，如何解决？", "reference_answer": "单个账号最多允许 3 个并发会话，超出后需先断开其他设备。", "expected_chunk_ids": ["manual-vpn-access#2"], "source": "synthetic"}
+{"id": "S106", "type": "semantic", "question": "自动重连的默认间隔时间是多少？", "reference_answer": "客户端默认开启自动重连，重连间隔 5 秒，最多尝试 10 次。", "expected_chunk_ids": ["manual-vpn-access#3"], "source": "synthetic"}
+{"id": "S107", "type": "semantic", "question": "我连不上公司 VPN，提示证书校验失败，是不是因为我电脑时间不对？", "reference_answer": "确认本地系统时间与标准时间一致，时间偏差超过 5 分钟会导致证书校验失败。", "expected_chunk_ids": ["manual-vpn-access#4"], "source": "synthetic"}
+{"id": "S108", "type": "semantic", "question": "明明账号权限已经审批通过了，为什么还是无法建立连接？", "reference_answer": "确认账号的 VPN 权限申请已审批通过。", "expected_chunk_ids": ["manual-vpn-access#4"], "source": "synthetic"}
+{"id": "S109", "type": "semantic", "question": "我在两台设备上同时登录，第三台设备连不上，是不是并发数满了？", "reference_answer": "确认已断开其他设备的会话（并发上限 3 个）。", "expected_chunk_ids": ["manual-vpn-access#4"], "source": "synthetic"}
+{"id": "S110", "type": "negative", "question": "下个月公司团建去哪里？需要我提前准备什么吗？", "reference_answer": "根据现有资料无法确定，建议转人工。", "expected_chunk_ids": [], "source": "synthetic"}
+{"id": "S111", "type": "negative", "question": "我的社保为什么还没到账？能不能帮我查一下缴纳记录？", "reference_answer": "根据现有资料无法确定，建议转人工。", "expected_chunk_ids": [], "source": "synthetic"}
+{"id": "S112", "type": "negative", "question": "我想申请报销差旅费，请问财务部的审批流程是怎样的？", "reference_answer": "根据现有资料无法确定，建议转人工。", "expected_chunk_ids": [], "source": "synthetic"}
+{"id": "S113", "type": "negative", "question": "行政部什么时候发新的工位？我的桌子坏了还没人来修。", "reference_answer": "根据现有资料无法确定，建议转人工。", "expected_chunk_ids": [], "source": "synthetic"}
+{"id": "S114", "type": "negative", "question": "公司食堂今天中午有红烧肉吗？过敏源有哪些？", "reference_answer": "根据现有资料无法确定，建议转人工。", "expected_chunk_ids": [], "source": "synthetic"}
+{"id": "S115", "type": "negative", "question": "我下季度的体检预约时间是什么时候？需要空腹吗？", "reference_answer": "根据现有资料无法确定，建议转人工。", "expected_chunk_ids": [], "source": "synthetic"}
+{"id": "S116", "type": "negative", "question": "人事那边说我的试用期转正材料还没提交，具体缺什么？", "reference_answer": "根据现有资料无法确定，建议转人工。", "expected_chunk_ids": [], "source": "synthetic"}
+{"id": "S117", "type": "negative", "question": "我想申请购买一台新的办公显示器，采购流程怎么走？", "reference_answer": "根据现有资料无法确定，建议转人工。", "expected_chunk_ids": [], "source": "synthetic"}
+{"id": "S118", "type": "negative", "question": "班车今天因为下雨停运了吗？大概几点发车？", "reference_answer": "根据现有资料无法确定，建议转人工。", "expected_chunk_ids": [], "source": "synthetic"}
+{"id": "S119", "type": "negative", "question": "公司什么时候发年终奖？绩效评级标准是什么？", "reference_answer": "根据现有资料无法确定，建议转人工。", "expected_chunk_ids": [], "source": "synthetic"}
+{"id": "S120", "type": "negative", "question": "下个月的团建活动具体地点定在哪里？需要我提前准备什么物资吗？", "reference_answer": "根据现有资料无法确定，建议转人工。", "expected_chunk_ids": [], "source": "synthetic"}
+{"id": "S121", "type": "negative", "question": "我的社保缴纳基数好像和去年不一样了，能不能帮我查一下明细？", "reference_answer": "根据现有资料无法确定，建议转人工。", "expected_chunk_ids": [], "source": "synthetic"}
+{"id": "S122", "type": "negative", "question": "行政部说工位调整通知发下来了，但我没收到邮件，请问具体怎么申请换座位？", "reference_answer": "根据现有资料无法确定，建议转人工。", "expected_chunk_ids": [], "source": "synthetic"}
+{"id": "S123", "type": "negative", "question": "公司食堂今天中午的菜谱是什么？有没有素食选项？", "reference_answer": "根据现有资料无法确定，建议转人工。", "expected_chunk_ids": [], "source": "synthetic"}
+{"id": "S124", "type": "negative", "question": "我想申请报销一笔差旅费，请问财务部的最新票据粘贴规范在哪里下载？", "reference_answer": "根据现有资料无法确定，建议转人工。", "expected_chunk_ids": [], "source": "synthetic"}
+{"id": "S125", "type": "negative", "question": "最近体检报告出来了，发现有些指标异常，公司有没有合作的医院可以复查？", "reference_answer": "根据现有资料无法确定，建议转人工。", "expected_chunk_ids": [], "source": "synthetic"}
+{"id": "S126", "type": "negative", "question": "下周三的班车路线有变动吗？如果我要去机场，需要怎么提前预约专车？", "reference_answer": "根据现有资料无法确定，建议转人工。", "expected_chunk_ids": [], "source": "synthetic"}
+{"id": "S127", "type": "negative", "question": "人事那边说试用期转正流程要填新表格，请问在哪里下载这个表单？", "reference_answer": "根据现有资料无法确定，建议转人工。", "expected_chunk_ids": [], "source": "synthetic"}
+{"id": "S128", "type": "negative", "question": "我想给部门采购一批新的绿植放在工位上，申请流程怎么走？", "reference_answer": "根据现有资料无法确定，建议转人工。", "expected_chunk_ids": [], "source": "synthetic"}
+{"id": "S129", "type": "negative", "question": "公司年会抽奖的奖品名单什么时候公布？我中了奖怎么领奖？", "reference_answer": "根据现有资料无法确定，建议转人工。", "expected_chunk_ids": [], "source": "synthetic"}
+{"id": "S130", "type": "negative", "question": "下个月的团建活动具体地点在哪里？需要我提前准备什么？", "reference_answer": "根据现有资料无法确定，建议转人工", "expected_chunk_ids": [], "source": "synthetic"}
+{"id": "S131", "type": "negative", "question": "我的社保缴纳基数为什么和上个月不一样了？", "reference_answer": "根据现有资料无法确定，建议转人工", "expected_chunk_ids": [], "source": "synthetic"}
+{"id": "S132", "type": "negative", "question": "行政部什么时候发放新的工位桌牌？我还没收到。", "reference_answer": "根据现有资料无法确定，建议转人工", "expected_chunk_ids": [], "source": "synthetic"}
+{"id": "S133", "type": "negative", "question": "公司食堂今天中午有没有提供素食窗口？", "reference_answer": "根据现有资料无法确定，建议转人工", "expected_chunk_ids": [], "source": "synthetic"}
+{"id": "S134", "type": "negative", "question": "我想申请报销一笔差旅费，财务审批流程需要几天？", "reference_answer": "根据现有资料无法确定，建议转人工", "expected_chunk_ids": [], "source": "synthetic"}
+{"id": "S135", "type": "negative", "question": "最近班车路线调整了吗？我住的地方还能坐得到车吗？", "reference_answer": "根据现有资料无法确定，建议转人工", "expected_chunk_ids": [], "source": "synthetic"}
+{"id": "S136", "type": "negative", "question": "入职体检报告还没下来，大概什么时候能出结果？", "reference_answer": "根据现有资料无法确定，建议转人工", "expected_chunk_ids": [], "source": "synthetic"}
+{"id": "S137", "type": "negative", "question": "我想把工位搬到靠窗的位置，需要走什么流程申请？", "reference_answer": "根据现有资料无法确定，建议转人工", "expected_chunk_ids": [], "source": "synthetic"}
+{"id": "S138", "type": "negative", "question": "采购部能不能帮我加急订一批办公文具？", "reference_answer": "根据现有资料无法确定，建议转人工", "expected_chunk_ids": [], "source": "synthetic"}
+{"id": "S139", "type": "negative", "question": "人事那边说我的试用期转正材料还缺一份，具体是哪份？", "reference_answer": "根据现有资料无法确定，建议转人工", "expected_chunk_ids": [], "source": "synthetic"}
+{"id": "S140", "type": "semantic", "question": "为什么更新系统后我一登录就提示需要重新输入密码？", "reference_answer": "这是预期行为。v1.3.0 将令牌签名算法从 HS256 改为 RS256，旧令牌全部失效，因此所有用户需要重新登录一次。", "expected_chunk_ids": ["T-1001#0"], "source": "synthetic"}
+{"id": "S141", "type": "semantic", "question": "既然大家都要重新登录，我该怎么确认后台迁移脚本执行成功了？", "reference_answer": "请通知管理员确认 migrate_auth.py 已成功执行。", "expected_chunk_ids": ["T-1001#0"], "source": "synthetic"}
+{"id": "S142", "type": "lexical", "question": "升级完系统后登录一直提示 ERR-4041，重启也没解决怎么办？", "reference_answer": "ERR-4041 表示令牌已过期。请执行「退出登录」以清理本地令牌后重新登录", "expected_chunk_ids": ["T-1002#0"], "source": "synthetic"}
+{"id": "S143", "type": "lexical", "question": "换了新电脑重装软件后遇到 ERR-4041 报错，该如何处理？", "reference_answer": "请执行「退出登录」以清理本地令牌后重新登录", "expected_chunk_ids": ["T-1002#0"], "source": "synthetic"}
+{"id": "S144", "type": "lexical", "question": "即使退出登录并重新尝试，ERR-4041 依然报错，可能是什么原因？", "reference_answer": "若仍然报错，请检查服务器时间是否与 NTP 同步。", "expected_chunk_ids": ["T-1002#0"], "source": "synthetic"}
+{"id": "S145", "type": "lexical", "question": "错误码 ERR-5002 具体代表什么含义？", "reference_answer": "ERR-5002 为认证网关超时", "expected_chunk_ids": ["T-1003#0"], "source": "synthetic"}
+{"id": "S146", "type": "lexical", "question": "导致出现 ERR-5002 的主要原因是什么？", "reference_answer": "多由网络抖动引起", "expected_chunk_ids": ["T-1003#0"], "source": "synthetic"}
+{"id": "S147", "type": "lexical", "question": "遇到 ERR-5002 错误后建议采取什么操作？", "reference_answer": "建议 30 秒后重试", "expected_chunk_ids": ["T-1003#0"], "source": "synthetic"}
+{"id": "S148", "type": "lexical", "question": "排查 ERR-5002 时需要确认哪方面的网络状态？", "reference_answer": "并确认到认证网关的网络是否稳定", "expected_chunk_ids": ["T-1003#0"], "source": "synthetic"}
+{"id": "S149", "type": "semantic", "question": "我刚才连续输错了好几次密码，现在账号被锁了，大概要等多久才能重新登录？", "reference_answer": "连续 5 次密码错误会返回 ERR-4011 并锁定账号 15 分钟", "expected_chunk_ids": ["T-1004#0"], "source": "synthetic"}
+{"id": "S150", "type": "semantic", "question": "如果我现在不想等了，有没有办法让管理员帮我解开这个锁定的账号？", "reference_answer": "或联系管理员解锁", "expected_chunk_ids": ["T-1004#0"], "source": "synthetic"}
+{"id": "S151", "type": "semantic", "question": "密码输错后账号被锁定，我除了等待之外还能做什么操作来恢复登录？", "reference_answer": "请等待锁定期结束后重试，或联系管理员解锁", "expected_chunk_ids": ["T-1004#0"], "source": "synthetic"}
+{"id": "S152", "type": "semantic", "question": "刚把公司邮箱地址填错了一位字母，导致收不到验证邮件，这种情况该怎么处理？", "reference_answer": "请确认邮箱地址拼写是否正确", "expected_chunk_ids": ["T-1005#0"], "source": "synthetic"}
+{"id": "S153", "type": "semantic", "question": "换了新电脑后，企业邮箱突然拦截了外部发信，导致验证邮件无法接收，该如何排查？", "reference_answer": "并检查企业邮箱是否拦截了外部发信", "expected_chunk_ids": ["T-1005#0"], "source": "synthetic"}
+{"id": "S154", "type": "semantic", "question": "之前一直收不到验证邮件，垃圾箱里也没有，现在想再试一次，需要等多久？", "reference_answer": "可在 5 分钟后重试发送", "expected_chunk_ids": ["T-1005#0"], "source": "synthetic"}
+{"id": "S155", "type": "lexical", "question": "ERR-7001 错误码具体代表什么含义？", "reference_answer": "ERR-7001 表示个人证书已过期。", "expected_chunk_ids": ["T-1006#0"], "source": "synthetic"}
+{"id": "S156", "type": "semantic", "question": "企业 VPN 证书的有效期是多久？", "reference_answer": "证书有效期为 12 个月。", "expected_chunk_ids": ["T-1006#0"], "source": "synthetic"}
+{"id": "S157", "type": "lexical", "question": "遇到 ERR-7001 提示证书有问题时，应在哪里重新签发证书？", "reference_answer": "请在内网门户重新签发证书并导入客户端。", "expected_chunk_ids": ["T-1006#0"], "source": "synthetic"}
+{"id": "S158", "type": "semantic", "question": "Outlook 设置好后一直报错说认证失败，这是怎么回事？", "reference_answer": "ERR-3102 表示 IMAP 认证失败。", "expected_chunk_ids": ["T-1007#0"], "source": "synthetic"}
+{"id": "S159", "type": "semantic", "question": "为什么我在 Outlook 里用域密码登录总是提示认证失败？", "reference_answer": "第三方客户端不能使用域密码", "expected_chunk_ids": ["T-1007#0"], "source": "synthetic"}
+{"id": "S160", "type": "semantic", "question": "我想解决 Outlook 配置后一直提示认证失败的问题，该怎么做？", "reference_answer": "请在网页端生成应用专用密码后重新配置。", "expected_chunk_ids": ["T-1007#0"], "source": "synthetic"}
+{"id": "S161", "type": "lexical", "question": "升级完补丁后终端防护客户端突然弹出 ERR-8801，提示病毒库很久没更新，这是什么意思？", "reference_answer": "ERR-8801 表示病毒库已过期（超过 7 天未更新）。", "expected_chunk_ids": ["T-1008#0"], "source": "synthetic"}
+{"id": "S162", "type": "lexical", "question": "换了新电脑安装终端防护客户端后一直报错 ERR-8801，需要检查什么网络条件？", "reference_answer": "请确认能访问内网更新服务器 update.corp.example.com", "expected_chunk_ids": ["T-1008#0"], "source": "synthetic"}
+{"id": "S163", "type": "semantic", "question": "公司内网环境下的终端防护客户端显示病毒库过期，应该采取什么操作来修复？", "reference_answer": "然后在客户端手动触发更新。", "expected_chunk_ids": ["T-1008#0"], "source": "synthetic"}
+{"id": "S164", "type": "semantic", "question": "为什么我电脑能上网却打不开公司内网系统？", "reference_answer": "多为 DNS 解析失败。", "expected_chunk_ids": ["T-1009#0"], "source": "synthetic"}
+{"id": "S165", "type": "semantic", "question": "能不能把网卡 DNS 改成 8.8.8.8 来访问内网？", "reference_answer": "请确认网卡 DNS 未被手动改成公网 DNS（如 8.8.8.8）", "expected_chunk_ids": ["T-1009#0"], "source": "synthetic"}
+{"id": "S166", "type": "semantic", "question": "内网域名应该由谁来解析？", "reference_answer": "内网域名必须由公司 DNS 解析。", "expected_chunk_ids": ["T-1009#0"], "source": "synthetic"}
+{"id": "S167", "type": "semantic", "question": "换了新手机后，MFA 双因素认证登不上去了怎么办？", "reference_answer": "MFA 不支持自助重置。", "expected_chunk_ids": ["T-1010#0"], "source": "synthetic"}
+{"id": "S168", "type": "semantic", "question": "更换设备导致 MFA 无法登录时，能否自己重置？", "reference_answer": "请联系 IT 服务台完成身份核验后重新绑定。", "expected_chunk_ids": ["T-1010#0"], "source": "synthetic"}
+{"id": "S169", "type": "semantic", "question": "联系 IT 服务台进行 MFA 重新绑定时需要提供什么材料？", "reference_answer": "核验需提供工号与直属主管确认。", "expected_chunk_ids": ["T-1010#0"], "source": "synthetic"}
+{"id": "S170", "type": "lexical", "question": "VPN 连接报错 ERR-7002 的具体含义是什么？", "reference_answer": "ERR-7002 表示并发会话数超限", "expected_chunk_ids": ["T-1011#0"], "source": "synthetic"}
+{"id": "S171", "type": "semantic", "question": "单个账号允许的最大并发会话数量是多少？", "reference_answer": "单个账号最多 3 个并发会话", "expected_chunk_ids": ["T-1011#0"], "source": "synthetic"}
+{"id": "S172", "type": "lexical", "question": "遇到 ERR-7002 错误码时，用户应首先执行什么操作？", "reference_answer": "请先在门户断开其他设备的会话后再连接", "expected_chunk_ids": ["T-1011#0"], "source": "synthetic"}
+{"id": "S173", "type": "lexical", "question": "ERR-7002 错误提示的会话数超限是指哪种情况？", "reference_answer": "表示并发会话数超限", "expected_chunk_ids": ["T-1011#0"], "source": "synthetic"}
+{"id": "S174", "type": "semantic", "question": "我想给新入职的员工开通系统权限，具体应该走什么流程？", "reference_answer": "在内网门户提交权限申请单，选择目标系统与角色，由直属主管审批后自动开通。", "expected_chunk_ids": ["faq-account-permission#0"], "source": "synthetic"}
