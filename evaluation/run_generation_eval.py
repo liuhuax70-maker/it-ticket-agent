@@ -41,6 +41,31 @@ def _mean(values: list[float]) -> float:
     return round(sum(values) / len(values), 4) if values else 0.0
 
 
+def _percentile(values: list[float], ratio: float) -> float:
+    if not values:
+        return 0.0
+    ordered = sorted(values)
+    index = min(len(ordered) - 1, max(0, round(ratio * (len(ordered) - 1))))
+    return round(ordered[index], 2)
+
+
+def _latency_summary(rows: list[dict]) -> dict:
+    """延迟统计（秒）；本地模型关注 P95 而非均值。"""
+    def stats(key: str) -> dict:
+        values = [row[key] for row in rows]
+        return {
+            "p50": _percentile(values, 0.5),
+            "p95": _percentile(values, 0.95),
+            "max": round(max(values), 2) if values else 0.0,
+        }
+
+    return {
+        "retrieval_seconds": stats("retrieval_seconds"),
+        "generation_seconds": stats("generation_seconds"),
+        "total_seconds": stats("total_seconds"),
+    }
+
+
 def evaluate(items, *, top_k: int | None, rerank: bool | None) -> dict:
     """分别统计正样本与负样本的生成层表现。"""
     positives = [item for item in items if item.expected_chunk_ids]
@@ -63,6 +88,9 @@ def evaluate(items, *, top_k: int | None, rerank: bool | None) -> dict:
                 "ungrounded_entities": report.ungrounded_entities,
                 "citation_ok": report.ok,
                 "retrieved_ids": run.retrieved_ids,
+                "retrieval_seconds": run.retrieval_seconds,
+                "generation_seconds": run.generation_seconds,
+                "total_seconds": run.total_seconds,
             }
         )
 
@@ -77,10 +105,14 @@ def evaluate(items, *, top_k: int | None, rerank: bool | None) -> dict:
                 "answer": run.answer,
                 "refused": is_refusal(run.answer),
                 "retrieved_ids": run.retrieved_ids,
+                "retrieval_seconds": run.retrieval_seconds,
+                "generation_seconds": run.generation_seconds,
+                "total_seconds": run.total_seconds,
             }
         )
 
     return {
+        "latency": _latency_summary(positive_rows + negative_rows),
         "positive": {
             "count": len(positive_rows),
             "citation_ok_rate": _mean([1.0 if r["citation_ok"] else 0.0 for r in positive_rows]),
@@ -123,6 +155,17 @@ def print_report(result: dict) -> None:
             print(f"       回答: {answer}…")
     else:
         print("  全部正确拒答 ✅")
+
+    latency = result["latency"]
+    print("\n=== 延迟（秒）===")
+    print(f"  {'阶段':<8} {'P50':>7} {'P95':>7} {'最大':>7}")
+    for key, label in (
+        ("retrieval_seconds", "检索"),
+        ("generation_seconds", "生成"),
+        ("total_seconds", "合计"),
+    ):
+        stats = latency[key]
+        print(f"  {label:<8} {stats['p50']:>7.2f} {stats['p95']:>7.2f} {stats['max']:>7.2f}")
 
 
 def main() -> None:

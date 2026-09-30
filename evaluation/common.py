@@ -8,6 +8,7 @@
 """
 
 import json
+import time
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -46,6 +47,13 @@ class EvalRun:
     debug: dict
     #: 原始检索结果（含 chunk_id / content / 元数据），供引用回链校验使用
     retrieved: list[dict] = field(default_factory=list)
+    #: 分段耗时（秒），用于延迟基线（要点文档 §3.7 要求能报出 P95 延迟）
+    retrieval_seconds: float = 0.0
+    generation_seconds: float = 0.0
+
+    @property
+    def total_seconds(self) -> float:
+        return round(self.retrieval_seconds + self.generation_seconds, 3)
 
 
 def load_testset(path: Path | str = TESTSET_PATH) -> list[EvalItem]:
@@ -70,16 +78,19 @@ def run_system(
     generate_answer: bool = True,
     rerank: bool | None = None,
 ) -> EvalRun:
-    """跑一遍被测系统。"""
+    """跑一遍被测系统，并分别记录检索与生成耗时。"""
+    started = time.perf_counter()
     chunks, mode, debug = hybrid_search(item.question, top_k=top_k, rerank_enabled=rerank)
+    retrieval_seconds = time.perf_counter() - started
 
     answer = ""
+    generation_seconds = 0.0
     if generate_answer and chunks:
         context = build_context(chunks)
-        answer = generate(
-            SYSTEM_PROMPT,
-            USER_PROMPT_TEMPLATE.format(context=context, query=item.question),
-        )
+        user_prompt = USER_PROMPT_TEMPLATE.format(context=context, query=item.question)
+        gen_started = time.perf_counter()
+        answer = generate(SYSTEM_PROMPT, user_prompt)
+        generation_seconds = time.perf_counter() - gen_started
 
     return EvalRun(
         item=item,
@@ -89,6 +100,8 @@ def run_system(
         answer=answer,
         debug=debug,
         retrieved=[c.model_dump(mode="json") for c in chunks],
+        retrieval_seconds=round(retrieval_seconds, 3),
+        generation_seconds=round(generation_seconds, 3),
     )
 
 
