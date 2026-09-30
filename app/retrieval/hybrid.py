@@ -77,6 +77,27 @@ def _collect(future, timeout: float, channel: str) -> tuple[list[Chunk], str | N
         return [], f"{type(exc).__name__}: {exc}"
 
 
+def passes_relevance_gate(chunks: list[Chunk], min_dense: float) -> bool:
+    """是否存在「足够相关」的片段（相关性门槛）。
+
+    只判稠密余弦分：BM25 原始分受查询长度与词频影响、**不可跨查询比较**
+    （实测正负样本分布严重重叠），RRF 是排名分、无相关性含义。
+
+    :param chunks: 待判定的片段（通常是 Top-K）。
+    :param min_dense: 门槛值；`<= 0` 表示不启用门槛（恒定通过）。
+    """
+    if min_dense <= 0:
+        return True
+
+    scores = [chunk.dense_score for chunk in chunks if chunk.dense_score is not None]
+    if not scores:
+        # 稠密通道不可用（已降级为纯 BM25）时**无法判定**相关性。
+        # 此时必须放行：否则纯 BM25 模式下每个问题都会被判成「无资料」，
+        # 整条链路直接瘫痪。这也是「漏判代价高于误收」原则的体现。
+        return True
+    return any(score >= min_dense for score in scores)
+
+
 def _resolve_mode(dense_error: str | None, sparse_error: str | None) -> RetrievalMode:
     if dense_error and sparse_error:
         return RetrievalMode.DEGRADED
@@ -183,18 +204,35 @@ def hybrid_search(
 
     # 5) 截断到 Top-K
     final = candidates[:top_k]
+
+    # 6) 相关性门槛：一条都不够相关 → 判定「无可用资料」，交由上层走拒答/转人工路径。
+    #    只判稠密分（BM25 原始分不可跨查询比较、RRF 是排名分），理由见配置注释。
+    max_dense = max((c.dense_score or 0.0) for c in final) if final else 0.0
+    # 注意：完全没召回（final 为空）不算「被门槛拦截」，那是无命中，两者要区分开
+    rejected = bool(final) and not passes_relevance_gate(final, settings.relevance_min_dense)
+    if rejected:
+        logger.info(
+            "相关性门槛拦截: 最高稠密分 %.3f < %.2f，判定无可用资料",
+            max_dense,
+            settings.relevance_min_dense,
+        )
+        final = []
+
     debug = _build_debug(
         mode, dense_chunks, sparse_chunks, fused, reranked, dense_error, sparse_error, final
     )
     debug["fused_before_dedupe"] = len(fused_raw)
+    debug["max_dense"] = round(max_dense, 4)
+    debug["relevance_rejected"] = rejected
 
     logger.info(
-        "混合检索完成: mode=%s dense=%d sparse=%d fused=%d reranked=%s final=%d",
+        "混合检索完成: mode=%s dense=%d sparse=%d fused=%d reranked=%s final=%d rejected=%s",
         debug["mode"],
         debug["dense_hits"],
         debug["sparse_hits"],
         debug["fused"],
         debug["reranked"],
         len(final),
+        rejected,
     )
     return final, mode, debug

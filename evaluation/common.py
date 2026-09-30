@@ -15,7 +15,12 @@ from pathlib import Path
 from app.core.config import get_settings
 from app.core.logging import get_logger
 from app.generation.ollama import generate
-from app.generation.prompts import SYSTEM_PROMPT, USER_PROMPT_TEMPLATE, build_context
+from app.generation.prompts import (
+    NOT_FOUND_REPLY,
+    SYSTEM_PROMPT,
+    USER_PROMPT_TEMPLATE,
+    build_context,
+)
 from app.retrieval.hybrid import hybrid_search
 
 logger = get_logger(__name__)
@@ -88,12 +93,16 @@ def run_system(
 
     answer = ""
     generation_seconds = 0.0
-    if generate_answer and chunks:
-        context = build_context(chunks)
-        user_prompt = USER_PROMPT_TEMPLATE.format(context=context, query=item.question)
-        gen_started = time.perf_counter()
-        answer = generate(SYSTEM_PROMPT, user_prompt)
-        generation_seconds = time.perf_counter() - gen_started
+    if generate_answer:
+        if chunks:
+            context = build_context(chunks)
+            user_prompt = USER_PROMPT_TEMPLATE.format(context=context, query=item.question)
+            gen_started = time.perf_counter()
+            answer = generate(SYSTEM_PROMPT, user_prompt)
+            generation_seconds = time.perf_counter() - gen_started
+        else:
+            # 无命中或被相关性门槛拦截：与线上链路一致，直接给拒答话术，不再调用生成
+            answer = NOT_FOUND_REPLY
 
     return EvalRun(
         item=item,

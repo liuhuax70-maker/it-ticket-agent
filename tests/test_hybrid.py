@@ -187,6 +187,8 @@ def test_hybrid_degrades_channel_on_timeout(monkeypatch):
         rrf_k = 60
         rerank_enabled = False
         channel_timeout_seconds = 0.05
+        #: 稠密通道已降级，此处无 dense_score 可用，门槛应放行（见 passes_relevance_gate）
+        relevance_min_dense = 0.42
 
     monkeypatch.setattr(hybrid, "get_settings", lambda: FakeSettings())
 

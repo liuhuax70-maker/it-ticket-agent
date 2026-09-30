@@ -9,9 +9,13 @@
 | MRR | 第一个期望片段的排名倒数（衡量「排得够不够前」） |
 
 **负样本单独处理**：负样本没有「应召回的 chunk」，因此不参与上述指标；
-它们用于诊断「检索在没有答案的问题上是否仍然自信」——报告 Top-1 的
-稠密/稀疏分数分布。注意这些分数**未经校准**，不能直接当「该不该回答」的阈值
-（真正的拒答判断在生成层，见 `run_generation_eval.py`）。
+它们用于诊断「检索在知识库范围外的问题上是否仍然自信」——报告 Top-1 的
+稠密/稀疏分数分布，以及**返回非空结果的比例**。
+
+后者受相关性门槛影响：启用 `RELEVANCE_MIN_DENSE` 后，低于门槛的问题会直接
+返回空结果（走拒答/转人工），该比例会明显下降（实测 100% → 19.44%）。
+门槛的校准过程见 `calibrate_threshold.py`。
+注意**只有稠密分可用于校准**：BM25 原始分不可跨查询比较。
 
 用法：
     python -m evaluation.run_retrieval_eval
@@ -141,10 +145,16 @@ def print_report(result: dict, top_k: int) -> None:
 
     negatives = result["negatives"]
     print(f"\n  负样本诊断（{negatives['count']} 条，不参与上述指标）：")
-    print(f"    返回非空结果比例: {negatives['returned_nonempty_rate']:.2%}  ← 恒为 100% 属正常：缺少相关性门槛")
+    print(f"    返回非空结果比例: {negatives['returned_nonempty_rate']:.2%}")
     print(f"    Top-1 稠密分均值: {negatives['mean_top1_dense']:.4f}")
     print(f"    Top-1 稀疏分均值: {negatives['mean_top1_sparse']:.4f}")
-    print("    说明：分数未经校准，不能直接当阈值；拒答判断在生成层，见 run_generation_eval")
+    if get_settings().relevance_min_dense > 0:
+        print(
+            f"    已启用相关性门槛 RELEVANCE_MIN_DENSE={get_settings().relevance_min_dense}："
+            "低于该比例的负样本仍拿到片段，需由生成层拒答兜底"
+        )
+    else:
+        print("    未启用相关性门槛（RELEVANCE_MIN_DENSE=0）：所有问题都会拿到片段，拒答全靠生成层")
 
     failures = result["failures"]
     if failures:
