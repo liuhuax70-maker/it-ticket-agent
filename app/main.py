@@ -16,6 +16,8 @@ from app.api.router import api_router
 from app.core.config import get_settings
 from app.core.errors import register_exception_handlers
 from app.core.logging import get_logger, setup_logging
+from app.graph.build import get_graph
+from app.memory.checkpointer import close_checkpointer
 
 logger = get_logger(__name__)
 
@@ -25,8 +27,15 @@ async def lifespan(app: FastAPI):
     settings = get_settings()
     setup_logging(settings.log_level)
     logger.info("app 启动 env=%s version=%s", settings.app_env, __version__)
-    # TODO(后续)：在此接入 LangSmith、Milvus 连接池、Checkpointer
+
+    # 预热 Checkpointer 与编排图，避免首个请求承担初始化开销
+    # TODO(后续)：在此接入 LangSmith、Milvus 连接池
+    await get_graph()
+    logger.info("编排图已就绪")
+
     yield
+
+    await close_checkpointer()
     logger.info("app 停止")
 
 

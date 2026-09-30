@@ -13,7 +13,7 @@
 > （`开发流程/04` §3.3 的示意图在这一点上不够清晰，已按此处实现并以本文件为准。）
 """
 
-from functools import lru_cache
+from typing import Any
 
 from langgraph.graph import END, START, StateGraph
 
@@ -76,8 +76,22 @@ def build_graph(checkpointer=None):
     return graph.compile(checkpointer=checkpointer or get_checkpointer())
 
 
-@lru_cache
-def get_graph():
-    """编译后的图单例。"""
-    logger.info("编译 LangGraph 编排图")
-    return build_graph()
+_graph: Any = None
+
+
+async def get_graph():
+    """编译后的图单例（首次调用时异步初始化 Checkpointer）。"""
+    global _graph
+
+    if _graph is None:
+        checkpointer = await get_checkpointer()
+        _graph = build_graph(checkpointer=checkpointer)
+        logger.info("编译 LangGraph 编排图")
+
+    return _graph
+
+
+def reset_graph() -> None:
+    """清空图单例（测试或切换 Checkpointer 时使用）。"""
+    global _graph
+    _graph = None

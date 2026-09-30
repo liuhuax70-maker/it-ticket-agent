@@ -271,6 +271,43 @@ def test_draft_failure_falls_back_to_excerpts(monkeypatch):
     assert result["send_status"] == SendStatus.SENT.value
 
 
+def test_draft_streams_tokens_only_when_explicitly_enabled(monkeypatch):
+    """默认走非流式；只有 config 里显式开启 stream_tokens 才逐 token 流式。
+
+    这条守住一个易踩的坑：`get_stream_writer()` 在非流式 invoke 下也会返回可调用对象，
+    若据此判断会误入流式分支（表现为单元测试静默调用真实模型）。
+    """
+    import asyncio
+
+    _patch_retrieve(monkeypatch, [_chunk()])
+    monkeypatch.setattr(draft_module, "generate", lambda system, user: "非流式草稿")
+    monkeypatch.setattr(draft_module, "generate_stream", lambda system, user: iter(["流式", "草稿"]))
+
+    graph = build.build_graph(checkpointer=InMemorySaver())
+
+    async def run(stream_tokens: bool):
+        config = {"configurable": {"thread_id": f"s-{stream_tokens}", "stream_tokens": stream_tokens}}
+        events = []
+        async for mode, chunk in graph.astream(
+            {"session_id": f"s-{stream_tokens}", "ticket_id": "T-S", "query": "ERR-4041"},
+            config,
+            stream_mode=["updates", "custom"],
+        ):
+            events.append((mode, chunk))
+        return events
+
+    # 未开启：无 token 事件，草稿来自 generate
+    plain = asyncio.run(run(False))
+    assert [c for m, c in plain if m == "custom"] == []
+
+    # 已开启：token 事件按序推送，且能拼回草稿
+    streamed = asyncio.run(run(True))
+    tokens = [c["delta"] for m, c in streamed if m == "custom"]
+    assert tokens == ["流式", "草稿"]
+    drafts = [c["draft"]["draft"] for m, c in streamed if m == "updates" and "draft" in c]
+    assert drafts == ["流式草稿"]
+
+
 def test_state_is_json_serializable(monkeypatch):
     """状态里必须是原生 JSON 值，否则 Checkpointer 反序列化会告警（甚至未来版本直接失败）。"""
     import json
