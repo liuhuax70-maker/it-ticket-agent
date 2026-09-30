@@ -51,8 +51,7 @@ curl http://localhost:8000/api/v1/health
 
 ```bash
 pip install -r requirements.txt
-# 本地运行时把 .env 中的 MILVUS_HOST 改为 localhost、OLLAMA_BASE_URL 改为 http://localhost:11434
-cp .env.example .env
+cp .env.example .env          # 默认即为本地地址（localhost）
 uvicorn app.main:app --reload
 ```
 

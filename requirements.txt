@@ -11,7 +11,7 @@ langchain>=0.3
 langchain-core>=0.3
 
 # ===== 检索（Milvus + 中文分词） =====
-pymilvus>=2.4
+pymilvus>=3.0,<4
 jieba>=0.42
 
 # ===== 生成（Ollama / HTTP） =====
