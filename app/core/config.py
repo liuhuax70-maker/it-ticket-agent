@@ -56,9 +56,17 @@ class Settings(BaseSettings):
     rerank_timeout_seconds: float = 60.0
 
     # ---- 编排 / 会话 ----
-    checkpointer_backend: str = "sqlite"
+    checkpointer_backend: str = "sqlite"  # sqlite | memory
     checkpointer_path: str = "./data/checkpoints.sqlite"
     session_ttl_days: int = 7
+    #: 敏感关键词（英文逗号分隔）；命中即判为敏感工单并转人工审核
+    sensitive_keywords: str = "投诉,举报,起诉,法律,赔偿,泄露,数据丢失,安全事件,监管,停机事故,账号被盗"
+    #: 是否所有工单都需人工审核（默认仅敏感工单需要）
+    require_review_for_all: bool = False
+
+    # ---- 生成 ----
+    #: 单次生成超时（秒）；本地模型长文本生成较慢，给足时间
+    llm_timeout_seconds: float = 300.0
 
     # ---- 可观测 ----
     langsmith_enabled: bool = False
@@ -73,6 +81,11 @@ class Settings(BaseSettings):
     def milvus_uri(self) -> str:
         """pymilvus 连接地址。"""
         return f"http://{self.milvus_host}:{self.milvus_port}"
+
+    @property
+    def sensitive_keyword_list(self) -> list[str]:
+        """敏感关键词列表（去掉空项）。"""
+        return [kw.strip() for kw in self.sensitive_keywords.split(",") if kw.strip()]
 
 
 @lru_cache
