@@ -1,0 +1,27 @@
+# ===== Web / API =====
+fastapi>=0.115
+uvicorn[standard]>=0.30
+pydantic>=2.7
+pydantic-settings>=2.3
+
+# ===== 编排（LangGraph） =====
+langgraph>=0.2
+langgraph-checkpoint-sqlite>=2.0
+langchain>=0.3
+langchain-core>=0.3
+
+# ===== 检索（Milvus + 中文分词） =====
+pymilvus>=2.4
+jieba>=0.42
+
+# ===== 生成（Ollama / HTTP） =====
+ollama>=0.3
+httpx>=0.27
+
+# ===== 可观测 / 评估 =====
+langsmith>=0.1
+ragas>=0.2
+
+# ===== 开发 / 测试 =====
+pytest>=8.0
+pytest-asyncio>=0.23
