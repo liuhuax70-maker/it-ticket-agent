@@ -42,12 +42,17 @@ class Settings(BaseSettings):
     top_n_dense: int = 20
     top_n_sparse: int = 20
     top_n_fused: int = 50
-    top_k: int = 5
+    #: 进入生成上下文的片段数。由 `evaluation/run_param_sweep.py` 扫出：
+    #: k=3→Recall 85.0%，k=5→90.8%，**k=8→95.8%**，k=8~10 为平台期，k=15→100%。
+    #: 取拐点 k=8（再往上收益递减但上下文成本线性增长）。
+    top_k: int = 8
     rrf_k: int = 60
     rerank_enabled: bool = False
     #: 单通道超时（秒）；超时则该通道降级。
-    #: 设计文档给的是 2s，但本地 embedding 首次调用含模型加载，故放宽到 5s。
-    channel_timeout_seconds: float = 5.0
+    #: 实测：本地 embedding 在模型冷启动/负载高时会超过 5s，导致稠密通道**静默降级**为纯 BM25
+    #: （实测出现过一次）。这类「静默劣化」比报错更危险，故放宽到 10s。
+    #: 代价是真正卡死时多等 5s，可接受。
+    channel_timeout_seconds: float = 10.0
     #: 参与重排的候选上限（重排逐条调用大模型，必须限流）
     rerank_top_n: int = 20
     #: 重排并发度
@@ -67,6 +72,9 @@ class Settings(BaseSettings):
     # ---- 生成 ----
     #: 单次生成超时（秒）；本地模型长文本生成较慢，给足时间
     llm_timeout_seconds: float = 300.0
+    #: 拼装上下文的最大字符预算；超出时**显式丢弃**低排名片段并记录日志，
+    #: 而不是让模型 API 静默截断（被截掉的可能正是答案所在片段）
+    context_max_chars: int = 6000
 
     # ---- 可观测 ----
     langsmith_enabled: bool = False

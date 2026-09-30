@@ -2,6 +2,7 @@
 
 import pytest
 
+from app.retrieval import milvus_store
 from app.retrieval.milvus_store import (
     FIELD_CONTENT,
     FIELD_DOC_ID,
@@ -108,6 +109,62 @@ def test_dense_field_uses_configured_dimension():
     dense = next(field for field in schema.fields if field.name == "dense")
 
     assert dense.params["dim"] == str(get_settings().embedding_dim) or dense.params["dim"] == get_settings().embedding_dim
+
+
+# ---------------- 索引一致性断言（防「换 embedding 不重建索引」） ----------------
+
+
+def test_verify_index_consistency_passes_when_meta_matches(monkeypatch):
+    expected = milvus_store.build_index_meta()
+    monkeypatch.setattr(milvus_store, "read_index_meta", lambda client=None: expected)
+
+    result = milvus_store.verify_index_consistency()
+
+    assert result["ok"] is True
+    assert result["mismatches"] == []
+
+
+def test_verify_index_consistency_detects_embedding_model_change(monkeypatch):
+    stored = dict(milvus_store.build_index_meta())
+    stored["embedding_model"] = "some-other-model"
+    monkeypatch.setattr(milvus_store, "read_index_meta", lambda client=None: stored)
+
+    with pytest.raises(RuntimeError, match="embedding_model"):
+        milvus_store.verify_index_consistency()
+
+    result = milvus_store.verify_index_consistency(raise_on_mismatch=False)
+    assert result["ok"] is False
+
+
+def test_verify_index_consistency_detects_dimension_change(monkeypatch):
+    stored = dict(milvus_store.build_index_meta())
+    stored["embedding_dim"] = 768
+    monkeypatch.setattr(milvus_store, "read_index_meta", lambda client=None: stored)
+
+    result = milvus_store.verify_index_consistency(raise_on_mismatch=False)
+
+    assert result["ok"] is False
+    assert any("embedding_dim" in item for item in result["mismatches"])
+
+
+def test_verify_index_consistency_flags_missing_meta(monkeypatch):
+    """旧版本建的集合没有元数据 → 无法确认向量空间，必须报错。"""
+    monkeypatch.setattr(milvus_store, "read_index_meta", lambda client=None: None)
+
+    result = milvus_store.verify_index_consistency(raise_on_mismatch=False)
+
+    assert result["ok"] is False
+    assert "未记录" in result["mismatches"][0]
+
+
+def test_build_schema_carries_index_meta_in_description():
+    """description 必须通过 create_schema 写入，否则读回为空。"""
+    schema = milvus_store.build_schema()
+    description = getattr(schema, "description", "") or ""
+
+    payload = __import__("json").loads(description)
+
+    assert payload[milvus_store.INDEX_META_KEY]["embedding_model"]
 
 
 def test_index_params_declare_hnsw_and_bm25():

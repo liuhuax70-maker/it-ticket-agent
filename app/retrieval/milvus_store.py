@@ -8,16 +8,28 @@
 | --- | --- | --- |
 | chunk_id | VARCHAR(128) | 主键，`{doc_id}#{index}` |
 | doc_id | VARCHAR(128) | 文档标识 |
-| content | VARCHAR(**8192**) | 片段正文，`enable_analyzer=True` 供 BM25 |
+| content | VARCHAR(**8192**) | 片段正文（含标题层级路径前缀），`enable_analyzer=True` 供 BM25 |
 | dense | FLOAT_VECTOR(1024) | qwen3-embedding 向量，COSINE |
 | sparse | SPARSE_FLOAT_VECTOR | 由 BM25 Function 自动生成 |
-| source | VARCHAR(32) | manual / faq / ticket |
+| source | VARCHAR(32) | manual / faq / ticket，支持按来源删除 |
 | title | VARCHAR(512) | 章节标题 |
+| heading_path | VARCHAR(512) | 标题层级路径（`一级 > 二级`），用于来源标注 |
+| content_hash | VARCHAR(64) | 内容哈希，用于**入库幂等**与查询期去重 |
+| embedding_model | VARCHAR(128) | 生成该向量时所用的 embedding 模型，用于一致性断言 |
 | version | VARCHAR(64) | 版本号（可空） |
 | error_code | VARCHAR(64) | 错误码（可空） |
 | updated_at | INT64 | 更新时间戳（秒） |
+
+## 为什么要记录 embedding 模型
+
+换 embedding 模型却不重建索引，是 RAG 里最隐蔽的故障：新旧向量落在**不同向量空间**，
+代码不报错、维度甚至可能一致，但召回质量会**静默下降**且可持续数周。
+
+因此：集合创建时把「embedding 模型名 + 维度 + schema 版本」写进集合 description，
+每次入库/启动都 `verify_index_consistency()` 断言一致，不一致直接拒绝服务。
 """
 
+import json
 from functools import lru_cache
 
 from pymilvus import CollectionSchema, DataType, Function, FunctionType, MilvusClient
@@ -36,6 +48,9 @@ FIELD_DENSE = "dense"
 FIELD_SPARSE = "sparse"
 FIELD_SOURCE = "source"
 FIELD_TITLE = "title"
+FIELD_HEADING_PATH = "heading_path"
+FIELD_CONTENT_HASH = "content_hash"
+FIELD_EMBEDDING_MODEL = "embedding_model"
 FIELD_VERSION = "version"
 FIELD_ERROR_CODE = "error_code"
 FIELD_UPDATED_AT = "updated_at"
@@ -47,10 +62,19 @@ BM25_FUNCTION_NAME = "bm25"
 MAX_ID_LENGTH = 128
 MAX_CONTENT_LENGTH = 8192
 MAX_TITLE_LENGTH = 512
+MAX_PATH_LENGTH = 512
+MAX_HASH_LENGTH = 64
+MAX_MODEL_LENGTH = 128
 MAX_SHORT_LENGTH = 64
 
 #: 中文分析器；jieba 分词对错误码与专有名词的切分更友好
 ANALYZER_PARAMS: dict = {"tokenizer": "jieba"}
+
+#: Schema 版本；字段结构变化时必须递增，用于识别「旧索引需要重建」
+SCHEMA_VERSION = 2
+
+#: 集合 description 里存放索引元数据的键
+INDEX_META_KEY = "kb_index_meta"
 
 #: 检索时返回的字段
 OUTPUT_FIELDS = [
@@ -59,6 +83,8 @@ OUTPUT_FIELDS = [
     FIELD_CONTENT,
     FIELD_SOURCE,
     FIELD_TITLE,
+    FIELD_HEADING_PATH,
+    FIELD_CONTENT_HASH,
     FIELD_VERSION,
     FIELD_ERROR_CODE,
 ]
@@ -72,11 +98,32 @@ def get_client() -> MilvusClient:
     return MilvusClient(uri=settings.milvus_uri)
 
 
+def build_index_meta() -> dict:
+    """当前代码期望的索引元数据（写入集合 description）。"""
+    settings = get_settings()
+    return {
+        "schema_version": SCHEMA_VERSION,
+        "embedding_model": settings.embedding_model,
+        "embedding_dim": settings.embedding_dim,
+        "analyzer": ANALYZER_PARAMS,
+    }
+
+
+def _description(meta: dict) -> str:
+    return json.dumps({INDEX_META_KEY: meta}, ensure_ascii=False)
+
+
 def build_schema() -> CollectionSchema:
     """构建集合 Schema（含 BM25 Function）。"""
     settings = get_settings()
 
-    schema = MilvusClient.create_schema(auto_id=False, enable_dynamic_field=False)
+    # 说明：description 必须通过 create_schema 传入；
+    # 直接给 create_collection(description=...) 不会持久化（读回为空字符串）。
+    schema = MilvusClient.create_schema(
+        auto_id=False,
+        enable_dynamic_field=False,
+        description=_description(build_index_meta()),
+    )
 
     schema.add_field(
         field_name=FIELD_CHUNK_ID,
@@ -100,6 +147,9 @@ def build_schema() -> CollectionSchema:
     schema.add_field(field_name=FIELD_SPARSE, datatype=DataType.SPARSE_FLOAT_VECTOR)
     schema.add_field(field_name=FIELD_SOURCE, datatype=DataType.VARCHAR, max_length=MAX_SHORT_LENGTH)
     schema.add_field(field_name=FIELD_TITLE, datatype=DataType.VARCHAR, max_length=MAX_TITLE_LENGTH)
+    schema.add_field(field_name=FIELD_HEADING_PATH, datatype=DataType.VARCHAR, max_length=MAX_PATH_LENGTH)
+    schema.add_field(field_name=FIELD_CONTENT_HASH, datatype=DataType.VARCHAR, max_length=MAX_HASH_LENGTH)
+    schema.add_field(field_name=FIELD_EMBEDDING_MODEL, datatype=DataType.VARCHAR, max_length=MAX_MODEL_LENGTH)
     schema.add_field(field_name=FIELD_VERSION, datatype=DataType.VARCHAR, max_length=MAX_SHORT_LENGTH)
     schema.add_field(field_name=FIELD_ERROR_CODE, datatype=DataType.VARCHAR, max_length=MAX_SHORT_LENGTH)
     schema.add_field(field_name=FIELD_UPDATED_AT, datatype=DataType.INT64)
@@ -135,16 +185,12 @@ def build_index_params():
         metric_type="BM25",
         params={"bm25_k1": 1.2, "bm25_b": 0.75},
     )
-    index_params.add_index(
-        field_name=FIELD_SOURCE,
-        index_name="idx_source",
-        index_type="INVERTED",
-    )
-    index_params.add_index(
-        field_name=FIELD_ERROR_CODE,
-        index_name="idx_error_code",
-        index_type="INVERTED",
-    )
+    for field_name, index_name in (
+        (FIELD_SOURCE, "idx_source"),
+        (FIELD_ERROR_CODE, "idx_error_code"),
+        (FIELD_CONTENT_HASH, "idx_content_hash"),
+    ):
+        index_params.add_index(field_name=field_name, index_name=index_name, index_type="INVERTED")
     return index_params
 
 
@@ -163,11 +209,62 @@ def ensure_collection(client: MilvusClient | None = None, *, recreate: bool = Fa
 
     client.create_collection(
         collection_name=name,
-        schema=build_schema(),
+        schema=build_schema(),  # description 已写入 schema
         index_params=build_index_params(),
     )
-    logger.info("集合创建完成: %s", name)
+    logger.info("集合创建完成: %s（schema v%d）", name, SCHEMA_VERSION)
     return name
+
+
+def read_index_meta(client: MilvusClient | None = None) -> dict | None:
+    """读取集合 description 中的索引元数据。"""
+    settings = get_settings()
+    client = client or get_client()
+    name = settings.milvus_collection
+
+    if not client.has_collection(name):
+        return None
+
+    description = client.describe_collection(name).get("description") or ""
+    try:
+        payload = json.loads(description)
+    except (json.JSONDecodeError, TypeError):
+        return None
+    return payload.get(INDEX_META_KEY) if isinstance(payload, dict) else None
+
+
+def verify_index_consistency(
+    client: MilvusClient | None = None, *, raise_on_mismatch: bool = True
+) -> dict:
+    """断言「索引里的向量」与「当前 embedding 模型」属于同一向量空间。
+
+    这是防「换模型不重建索引」这类**静默故障**的闸门。
+
+    :raises RuntimeError: 不一致且 `raise_on_mismatch=True`。
+    """
+    expected = build_index_meta()
+    stored = read_index_meta(client)
+
+    mismatches: list[str] = []
+    if stored is None:
+        mismatches.append("索引未记录 embedding 元数据（可能是旧版本建的集合）")
+    else:
+        for key in ("embedding_model", "embedding_dim", "schema_version"):
+            if stored.get(key) != expected.get(key):
+                mismatches.append(f"{key}: 索引={stored.get(key)!r} 当前={expected.get(key)!r}")
+
+    result = {"ok": not mismatches, "stored": stored, "expected": expected, "mismatches": mismatches}
+
+    if mismatches:
+        message = (
+            "索引与当前 embedding 配置不一致："
+            + "；".join(mismatches)
+            + "。请用 `python -m ingestion.ingest --recreate` 重建索引。"
+        )
+        if raise_on_mismatch:
+            raise RuntimeError(message)
+        logger.error(message)
+    return result
 
 
 def collection_stats(client: MilvusClient | None = None) -> dict:
@@ -185,6 +282,53 @@ def collection_stats(client: MilvusClient | None = None) -> dict:
         "collection": name,
         "row_count": int(stats.get("row_count", 0)),
     }
+
+
+def upsert_rows(rows: list[dict], client: MilvusClient | None = None) -> int:
+    """按主键 upsert 写入（**幂等**：重复执行不会产生重复片段）。"""
+    if not rows:
+        return 0
+    settings = get_settings()
+    client = client or get_client()
+
+    result = client.upsert(collection_name=settings.milvus_collection, data=rows)
+    return int(result.get("upsert_count", len(rows)))
+
+
+def delete_by_source(source: str, client: MilvusClient | None = None) -> int:
+    """按来源删除全部片段（支持「删文档」场景）。"""
+    settings = get_settings()
+    client = client or get_client()
+
+    result = client.delete(
+        collection_name=settings.milvus_collection,
+        filter=f'{FIELD_SOURCE} == "{source}"',
+    )
+    deleted = int(result.get("delete_count", 0))
+    logger.info("按来源删除: source=%s count=%d", source, deleted)
+    return deleted
+
+
+def count_by_source(client: MilvusClient | None = None) -> dict[str, int]:
+    """统计各来源的片段数（用于验证幂等与删除效果）。"""
+    settings = get_settings()
+    client = client or get_client()
+    name = settings.milvus_collection
+
+    if not client.has_collection(name):
+        return {}
+
+    client.flush(name)
+    counts: dict[str, int] = {}
+    for source in DocSource:
+        rows = client.query(
+            collection_name=name,
+            filter=f'{FIELD_SOURCE} == "{source.value}"',
+            output_fields=["count(*)"],
+        )
+        total = rows[0].get("count(*)", 0) if rows else 0
+        counts[source.value] = int(total)
+    return counts
 
 
 def build_filter_expr(filters: RetrievalFilters | None) -> str:
@@ -222,6 +366,8 @@ def to_chunks(results, score_field: str | None = None) -> list[Chunk]:
                 content=entity.get(FIELD_CONTENT, ""),
                 source=DocSource(source),
                 title=entity.get(FIELD_TITLE) or None,
+                heading_path=entity.get(FIELD_HEADING_PATH) or None,
+                content_hash=entity.get(FIELD_CONTENT_HASH) or None,
                 version=entity.get(FIELD_VERSION) or None,
                 error_code=entity.get(FIELD_ERROR_CODE) or None,
                 rank=rank,

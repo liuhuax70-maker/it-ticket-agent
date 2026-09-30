@@ -14,6 +14,8 @@
 两路**并行执行**并各自带超时：单路超时/报错只降级该路，不影响整体可用性。
 """
 
+import hashlib
+import re
 from concurrent.futures import ThreadPoolExecutor
 from concurrent.futures import TimeoutError as FuturesTimeoutError
 
@@ -24,6 +26,38 @@ from app.retrieval.fuse import reciprocal_rank_fusion
 from app.schemas.retrieval import Chunk, RetrievalFilters, RetrievalMode
 
 logger = get_logger(__name__)
+
+#: 近重复判定用的前缀长度（同一段内容被不同来源收录时前缀高度一致）
+_NEAR_DUP_PREFIX = 120
+
+
+def _chunk_keys(chunk: Chunk) -> tuple[str, str]:
+    """返回 (精确键, 近重复键)。"""
+    exact = chunk.content_hash or hashlib.sha256(
+        re.sub(r"\s+", "", chunk.content).encode("utf-8")
+    ).hexdigest()
+    near = re.sub(r"\s+", "", chunk.content)[:_NEAR_DUP_PREFIX]
+    return exact, near
+
+
+def dedupe_chunks(chunks: list[Chunk]) -> list[Chunk]:
+    """查询期去重。
+
+    近重复片段（同一内容被多个来源收录、或切分重叠产生的副本）会占满 Top-K，
+    把其他真正相关的内容挤出去，因此融合后必须先去掉它们。
+    """
+    seen_exact: set[str] = set()
+    seen_near: set[str] = set()
+    result: list[Chunk] = []
+
+    for chunk in chunks:
+        exact, near = _chunk_keys(chunk)
+        if exact in seen_exact or near in seen_near:
+            continue
+        seen_exact.add(exact)
+        seen_near.add(near)
+        result.append(chunk)
+    return result
 
 
 def _collect(future, timeout: float, channel: str) -> tuple[list[Chunk], str | None]:
@@ -129,7 +163,13 @@ def hybrid_search(
     else:  # SPARSE_ONLY
         fused = sparse_chunks[:top_n_fused]
 
-    # 3) 可选重排（失败/未实现则跳过，不阻塞主流程）
+    # 3) 去重（近重复片段会占满 Top-K，挤掉其他相关内容）
+    fused_raw = fused
+    fused = dedupe_chunks(fused)
+    if len(fused) < len(fused_raw):
+        logger.info("融合后去重: %d → %d", len(fused_raw), len(fused))
+
+    # 4) 可选重排（失败/未实现则跳过，不阻塞主流程）
     reranked = False
     candidates = fused
     if use_rerank and fused:
@@ -141,11 +181,12 @@ def hybrid_search(
         except Exception as exc:  # noqa: BLE001 - 重排是增强项，失败不应影响召回
             logger.warning("重排失败，本次跳过: %s", exc)
 
-    # 4) 截断到 Top-K
+    # 5) 截断到 Top-K
     final = candidates[:top_k]
     debug = _build_debug(
         mode, dense_chunks, sparse_chunks, fused, reranked, dense_error, sparse_error, final
     )
+    debug["fused_before_dedupe"] = len(fused_raw)
 
     logger.info(
         "混合检索完成: mode=%s dense=%d sparse=%d fused=%d reranked=%s final=%d",

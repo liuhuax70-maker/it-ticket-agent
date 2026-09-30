@@ -143,6 +143,43 @@ def test_chunk_id_format_is_stable():
     assert chunks[0].chunk_id == "manual-01#0"
 
 
+# ---------------- 标题层级路径（自解释） ----------------
+
+
+def test_split_document_captures_nested_heading_path():
+    """块必须携带完整标题层级路径，才能被单独召回后读懂「我是谁」。"""
+    text = "# 产品手册\n\n## 登录模块\n\n### 常见错误码\n\nERR-4041 表示令牌过期。"
+    chunks = split_document("manual-01", text, chunk_size=100, overlap=0)
+
+    assert len(chunks) == 1
+    assert chunks[0].heading_path == ("产品手册", "登录模块", "常见错误码")
+    assert chunks[0].heading_path_text == "产品手册 > 登录模块 > 常见错误码"
+
+
+def test_heading_path_prefix_is_injected_into_content():
+    text = "# 手册\n\n## 登录\n\n### 错误码\n\nERR-4041 表示令牌过期。"
+    chunks = split_document("m", text, chunk_size=100, overlap=0)
+
+    assert chunks[0].content.startswith("【手册 > 登录 > 错误码】")
+
+
+def test_sibling_heading_pops_back_to_same_level():
+    """同级标题之间不应互相继承，路径要正确回退。"""
+    text = "# 手册\n\n## 模块A\n\n### 子节1\n\n内容甲。\n\n### 子节2\n\n内容乙。"
+    chunks = split_document("m", text, chunk_size=40, overlap=0)
+
+    paths = [c.heading_path for c in chunks]
+    assert ("手册", "模块A", "子节1") in paths
+    assert ("手册", "模块A", "子节2") in paths
+
+
+def test_overlap_defaults_to_zero():
+    """结构化切分下默认不重叠（overlap 会引入重复内容）。"""
+    from ingestion.chunk import DEFAULT_OVERLAP_TOKENS
+
+    assert DEFAULT_OVERLAP_TOKENS == 0
+
+
 # ---------------- dedupe_chunks ----------------
 
 

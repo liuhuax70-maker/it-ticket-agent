@@ -30,6 +30,10 @@ class Chunk(BaseModel):
     content: str
     source: DocSource
     title: str | None = None
+    #: 标题层级路径（`一级 > 二级`），用于拼装上下文时标注来源
+    heading_path: str | None = None
+    #: 内容哈希，用于查询期去重
+    content_hash: str | None = None
     version: str | None = None
     error_code: str | None = None
     dense_score: float | None = None

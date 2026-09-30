@@ -44,6 +44,8 @@ class EvalRun:
     mode: str
     answer: str
     debug: dict
+    #: 原始检索结果（含 chunk_id / content / 元数据），供引用回链校验使用
+    retrieved: list[dict] = field(default_factory=list)
 
 
 def load_testset(path: Path | str = TESTSET_PATH) -> list[EvalItem]:
@@ -86,6 +88,7 @@ def run_system(
         mode=mode.value,
         answer=answer,
         debug=debug,
+        retrieved=[c.model_dump(mode="json") for c in chunks],
     )
 
 

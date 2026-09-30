@@ -80,6 +80,55 @@ def test_hybrid_uses_configured_top_k_by_default(monkeypatch):
     assert len(chunks) == get_settings().top_k
 
 
+# ---------------- 查询期去重 ----------------
+
+
+def test_dedupe_chunks_removes_exact_duplicates():
+    from app.retrieval.hybrid import dedupe_chunks
+
+    same = _chunk("a#1")
+    other = _chunk("b#1")
+    other.content = "完全不同的内容" + "补充文字"
+
+    result = dedupe_chunks([same, same.model_copy(), other])
+
+    assert [c.chunk_id for c in result] == ["a#1", "b#1"]
+
+
+def test_dedupe_chunks_removes_near_duplicates_by_prefix():
+    """不同来源但开头高度一致（转载/重复收录）应被去掉。
+
+    近重复判定看归一化后的前 120 字，因此测试前缀必须超过该长度。
+    """
+    from app.retrieval.hybrid import dedupe_chunks
+
+    prefix = "这是一段被多个来源重复收录的长文本" * 10
+    first = _chunk("a#1")
+    first.content = prefix + "甲"
+    second = _chunk("b#1")
+    second.content = prefix + "乙"
+
+    result = dedupe_chunks([first, second])
+
+    assert len(result) == 1
+
+
+def test_hybrid_search_reports_dedupe_in_debug(monkeypatch):
+    prefix = "重复开头" * 40
+    dup_a = _chunk("a#1")
+    dup_a.content = prefix + "甲"
+    dup_b = _chunk("b#1")
+    dup_b.content = prefix + "乙"
+
+    monkeypatch.setattr(dense, "search_dense", lambda q, n, f=None: [dup_a, dup_b])
+    monkeypatch.setattr(sparse, "search_sparse", lambda q, n, f=None: [])
+
+    _, _, debug = hybrid.hybrid_search("q", rerank_enabled=False)
+
+    assert debug["fused_before_dedupe"] == 2
+    assert debug["fused"] == 1
+
+
 # ---------------- 降级路径 ----------------
 
 
