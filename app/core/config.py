@@ -48,6 +48,12 @@ class Settings(BaseSettings):
     #: 单通道超时（秒）；超时则该通道降级。
     #: 设计文档给的是 2s，但本地 embedding 首次调用含模型加载，故放宽到 5s。
     channel_timeout_seconds: float = 5.0
+    #: 参与重排的候选上限（重排逐条调用大模型，必须限流）
+    rerank_top_n: int = 20
+    #: 重排并发度
+    rerank_max_workers: int = 4
+    #: 重排单条超时（秒）
+    rerank_timeout_seconds: float = 60.0
 
     # ---- 编排 / 会话 ----
     checkpointer_backend: str = "sqlite"
