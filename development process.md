@@ -379,7 +379,7 @@ app = create_app()
   期望（三项都真实连通）：
   ```json
   {"status":"ok","milvus":"ok","llm":"ok","redis":"ok",
-   "details":{"milvus":"uri=http://localhost:19531 server=pkg/v2.5.4",
+   "details":{"milvus":"uri=http://localhost:19530 server=pkg/v2.5.4",
               "llm":"endpoint=http://localhost:11434/v1 model=qwen3.5:9b",
               "redis":"url=redis://localhost:6379/0"}}
   ```
