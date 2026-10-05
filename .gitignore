@@ -1,0 +1,31 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+
+# 环境变量与密钥（.env.example 需保留）
+.env
+.env.*
+!.env.example
+
+# 运行时数据：向量库文件、索引台账、依赖服务数据卷
+data/
+volumes/
+deploy/volumes/
+*.db
+
+# 模型权重缓存
+cache/
+models/
+.hf_cache/
+
+# IDE / 系统
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
