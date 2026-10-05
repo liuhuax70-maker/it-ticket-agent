@@ -83,7 +83,7 @@ curl -s -X POST http://localhost:8000/chat \
 本项目**自身**不做部署编排（不做 K8s、不写 Helm、不交付镜像），但本地依赖服务统一用 Docker 拉起：
 
 ```bash
-docker compose -f deploy/docker-compose.yml up -d
+docker compose -f deploy/docker-compose.yml --env-file .env up -d
 docker compose -f deploy/docker-compose.yml ps
 ```
 
@@ -96,10 +96,13 @@ docker compose -f deploy/docker-compose.yml ps
 
 P0 的 `deploy/docker-compose.yml` 只含 **`etcd` / `minio` / `milvus` / `redis`** 四个服务：
 
+> 以下为摘要，**以 `deploy/docker-compose.yml` 为准**（含 healthcheck 与 `depends_on: condition: service_healthy`）。
+> 镜像 tag 请优先选本机 `docker images` 里**已存在**的版本，避免无谓拉取；下方 tag 仅为示例。
+
 ```yaml
 services:
   etcd:
-    image: quay.io/coreos/etcd:v3.5.14
+    image: quay.io/coreos/etcd:v3.5.16
     environment:
       - ETCD_AUTO_COMPACTION_MODE=revision
       - ETCD_AUTO_COMPACTION_RETENTION=1000
@@ -107,14 +110,16 @@ services:
     command: etcd -advertise-client-urls=http://etcd:2379 -listen-client-urls http://0.0.0.0:2379 --data-dir /etcd
     volumes: [ "./volumes/etcd:/etcd" ]
   minio:
-    image: minio/minio:RELEASE.2023-03-20T20-16-18Z
+    image: minio/minio:RELEASE.2024-05-28T17-19-04Z
     environment:
-      MINIO_ACCESS_KEY: minioadmin
+      MINIO_ROOT_USER: minioadmin          # 新版本变量名
+      MINIO_ROOT_PASSWORD: minioadmin
+      MINIO_ACCESS_KEY: minioadmin         # 旧版本变量名，两套都写以兼容
       MINIO_SECRET_KEY: minioadmin
     command: minio server /minio_data --console-address ":9001"
     volumes: [ "./volumes/minio:/minio_data" ]
   milvus:
-    image: milvusdb/milvus:v2.4.13
+    image: milvusdb/milvus:v2.5.4
     command: ["milvus", "run", "standalone"]
     environment:
       ETCD_ENDPOINTS: etcd:2379
@@ -129,6 +134,7 @@ services:
     volumes: [ "./volumes/redis:/data" ]
 ```
 
+> - 端口通过 `.env` 的 `MILVUS_PORT` / `MILVUS_METRICS_PORT` / `REDIS_PORT` 插值（compose 写 `${VAR:-默认}`）。**本机若已有其他 Milvus 占用 19530，必须改端口**并同步改 `MILVUS_URI`；应用端口被占用时改用 8100。
 > - **Elasticsearch 在 P2 接入混合检索时才加进 compose**（需装 IK 分词插件），P0 不占端口、不占内存。
 > - 若已有可用的 Milvus / Redis 实例，跳过 compose、直接改 `.env` 指向即可（compose 只是为了省去环境折腾，不是流程的强制前置）。
 > - **不要用 `milvus-lite`**：它不支持 Windows，且标量过滤能力受限，P2 的权限过滤终究要切回 standalone。既然 Docker 可用，一步到位省掉一次迁移。
@@ -349,22 +355,36 @@ settings = Settings()
 ```
 
 ```python
-# src/rag/api/main.py
+# src/rag/api/main.py —— 只做装配，不写业务逻辑
 from fastapi import FastAPI
-from rag.api.routes import chat, health
+from rag.api.routes import health
 
-app = FastAPI(title="permission-aware-rag")
-app.include_router(health.router)
-app.include_router(chat.router)
+
+def create_app() -> FastAPI:
+    app = FastAPI(title="permission-aware-rag", version="0.1.0")
+    app.include_router(health.router)
+    # S6 接入：app.include_router(chat.router)
+    return app
+
+
+app = create_app()
 ```
 
 - 配置原则：所有"拍脑袋的常数"（chunk 大小、top_k、模型名、超时）进 `settings.py`，**不在 `.py` 里硬编码**。
-- 验证：
+- 验证（在仓库根目录执行；用 `python -m` 保证 `config` 包可导入，`--app-dir src` 保证 `rag` 包可导入）：
   ```bash
-  uvicorn rag.api.main:app --app-dir src --reload
-  curl -s http://localhost:8000/health
+  python -m uvicorn rag.api.main:app --app-dir src --port 8100 --reload
+  curl -s http://localhost:8100/health
   ```
-  期望：`{"milvus":"ok","llm":"ok","redis":"skip"}`。Milvus 不通就必须先把 §3 处理掉，不要带着坏依赖往下走。
+  期望（三项都真实连通）：
+  ```json
+  {"status":"ok","milvus":"ok","llm":"ok","redis":"ok",
+   "details":{"milvus":"uri=http://localhost:19531 server=pkg/v2.5.4",
+              "llm":"endpoint=http://localhost:11434/v1 model=qwen3.5:9b",
+              "redis":"url=redis://localhost:6379/0"}}
+  ```
+  说明：`llm` / `redis` 未配置时返回 `skip`（不算故障），`milvus` 返回 `error` 则必须先解决 §3，不要带着坏依赖往下走。
+  **端口注意**：8000 常被其他服务占用，本服务用 8100；`MILVUS_URI` 的端口必须与 compose 的 `MILVUS_PORT` 一致。
 
 ### S1 数据接入最小版（0.5d）
 
