@@ -14,6 +14,7 @@ L2 负责"答案是否忠于上下文、是否切题"。两层都要看：
 
 from __future__ import annotations
 
+import re
 import warnings
 from typing import TYPE_CHECKING, Any
 
@@ -60,7 +61,73 @@ def _load_metrics(selected: list[str], judge: ProjectLLMJudge) -> list[tuple[str
             class_name = LEGACY_METRIC_NAMES[key]
             factory = getattr(ragas_metrics, class_name)
             loaded.append((key, factory(llm=judge)))
+    _apply_equivalence_rules(loaded)
     return loaded
+
+
+# 裁判等价规则。为什么必须有：语料与答案都是正常中文，但表示形式常常不同——
+# 语料写「五百元」、答案写「500元」；语料写「十点」、答案写「10:00」。
+# RAGAS 默认的 NLI 判据是「可否**直接推断**」，裁判按字面匹配就判 0，
+# 把"模型说得对"报成"模型编造了"（假阴性，方向完全相反）。
+#
+# 边界刻意收窄：只放宽**表示形式**的等价，不放宽事实——
+# 加了上下文里没有的数量/主体/条件仍然判 0，否则指标会松成"什么都对"。
+EQUIVALENCE_RULES = """
+Equivalence rules you MUST apply before giving a verdict:
+- Chinese numerals and Arabic numerals express the SAME value: 五百 = 500, 三千 = 3000,
+  十二个月 = 12 months. If the context states the amount in either notation, verdict is 1.
+- Same for other formats: 十点 = 10:00, 三天 = 3 days, 百分之五十 = 50%.
+- Rephrasing that preserves the fact (synonyms, different word order, 须/需要/必须
+  politeness variants) is still directly inferable: verdict 1.
+- These rules cover REPRESENTATION ONLY. A statement that adds facts, amounts,
+  parties or conditions absent from the context remains verdict 0.
+"""
+
+# statement 拆分规则。根因：faithfulness 的假阴性大头不在 NLI 判据，
+# 而在**拆分器**把答案拆坏。用探针逐条看 verdict 理由后确认的三种拆坏方式：
+#   1) 把**问题里的前提**带进 statement（问"超过三千元需要谁审批"，
+#      拆出"费用超过三千元"——上下文当然不会断言某笔具体费用，于是判 0）；
+#   2) 把一个完整主张拆成**互相重叠的碎片**（"A 与 B 共同审批"拆成
+#      "须由 A 审批" + "须由 B 审批"——两条单独看都不成立，各判 0）；
+#   3) 引用标记（在 _to_ragas_rows 里剥离）。
+STATEMENT_RULES = """
+Additional rules for decomposing the answer:
+- Do NOT carry premises or qualifiers from the question into statements
+  (question: "for fees over 3000, who approves?" -> do NOT produce
+  "the fee is over 3000" as a statement; that premise is not asserted by the answer).
+- Each statement must be a COMPLETE, self-contained claim. Never split one claim
+  into overlapping partial fragments: "approved jointly by A and B" must not become
+  "approved by A" plus "approved by B" -- each fragment alone asserts something false.
+- Keep the original meaning; do not add or remove conditions.
+"""
+
+
+def _apply_equivalence_rules(metrics: list[tuple[str, Any]]) -> None:
+    """把等价规则与拆分规则写进 faithfulness 的两段提示词。
+
+    只动 faithfulness：它的"拆 statement 再逐条对照"形态正是假阴性的来源；
+    context_precision/recall 没有这个失败模式（实测 1.0），
+    不为一致性顺手去动没出问题的指标。
+    """
+    for key, metric in metrics:
+        if key != "faithfulness":
+            continue
+        nli = getattr(metric, "nli_statements_prompt", None)
+        if nli is not None and hasattr(nli, "instruction"):
+            if "Equivalence rules" not in nli.instruction:
+                nli.instruction = f"{nli.instruction}\n{EQUIVALENCE_RULES.strip()}"
+        else:
+            logger.warning("faithfulness 没有 nli_statements_prompt，等价规则未生效")
+
+        gen = getattr(metric, "statement_generator_prompt", None)
+        if gen is not None and hasattr(gen, "instruction"):
+            if "Additional rules" not in gen.instruction:
+                gen.instruction = f"{gen.instruction}\n{STATEMENT_RULES.strip()}"
+        else:
+            logger.warning("faithfulness 没有 statement_generator_prompt，拆分规则未生效")
+
+
+_CITE_MARKER = re.compile(r"\s*\[\d+\]")
 
 
 def _to_ragas_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -71,11 +138,16 @@ def _to_ragas_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
             continue
         converted.append(
             {
-                # sample_id 必须带进 RAGAS：否则 L2 只有一列匿名分数，
-                # 看到某条 faithfulness 低也无法知道是哪条样本，L2 失分无法定位。
+                # sample_id 必须留在我们自己的行里：RAGAS 0.4 的 from_list 只保留
+                # 它认识的 4 个字段，自定义键会被丢弃（实测 features() 里没有它），
+                # 所以逐样本明细只能按数据集顺序配回去。
                 "sample_id": row["sample_id"],
                 "user_input": row["question"],
-                "response": row.get("answer", ""),
+                # 剥离 [1][2] 这类引用标记：那是我们自己的引用语法，不是答案内容。
+                # 不剥的话拆分器会把"要求来源于引用 [1]"当成一条主张——
+                # 上下文里当然没有"[1]"这个东西，于是一条正确的答案被判 0
+                # （实测 perm-eng-allowed 因此只有 0.5）。
+                "response": _CITE_MARKER.sub("", row.get("answer", "")).strip(),
                 "retrieved_contexts": list(row.get("contexts") or []) or [""],
                 "reference": row.get("reference") or row.get("answer", ""),
             }
@@ -209,6 +281,9 @@ def score(rows: list[dict[str, Any]], settings: Settings) -> dict[str, Any]:
         "per_sample": per_sample,
         # 带样本 id 的逐样本明细：L2 分数低时能直接定位到是哪条问题
         "per_sample_by_id": _per_sample_by_id(frame, per_sample, sample_ids),
+        # 归因字段：裁判判据里注入了表示形式等价规则（中文数字/格式/同义改写）。
+        # 没有它，"L2 分数上来了"无法区分是修复了假阴性还是换了模型。
+        "judge_equivalence_rules": True,
         "judge_model": judge.target_name,
         # 端点实际服务的模型名（与请求名不同时才有值，例如中转把 chat 映射成 flash）
         "judge_served_model": judge.served_name or None,

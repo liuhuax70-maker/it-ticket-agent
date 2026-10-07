@@ -14,7 +14,103 @@ from __future__ import annotations
 from typing import Any
 
 import pytest
-from app.ragas_runner import _per_sample_by_id, _to_ragas_rows
+from app.ragas_runner import (
+    _apply_equivalence_rules,
+    _per_sample_by_id,
+    _to_ragas_rows,
+)
+
+
+class _GenPrompt:
+    def __init__(self) -> None:
+        self.instruction = "Base statement generator instruction."
+
+
+class _Prompt:
+    def __init__(self) -> None:
+        self.instruction = "Base NLI instruction."
+
+
+class _Metric:
+    """最小指标替身：只带等价规则要动到的那两个提示词属性。"""
+
+    def __init__(self, with_prompt: bool = True) -> None:
+        self.statement_generator_prompt: _GenPrompt | None = None
+        if with_prompt:
+            self.nli_statements_prompt = _Prompt()
+            self.statement_generator_prompt = _GenPrompt()
+
+
+def test_equivalence_rules_apply_only_to_faithfulness() -> None:
+    """规则只注入 faithfulness——它才是字面匹配假阴性的来源。"""
+    metrics = [
+        ("faithfulness", _Metric()),
+        ("context_precision", _Metric()),
+    ]
+    _apply_equivalence_rules(metrics)
+    assert "Chinese numerals" in metrics[0][1].nli_statements_prompt.instruction
+    assert metrics[1][1].nli_statements_prompt.instruction == "Base NLI instruction."
+
+
+def test_equivalence_rules_preserve_base_instruction() -> None:
+    """规则是**追加**而不是替换：默认判据（直接推断）仍然生效。"""
+    metric = _Metric()
+    _apply_equivalence_rules([("faithfulness", metric)])
+    assert metric.nli_statements_prompt.instruction.startswith("Base NLI instruction.")
+
+
+def test_equivalence_rules_are_idempotent() -> None:
+    """加载流程可能跑两次（重试/复用），规则不能叠两层。"""
+    metric = _Metric()
+    _apply_equivalence_rules([("faithfulness", metric)])
+    once = metric.nli_statements_prompt.instruction
+    _apply_equivalence_rules([("faithfulness", metric)])
+    assert metric.nli_statements_prompt.instruction == once
+
+
+def test_equivalence_rules_survive_metric_without_prompt() -> None:
+    """ragas 版本升级改了属性名时，降级为告警而不是抛异常。"""
+    _apply_equivalence_rules([("faithfulness", _Metric(with_prompt=False))])  # 不应抛异常
+
+
+def test_citation_markers_stripped_from_response() -> None:
+    """[1][2] 是我们自己的引用语法，不是答案内容，必须剥掉再送裁判。
+
+    不剥的话拆分器会把「要求来源于引用 [1]」当成一条主张——上下文里
+    当然没有"[1]"这个字符串，一条正确的答案因此被判 0（实测 0.5）。
+    """
+    rows = [
+        {
+            "sample_id": "x",
+            "question": "q",
+            "answer": "P1 告警需在五分钟内响应 [1]。",
+            "contexts": ["c"],
+            "reference": "r",
+        }
+    ]
+    response = _to_ragas_rows(rows)[0]["response"]
+    assert response == "P1 告警需在五分钟内响应。"
+
+
+def test_statement_rules_apply_to_generator_prompt() -> None:
+    """拆分规则必须进 statement_generator_prompt——假阴性大头在拆分层。"""
+    metric = _Metric()
+    _apply_equivalence_rules([("faithfulness", metric)])
+    assert metric.statement_generator_prompt is not None
+    gen = metric.statement_generator_prompt.instruction
+    assert "premises" in gen, "缺少「不带问题前提」规则"
+    assert "fragments" in gen, "缺少「不拆碎片」规则"
+    # 原指令仍在
+    assert gen.startswith("Base statement generator instruction.")
+
+
+def test_statement_rules_idempotent() -> None:
+    metric = _Metric()
+    _apply_equivalence_rules([("faithfulness", metric)])
+    assert metric.statement_generator_prompt is not None
+    once = metric.statement_generator_prompt.instruction
+    _apply_equivalence_rules([("faithfulness", metric)])
+    assert metric.statement_generator_prompt.instruction == once
 
 
 class _Frame:

@@ -208,11 +208,22 @@ def make_guard_node(model_gateway: ModelGatewayClient, settings: Settings):
 
 
 def make_refuse_node(settings: Settings):  # noqa: ARG001
-    """检索为空时的拒答出口：**不调用 LLM**，从源头堵死幻觉。"""
+    """拒答出口：**不调用 LLM**，从源头堵死幻觉。
+
+    有两条路会走到这里，原因完全不同，错误标签必须分开——
+    统一记 ``empty_retrieval`` 会把排障的人引去查检索服务，
+    而真凶可能是模型返回了空（服务其实一切正常）。
+    """
 
     async def refuse(state: RAGState) -> dict:
         started = time.perf_counter()
-        logger.info("检索为空，走拒答出口 query=%r", state.get("query", "")[:60])
+        if state.get("hits"):
+            # 检索有结果但生成为空：模型异常/被截断
+            reason = "empty_generation"
+            logger.info("生成为空，走拒答出口 query=%r", state.get("query", "")[:60])
+        else:
+            reason = "empty_retrieval"
+            logger.info("检索为空，走拒答出口 query=%r", state.get("query", "")[:60])
         return merge_timing(
             state,
             "guard",
@@ -220,7 +231,7 @@ def make_refuse_node(settings: Settings):  # noqa: ARG001
             answer=REFUSE_TEXT,
             citations=[],
             refused=True,
-            errors=add_error(state, "empty_retrieval"),
+            errors=add_error(state, reason),
         )
 
     return refuse

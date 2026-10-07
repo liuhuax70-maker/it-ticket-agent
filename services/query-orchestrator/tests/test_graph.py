@@ -163,6 +163,25 @@ async def test_empty_retrieval_refuses_without_calling_llm(make_graph) -> None:
     assert "empty_retrieval" in final["errors"]
 
 
+async def test_empty_generation_refuses_with_correct_reason(make_graph) -> None:
+    """检索有结果但模型返回空 -> 拒答，且错误标签必须是 empty_generation。
+
+    这条标签曾经统一写成 empty_retrieval：排障的人会去查检索服务，
+    而检索其实一切正常，真凶是模型异常/截断。拒答出口被两条边共用，
+    原因必须按 state 里的实际线索区分。
+    """
+    graph, retrieval, gateway = make_graph(hits=[_hit("d_1:4", "转正后凭发票报销。")], answer="   ")
+    final = await graph.ainvoke(_state())
+
+    assert final["refused"] is True
+    assert final["answer"] == REFUSE_TEXT
+    assert final["citations"] == []
+    assert gateway.generate_calls == 1, "检索有结果时应调用过 LLM"
+    assert retrieval.hits, "前提：检索是有结果的"
+    assert "empty_generation" in final["errors"]
+    assert "empty_retrieval" not in final["errors"]
+
+
 async def test_missing_citation_falls_back_to_top1_and_records_error(make_graph) -> None:
     graph, _, _ = make_graph(
         hits=[_hit("d_1:4", "转正后凭发票报销。")], answer=ANSWER_WITHOUT_CITATION
