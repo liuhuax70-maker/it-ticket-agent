@@ -27,20 +27,38 @@ class OpaClient:
     def __init__(self, settings: SecuritySettings, *, enabled: bool | None = None) -> None:
         self._settings = settings
         self.enabled = settings.authz_enabled if enabled is None else enabled
+        self._client: Any = None  # httpx.AsyncClient，懒创建（enabled=False 时不建）
+
+    def _http(self) -> Any:
+        """复用同一个 AsyncClient。
+
+        曾经每次决策都 ``async with httpx.AsyncClient(...)`` 新建连接。在本机
+        （服务间 URL 都写成 ``localhost``，而服务实际绑在 127.0.0.1），
+        Windows 会先尝试 ::1 再回退，**每次新建连接都要付这一笔**——
+        实测每个经过网关的请求因此固定多花约 0.65~1.1s，且观测手段完全看不到：
+        编排器自己的 total 正常，只有端到端延迟虚高。
+        """
+        if self._client is None:
+            import httpx
+
+            self._client = httpx.AsyncClient(timeout=self._settings.opa_timeout)
+        return self._client
+
+    async def aclose(self) -> None:
+        if self._client is not None:
+            await self._client.aclose()
+            self._client = None
 
     async def allow(self, input_doc: dict[str, Any]) -> tuple[bool, str]:
         """返回 ``(是否允许, 原因)``。"""
         if not self.enabled:
             return True, "authz disabled"
 
-        import httpx
-
         url = f"{self._settings.opa_url.rstrip('/')}/{self._settings.opa_decision_path.lstrip('/')}"
         try:
-            async with httpx.AsyncClient(timeout=self._settings.opa_timeout) as client:
-                resp = await client.post(url, json={"input": input_doc})
-                resp.raise_for_status()
-                payload = resp.json()
+            resp = await self._http().post(url, json={"input": input_doc})
+            resp.raise_for_status()
+            payload = resp.json()
         except Exception as exc:  # noqa: BLE001
             logger.error("OPA 决策失败，按 fail-closed 拒绝: %s", exc)
             return False, f"opa unavailable: {exc}"

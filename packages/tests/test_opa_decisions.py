@@ -27,12 +27,13 @@ class _FakeResponse:
 
 
 def _install_httpx(monkeypatch, *, payload=None, error: Exception | None = None):
-    """替换 httpx.AsyncClient，并记录 (url, body) 便于断言请求目标。"""
+    """替换 httpx.AsyncClient，并记录 (url, body) 与构造次数便于断言。"""
     calls: list[tuple[str, dict]] = []
+    constructions: list[int] = []
 
     class _FakeClient:
         def __init__(self, *args, **kwargs) -> None:
-            pass
+            constructions.append(1)
 
         async def __aenter__(self):
             return self
@@ -46,8 +47,11 @@ def _install_httpx(monkeypatch, *, payload=None, error: Exception | None = None)
                 raise error
             return _FakeResponse(payload)
 
+        async def aclose(self) -> None:
+            return None
+
     monkeypatch.setattr(httpx, "AsyncClient", _FakeClient)
-    return calls
+    return calls, constructions
 
 
 def _settings(**overrides) -> SecuritySettings:
@@ -62,7 +66,7 @@ def _settings(**overrides) -> SecuritySettings:
 
 async def test_disabled_client_allows_without_calling_opa(monkeypatch) -> None:
     """显式关闭时不发任何请求——否则等于"关了鉴权还要依赖 OPA 可用"。"""
-    calls = _install_httpx(monkeypatch, payload={"result": False})
+    calls, _ = _install_httpx(monkeypatch, payload={"result": False})
     client = OpaClient(_settings(), enabled=False)
     assert await client.allow({"action": "chat"}) == (True, "authz disabled")
     assert calls == []
@@ -131,8 +135,24 @@ async def test_missing_result_field_fails_closed(monkeypatch) -> None:
     assert reason == "opa malformed response"
 
 
+async def test_client_is_constructed_once_and_reused(monkeypatch) -> None:
+    """多次决策必须复用同一个 AsyncClient。
+
+    曾经每次决策都新建一个客户端。服务间 URL 写的是 localhost，而服务绑在
+    127.0.0.1，Windows 会先尝试 ::1 再回退——每次新建连接都要付这笔延迟，
+    实测每个经过网关的请求固定多花约 0.65~1.1s，且编排器自己的耗时完全正常，
+    只有端到端延迟虚高，极难定位。
+    """
+    _calls, constructions = _install_httpx(monkeypatch, payload={"result": True})
+    client = OpaClient(_settings())
+    for _ in range(3):
+        assert await client.allow({"action": "chat"}) == (True, "opa allow")
+    assert constructions == [1]
+    await client.aclose()
+
+
 async def test_request_targets_package_path_with_input(monkeypatch) -> None:
-    calls = _install_httpx(monkeypatch, payload={"result": True})
+    calls, _ = _install_httpx(monkeypatch, payload={"result": True})
     await OpaClient(_settings()).allow({"action": "chat", "user": {"user_id": "u_1"}})
     url, body = calls[0]
     assert url == "http://opa:8181/v1/data/rag"

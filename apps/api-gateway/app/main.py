@@ -71,6 +71,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 client = getattr(app.state, name, None)
                 if client is not None:
                     await client.aclose()
+            await app.state.opa.aclose()
             await counter.aclose()
 
     app = FastAPI(title="api-gateway", version=VERSION, lifespan=lifespan)
