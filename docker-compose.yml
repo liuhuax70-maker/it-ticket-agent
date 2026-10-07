@@ -1,0 +1,270 @@
+# =============================================================
+# 本地开发依赖编排（开发工具，非交付物）
+#
+# 核心依赖（postgres / redis / opensearch / milvus）不带 profile，
+# 一条 `docker compose up -d` 即拉起最小闭环所需；
+# 重量级依赖按 profile 叠加：
+#   docker compose --profile streaming --profile authz --profile observability up -d
+# 或全量：
+#   docker compose --profile "*" up -d
+#
+# 宿主端口统一走 .env 插值，避免与本机已占用端口冲突。
+# =============================================================
+name: permission-aware-rag
+
+services:
+  # ---------------------------------------------------------
+  # 核心依赖（无 profile）
+  # ---------------------------------------------------------
+  postgres:
+    image: postgres:16-alpine
+    container_name: par-postgres
+    environment:
+      POSTGRES_USER: rag
+      POSTGRES_PASSWORD: rag
+      POSTGRES_DB: rag
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - ./infra/docker/postgres/init.sql:/docker-entrypoint-initdb.d/00-init.sql:ro
+      - par-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U rag -d rag"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    container_name: par-redis
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - par-redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  opensearch:
+    image: opensearchproject/opensearch:2.17.1
+    container_name: par-opensearch
+    environment:
+      - discovery.type=single-node
+      - bootstrap.memory_lock=true
+      - DISABLE_INSTALL_DEMO_CONFIG=true
+      - DISABLE_SECURITY_PLUGIN=true
+      - "OPENSEARCH_JAVA_OPTS=-Xms512m -Xmx512m"
+    ulimits:
+      memlock: { soft: -1, hard: -1 }
+      nofile: { soft: 65536, hard: 65536 }
+    ports:
+      - "${OPENSEARCH_PORT:-9200}:9200"
+    volumes:
+      - par-opensearch-data:/usr/share/opensearch/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:9200/_cluster/health || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 20
+
+  etcd:
+    image: quay.io/coreos/etcd:v3.5.16
+    container_name: par-etcd
+    environment:
+      - ETCD_AUTO_COMPACTION_MODE=revision
+      - ETCD_AUTO_COMPACTION_RETENTION=1000
+      - ETCD_QUOTA_BACKEND_BYTES=4294967296
+      - ETCD_SNAPSHOT_COUNT=50000
+    volumes:
+      - ./volumes/etcd:/etcd
+    command: etcd -advertise-client-urls=http://etcd:2379 -listen-client-urls http://0.0.0.0:2379 --data-dir /etcd
+    healthcheck:
+      test: ["CMD", "etcdctl", "endpoint", "health"]
+      interval: 30s
+      start_period: 10s
+      timeout: 20s
+      retries: 3
+
+  minio:
+    image: minio/minio:RELEASE.2024-05-28T17-19-04Z
+    container_name: par-minio
+    environment:
+      # 新旧两套变量名都写，兼容不同 MinIO 版本
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+      MINIO_ACCESS_KEY: minioadmin
+      MINIO_SECRET_KEY: minioadmin
+    volumes:
+      - ./volumes/minio:/minio_data
+    command: minio server /minio_data --console-address ":9001"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 30s
+      start_period: 10s
+      timeout: 20s
+      retries: 3
+
+  milvus:
+    image: milvusdb/milvus:v2.5.4
+    container_name: par-milvus
+    command: ["milvus", "run", "standalone"]
+    security_opt:
+      - seccomp:unconfined
+    environment:
+      ETCD_ENDPOINTS: etcd:2379
+      MINIO_ADDRESS: minio:9000
+    volumes:
+      - ./volumes/milvus:/var/lib/milvus
+    ports:
+      - "${MILVUS_PORT:-19530}:19530"
+      - "${MILVUS_METRICS_PORT:-9091}:9091"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9091/healthz"]
+      interval: 30s
+      start_period: 90s
+      timeout: 20s
+      retries: 3
+    depends_on:
+      # standalone 必须等 etcd + minio 就绪，否则容器反复重启
+      etcd:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+
+  # ---------------------------------------------------------
+  # streaming：Kafka（最小闭环仅占位，USE_KAFKA=false 时服务间同步直连）
+  # ---------------------------------------------------------
+  kafka:
+    image: apache/kafka:3.8.1
+    container_name: par-kafka
+    profiles: ["streaming"]
+    ports:
+      - "${KAFKA_PORT:-9092}:9092"
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,CONTROLLER://0.0.0.0:9093
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+      CLUSTER_ID: MkU3OEVBNTcwNTJENDM2Qk
+    volumes:
+      - par-kafka-data:/var/lib/kafka/data
+
+  # ---------------------------------------------------------
+  # authz：Keycloak + OPA（最小闭环先占位）
+  # ---------------------------------------------------------
+  keycloak:
+    image: quay.io/keycloak/keycloak:25.0
+    container_name: par-keycloak
+    profiles: ["authz"]
+    command: ["start-dev", "--http-port=8180", "--import-realm"]
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: admin
+      KC_BOOTSTRAP_ADMIN_PASSWORD: admin
+      KC_HEALTH_ENABLED: "true"
+      KC_HTTP_PORT: "8180"
+    volumes:
+      - ./infra/docker/keycloak/realm-rag.json:/opt/keycloak/data/import/realm-rag.json:ro
+    ports:
+      - "${KEYCLOAK_PORT:-8180}:8180"
+
+  opa:
+    image: openpolicyagent/opa:0.68.0
+    container_name: par-opa
+    profiles: ["authz"]
+    command: ["run", "--server", "--log-level=info", "/policies"]
+    volumes:
+      - ./services/authz/policies:/policies:ro
+    ports:
+      - "${OPA_PORT:-8181}:8181"
+
+  # ---------------------------------------------------------
+  # observability：Langfuse v3（自带 ClickHouse / S3 / Redis 复用）
+  # ---------------------------------------------------------
+  langfuse-clickhouse:
+    image: clickhouse/clickhouse-server:24.3-alpine
+    container_name: par-langfuse-clickhouse
+    profiles: ["observability"]
+    environment:
+      CLICKHOUSE_DB: default
+      CLICKHOUSE_USER: clickhouse
+      CLICKHOUSE_PASSWORD: clickhouse
+    volumes:
+      - par-clickhouse-data:/var/lib/clickhouse
+    ulimits:
+      nofile: { soft: 262144, hard: 262144 }
+
+  langfuse-minio:
+    image: minio/minio:RELEASE.2024-05-28T17-19-04Z
+    container_name: par-langfuse-minio
+    profiles: ["observability"]
+    environment:
+      MINIO_ROOT_USER: langfuse
+      MINIO_ROOT_PASSWORD: langfuse123
+    command: sh -c "mkdir -p /data/langfuse && minio server /data --console-address ':9091'"
+    volumes:
+      - par-langfuse-minio-data:/data
+
+  langfuse:
+    image: langfuse/langfuse:3
+    container_name: par-langfuse
+    profiles: ["observability"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      langfuse-clickhouse:
+        condition: service_started
+      langfuse-minio:
+        condition: service_started
+    environment: &langfuse-env
+      DATABASE_URL: postgresql://rag:rag@postgres:5432/langfuse
+      CLICKHOUSE_URL: http://langfuse-clickhouse:8123
+      CLICKHOUSE_USER: clickhouse
+      CLICKHOUSE_PASSWORD: clickhouse
+      CLICKHOUSE_MIGRATION_URL: clickhouse://clickhouse:clickhouse@langfuse-clickhouse:9000
+      REDIS_CONNECTION_STRING: redis://redis:6379/1
+      LANGFUSE_S3_EVENT_UPLOAD_BUCKET: langfuse
+      LANGFUSE_S3_EVENT_UPLOAD_ENDPOINT: http://langfuse-minio:9000
+      LANGFUSE_S3_EVENT_UPLOAD_ACCESS_KEY_ID: langfuse
+      LANGFUSE_S3_EVENT_UPLOAD_SECRET_ACCESS_KEY: langfuse123
+      LANGFUSE_S3_EVENT_UPLOAD_FORCE_PATH_STYLE: "true"
+      LANGFUSE_S3_MEDIA_UPLOAD_BUCKET: langfuse
+      LANGFUSE_S3_MEDIA_UPLOAD_ENDPOINT: http://langfuse-minio:9000
+      LANGFUSE_S3_MEDIA_UPLOAD_ACCESS_KEY_ID: langfuse
+      LANGFUSE_S3_MEDIA_UPLOAD_SECRET_ACCESS_KEY: langfuse123
+      LANGFUSE_S3_MEDIA_UPLOAD_FORCE_PATH_STYLE: "true"
+      NEXTAUTH_URL: http://localhost:${LANGFUSE_PORT:-3030}
+      NEXTAUTH_SECRET: dev-nextauth-secret-change-me
+      SALT: dev-salt-change-me
+      TELEMETRY_ENABLED: "false"
+    ports:
+      - "${LANGFUSE_PORT:-3030}:3000"
+
+  langfuse-worker:
+    image: langfuse/langfuse-worker:3
+    container_name: par-langfuse-worker
+    profiles: ["observability"]
+    depends_on:
+      langfuse:
+        condition: service_started
+    environment: *langfuse-env
+
+volumes:
+  par-postgres-data:
+  par-redis-data:
+  par-opensearch-data:
+  par-kafka-data:
+  par-clickhouse-data:
+  par-langfuse-minio-data:

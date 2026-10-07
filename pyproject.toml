@@ -5,34 +5,70 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "permission-aware-rag"
 version = "0.1.0"
-description = "企业级权限感知 RAG 知识库平台"
+description = "企业级权限感知 RAG 知识库平台（FastAPI + LangGraph + Postgres + OpenSearch + Milvus + Redis + Kafka + LiteLLM）"
 requires-python = ">=3.11"
 dependencies = [
+  # --- Web / 契约 ---
   "fastapi>=0.115",
   "uvicorn[standard]>=0.30",
+  "python-multipart>=0.0.9",
   "pydantic>=2.7",
   "pydantic-settings>=2.3",
   "httpx>=0.27",
-  "pymilvus>=2.5.0,<3.0",
-  "redis>=5.0",
+  "pyyaml>=6.0",
+  # --- 编排 ---
+  "langgraph>=0.2.60",
   "langchain-core>=0.3",
   "langchain-text-splitters>=0.3",
-  "langgraph>=0.2.60",
-  "langchain-openai>=0.2",
-  "sentence-transformers>=3.0",
+  # --- 模型网关 ---
+  "litellm>=1.50",
+  # --- 存储 ---
+  "sqlalchemy[asyncio]>=2.0.30",
+  "asyncpg>=0.29",
+  "alembic>=1.13",
+  "redis>=5.0",
+  "pymilvus>=2.5.0,<3.0",
+  "opensearch-py>=2.6",
+  # --- 消息（占位，同步直连为默认） ---
+  "aiokafka>=0.10",
+  # --- 向量化 / 解析 ---
+  "fastembed>=0.4",
+  "pypdf>=4.2",
+  # --- 安全（鉴权占位，JWT 校验待启用） ---
+  "python-jose[cryptography]>=3.3",
 ]
 
 [project.optional-dependencies]
-dev = ["pytest>=8.0", "pytest-asyncio>=0.23"]
+dev = [
+  "pytest>=8.0",
+  "pytest-asyncio>=0.23",
+  "ruff>=0.6",
+  "mypy>=1.11",
+]
+# 评测服务需要（较重）
+eval = ["ragas>=0.2", "datasets>=2.20"]
+# 备选本地向量化后端（体积大，默认用 fastembed）
+local-embed = ["sentence-transformers>=3.0"]
 
 [tool.setuptools]
-package-dir = { "" = "src" }
+# 只打包共享库；apps/ 与 services/ 以 --app-dir 方式运行，不做 site-packages 安装
+packages = ["packages"]
 
 [tool.setuptools.packages.find]
-where = ["src"]
+where = ["."]
+include = ["packages*"]
+exclude = ["apps*", "services*", "pipelines*", "tests*", "migrations*"]
 
 [tool.pytest.ini_options]
-# 同时暴露 src/（rag 包）与仓库根（config 包），与运行时的 --app-dir src 一致
-pythonpath = ["src", "."]
+# 仓库根可导入 packages.*；服务内 app.* 由各服务 tests 的 conftest 自行注入
+pythonpath = ["."]
 testpaths = ["tests"]
 asyncio_mode = "auto"
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+ignore = ["E501"]
