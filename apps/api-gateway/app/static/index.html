@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
 <title>企业知识库 · 智能问答</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%234d6bfe'/%3E%3Cpath d='M9 21V11h5.6c1.9 0 3.1 1 3.1 2.6 0 1.2-.7 2-1.7 2.3 1.3.3 2.2 1.2 2.2 2.6 0 1.9-1.4 2.9-3.6 2.9H9Zm2.3-6h2.8c.8 0 1.3-.4 1.3-1.1s-.5-1.1-1.3-1.1h-2.8v2.2Zm0 4.2h3c.9 0 1.5-.5 1.5-1.2 0-.8-.6-1.2-1.5-1.2h-3v2.4Z' fill='%23fff'/%3E%3C/svg%3E" />
-<link rel="stylesheet" href="styles.css?v=2" />
+<link rel="stylesheet" href="styles.css?v=3" />
 </head>
 <body>
 <div class="app">
@@ -22,6 +22,18 @@
       <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M12 5v14M5 12h14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
       <span>开启新对话</span>
     </button>
+
+    <div class="kb-actions">
+      <button class="kb-btn" id="uploadOpen" type="button">
+        <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path d="M12 16V4m0 0L8 8m4-4 4 4M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        <span>上传文档</span>
+      </button>
+      <button class="kb-btn" id="kbOpen" type="button">
+        <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path d="M4 5.5A1.5 1.5 0 0 1 5.5 4H10l2 2h6.5A1.5 1.5 0 0 1 20 7.5v9A1.5 1.5 0 0 1 18.5 18h-13A1.5 1.5 0 0 1 4 16.5v-11Z" fill="none" stroke="currentColor" stroke-width="1.7"/></svg>
+        <span>知识库</span>
+        <span class="kb-count" id="kbCount" hidden></span>
+      </button>
+    </div>
 
     <div class="conv-scroll">
       <div class="conv-label">最近的对话</div>
@@ -68,6 +80,82 @@
     </div>
   </main>
 </div>
-<script src="app.js?v=2"></script>
+
+<!-- ============ 上传文档 ============ -->
+<div class="modal" id="uploadModal" hidden>
+  <div class="modal-mask" data-close></div>
+  <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="uploadTitle">
+    <header class="modal-head">
+      <h2 id="uploadTitle">上传到知识库</h2>
+      <button class="icon-btn" type="button" data-close aria-label="关闭">✕</button>
+    </header>
+    <div class="modal-body">
+      <div class="dropzone" id="dropzone" tabindex="0" role="button" aria-label="选择或拖入文件">
+        <svg viewBox="0 0 24 24" width="26" height="26" aria-hidden="true"><path d="M12 16V4m0 0L8 8m4-4 4 4M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        <p><strong>点击选择文件</strong>，或把文件拖到这里</p>
+        <p class="dz-hint">支持 .md / .markdown / .txt / .pdf，单文件 ≤ 32MB，可多选</p>
+        <input type="file" id="filePicker" multiple accept=".md,.markdown,.txt,.pdf" hidden />
+      </div>
+
+      <div class="queue" id="queue" hidden></div>
+
+      <details class="adv">
+        <summary>从服务器路径导入（目录或文件）</summary>
+        <div class="row">
+          <input type="text" id="serverPath" placeholder="例如 data/corpus" aria-label="服务器路径" />
+          <button class="btn" type="button" id="pathImport">导入</button>
+        </div>
+        <p class="hint-line">路径相对 ingestion 服务的工作目录（仓库根目录）；目录会递归导入所有受支持的文件。</p>
+      </details>
+
+      <div class="row options">
+        <label class="field">可见范围
+          <select id="visibility">
+            <option value="internal">内部（租户内可见）</option>
+            <option value="department">仅本部门</option>
+            <option value="private">仅自己</option>
+            <option value="public">公开</option>
+          </select>
+        </label>
+        <label class="check"><input type="checkbox" id="reindex" /> <span>重建索引</span></label>
+      </div>
+
+      <p class="hint-line">
+        doc_id 由来源路径稳定派生，同一份文件重复上传是<strong>覆盖</strong>而不是新增；
+        内容有改动时请勾选「重建索引」，否则旧分块会残留。
+      </p>
+    </div>
+    <footer class="modal-foot">
+      <span class="modal-note" id="uploadSummary"></span>
+      <button class="btn-ghost" type="button" data-close>关闭</button>
+    </footer>
+  </div>
+</div>
+
+<!-- ============ 知识库文档 ============ -->
+<div class="modal" id="kbModal" hidden>
+  <div class="modal-mask" data-close></div>
+  <div class="modal-card wide" role="dialog" aria-modal="true" aria-labelledby="kbTitle">
+    <header class="modal-head">
+      <h2 id="kbTitle">知识库文档</h2>
+      <button class="icon-btn" type="button" data-close aria-label="关闭">✕</button>
+    </header>
+    <div class="modal-body">
+      <div class="kb-toolbar">
+        <input type="search" id="kbSearch" placeholder="搜索标题 / 来源路径 / doc_id" aria-label="搜索文档" />
+        <button class="btn" type="button" id="kbRefresh">刷新</button>
+        <button class="btn primary" type="button" id="kbUpload">上传</button>
+      </div>
+      <div class="kb-list" id="kbList"></div>
+    </div>
+    <footer class="modal-foot">
+      <span class="modal-note" id="kbFooter"></span>
+    </footer>
+  </div>
+</div>
+
+<div class="toasts" id="toasts" aria-live="polite"></div>
+
+<script src="app.js?v=3"></script>
 </body>
 </html>

@@ -31,6 +31,22 @@ class IngestionClient:
             response_model=IngestResponse,
         )
 
+    async def list_documents(
+        self,
+        *,
+        tenant_id: str | None = None,
+        keyword: str | None = None,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> dict[str, Any]:
+        # 交给 httpx 拼装与编码：关键字可能是中文，手工拼串容易踩编码坑
+        params: dict[str, Any] = {"limit": limit, "offset": offset}
+        if tenant_id:
+            params["tenant_id"] = tenant_id
+        if keyword:
+            params["keyword"] = keyword
+        return await self._client.get("/documents", params=params)
+
     async def get_document(self, doc_id: str) -> dict[str, Any]:
         return await self._client.get(f"/documents/{doc_id}")
 

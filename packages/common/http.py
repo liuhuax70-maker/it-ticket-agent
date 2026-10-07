@@ -48,6 +48,7 @@ class ServiceClient:
         path: str,
         *,
         json_body: dict[str, Any] | None = None,
+        params: dict[str, Any] | None = None,
         files: list[tuple[str, tuple[str, bytes, str]]] | None = None,
         data: dict[str, Any] | None = None,
         headers: dict[str, str] | None = None,
@@ -59,6 +60,7 @@ class ServiceClient:
             resp = await self._client.request(
                 method,
                 url,
+                params=params,
                 json=json_body,
                 files=files,
                 data=data,
@@ -91,10 +93,19 @@ class ServiceClient:
         self,
         path: str,
         *,
+        params: dict[str, Any] | None = None,
+        headers: dict[str, str] | None = None,
         response_model: type[M] | None = None,
         timeout: float | None = None,
     ) -> Any:
-        return await self._request("GET", path, response_model=response_model, timeout=timeout)
+        return await self._request(
+            "GET",
+            path,
+            params=params,
+            headers=headers,
+            response_model=response_model,
+            timeout=timeout,
+        )
 
     async def post(
         self,

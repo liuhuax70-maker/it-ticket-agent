@@ -35,12 +35,17 @@ def _settings(request: Request) -> Settings:
 async def ingest(
     req: IngestRequest, request: Request, identity: DocumentWriter
 ) -> IngestResponse:
-    # 未显式指定 ACL 时，默认归属调用方租户/部门
-    if req.acl is None:
-        req = req.model_copy(
-            update={"acl": ACL(tenant_id=identity.tenant_id, department_id=identity.department_id)}
-        )
-    return await _client(request).ingest(req)
+    # ACL 组装规则：**租户与部门只能来自身份**，调用方只被允许选择可见范围。
+    # 否则客户端可以把自己的文档塞进别的租户（越权写入）。
+    requested = req.acl
+    acl = ACL(
+        tenant_id=identity.tenant_id,
+        department_id=identity.department_id,
+        owner=identity.user_id,
+        visibility=requested.visibility if requested else Visibility.internal,
+        allowed_roles=list(requested.allowed_roles) if requested else [],
+    )
+    return await _client(request).ingest(req.model_copy(update={"acl": acl}))
 
 
 @router.post("/upload", response_model=IngestResponse, summary="上传文件接入")
@@ -69,6 +74,23 @@ async def upload(
     )
     return await _client(request).upload(
         file.filename or "upload.bin", data, acl=acl, reindex=reindex
+    )
+
+
+@router.get("", summary="文档列表（知识库台账）")
+async def list_documents(
+    request: Request,
+    identity: DocumentReader,
+    keyword: str = "",
+    limit: int = 50,
+    offset: int = 0,
+) -> dict:
+    # 只列本租户的文档：租户边界由身份决定，不接受客户端传 tenant_id
+    return await _client(request).list_documents(
+        tenant_id=identity.tenant_id,
+        keyword=keyword or None,
+        limit=min(max(limit, 1), 200),
+        offset=max(offset, 0),
     )
 
 

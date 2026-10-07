@@ -122,6 +122,10 @@ python -m uvicorn app.main:app --app-dir services/retrieval --port 8002 --reload
 打开 <http://localhost:8000/ui/> 即为问答界面（零构建、离线可用的单页应用）：
 
 - 左侧会话历史（localStorage 持久化，可新建/切换/删除），右侧对话区；
+- **上传知识库**：侧栏「上传文档」支持点击选择或拖拽（.md/.markdown/.txt/.pdf，可多选），
+  也可从服务器路径导入（文件或目录）；串行上传并在队列里逐个显示进度、分块数与 doc_id；
+- **知识库管理**：侧栏「知识库」列出本文档台账（标题 / 来源路径 / 状态 / 分块数 / 大小 / 更新时间），
+  支持关键字搜索、重建索引与删除（删除会同时清 Milvus、OpenSearch 与元数据）；
 - 助手答案按 Markdown 渲染，`[n]` 会变成可点击角标，点击高亮并滚动到对应来源卡片；
 - 来源卡片展示文档名、章节路径、原文片段与「分块号 · 字符区间 · 相关度」；
 - 拒答会渲染成中性提示而非报错（拒答不是故障，是正确行为）；
@@ -222,7 +226,9 @@ terraform -chdir=infra/terraform/envs/dev init && terraform -chdir=infra/terrafo
 | Reranker | 默认关闭（透传） | 有 eval set 后再开，否则无法归因 |
 | 中文分词 | OpenSearch 用 `standard` 分析器 | 换带 IK 插件的镜像并重建索引 |
 | PDF / Word / HTML | 已支持 Markdown / Txt / PDF（pypdf，无 OCR） | 补 docx / html / OCR |
-| 前端 | `api-gateway` 内置单页问答界面（会话历史 / 引用定位 / 深色模式） | `apps/chat-ui`、`apps/admin-console`（Next.js，含文档管理、评测看板） |
+| 前端 | `api-gateway` 内置单页应用（问答 + 上传 + 知识库台账 + 深色模式） | `apps/chat-ui`、`apps/admin-console`（Next.js，含评测看板、批量导入、权限配置） |
+| 文档管理 | 列表 / 关键字搜索 / 重建索引 / 删除（`GET/DELETE /documents`） | 批量上传任务化、版本历史、失败重试 |
+| 批量上传 | 前端串行逐个上传（避免打满写入路径） | 改走 Kafka 异步通道（`USE_KAFKA=true` 时 ingestion 已支持） |
 | 流式输出 | 一次性返回 + 思考中提示 | model-gateway → orchestrator → gateway 三级 SSE 透传（LangGraph `astream` 已可提供节点级进度） |
 | 拒答的兜底判定 | 哨兵 + 固定话术 + 短句启发式（阈值 80 字） | 用评测集标定「相关性阈值」，让不可回答的问题在检索阶段就返回空 |
 | 入库吞吐 | 单文档 `/index` 因 Milvus `flush` + OpenSearch `refresh` 约 20s（本机实测） | 大文档改批量写入 + 关闭同步 refresh，用 bulk 参数控制可见性 |

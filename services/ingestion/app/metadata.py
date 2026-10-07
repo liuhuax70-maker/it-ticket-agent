@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import uuid
 
-from sqlalchemy import delete, func, select
+from sqlalchemy import delete, func, or_, select
 
 from packages.common.db import session_scope
 from packages.common.logging import get_logger
@@ -108,22 +108,52 @@ class MetadataStore:
             }
 
     async def list_documents(
-        self, *, limit: int = 100, offset: int = 0, tenant_id: str | None = None
-    ) -> list[dict]:
+        self,
+        *,
+        tenant_id: str | None = None,
+        keyword: str | None = None,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> dict:
+        """分页列出文档台账。
+
+        关键字同时匹配标题 / 来源路径 / doc_id——管理界面上排查「这份文档到底进没进去」
+        时，用来源路径搜是最常用的入口。
+        """
+        stmt = select(DocumentRow)
+        count_stmt = select(func.count()).select_from(DocumentRow)
+
+        if tenant_id:
+            stmt = stmt.where(DocumentRow.tenant_id == tenant_id)
+            count_stmt = count_stmt.where(DocumentRow.tenant_id == tenant_id)
+        if keyword:
+            like = f"%{keyword}%"
+            condition = or_(
+                DocumentRow.title.ilike(like),
+                DocumentRow.source.ilike(like),
+                DocumentRow.doc_id.ilike(like),
+            )
+            stmt = stmt.where(condition)
+            count_stmt = count_stmt.where(condition)
+
+        stmt = stmt.order_by(DocumentRow.updated_at.desc()).limit(limit).offset(offset)
+
         async with session_scope(self._url) as session:
-            stmt = select(DocumentRow).order_by(DocumentRow.created_at.desc())
-            if tenant_id:
-                stmt = stmt.where(DocumentRow.tenant_id == tenant_id)
-            stmt = stmt.limit(limit).offset(offset)
             rows = (await session.scalars(stmt)).all()
-            return [
+            total = await session.scalar(count_stmt)
+
+        return {
+            "total": int(total or 0),
+            "limit": limit,
+            "offset": offset,
+            "items": [
                 {
                     "doc_id": row.doc_id,
                     "title": row.title,
                     "source": row.source,
                     "status": row.status,
-                    "content_hash": row.content_hash,
                     "chunk_count": row.chunk_count,
+                    "size_bytes": row.size_bytes,
                     "tenant_id": row.tenant_id,
                     "department_id": row.department_id,
                     "visibility": row.visibility,
@@ -131,7 +161,8 @@ class MetadataStore:
                     "updated_at": row.updated_at.isoformat() if row.updated_at else None,
                 }
                 for row in rows
-            ]
+            ],
+        }
 
     # ---------------- 接入任务 ----------------
     async def create_job(self, source: str) -> str:

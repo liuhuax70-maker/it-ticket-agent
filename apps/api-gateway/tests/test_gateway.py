@@ -70,8 +70,39 @@ class FakeOrchestrator:
 
 
 class FakeIngestion:
+    """记录调用入参，便于断言「网关有没有把该传的东西传对」。"""
+
+    def __init__(self) -> None:
+        self.ingest_requests: list[IngestRequest] = []
+        self.list_query: dict = {}
+
     async def stats(self) -> dict:
         return {"documents": 1, "chunks": 6}
+
+    async def list_documents(
+        self, *, tenant_id=None, keyword=None, limit: int = 50, offset: int = 0
+    ) -> dict:  # noqa: ANN001
+        self.list_query = {"tenant_id": tenant_id, "keyword": keyword, "limit": limit, "offset": offset}
+        return {
+            "total": 1,
+            "limit": limit,
+            "offset": offset,
+            "items": [
+                {
+                    "doc_id": "d_1",
+                    "title": "员工手册",
+                    "source": "data/corpus/employee_handbook.md",
+                    "status": "indexed",
+                    "chunk_count": 10,
+                    "size_bytes": 2345,
+                    "tenant_id": tenant_id,
+                    "department_id": "default",
+                    "visibility": "internal",
+                    "created_at": None,
+                    "updated_at": None,
+                }
+            ],
+        }
 
     async def get_document(self, doc_id: str) -> dict:
         return {"doc_id": doc_id, "status": "indexed"}
@@ -80,6 +111,7 @@ class FakeIngestion:
         return {"doc_id": doc_id, "deleted": {"milvus": 1, "opensearch": 1}, "existed": True}
 
     async def ingest(self, req: IngestRequest) -> IngestResponse:
+        self.ingest_requests.append(req)
         return IngestResponse(job_id="j1", status="succeeded", documents=1, chunk_count=6, indexed=6)
 
     async def upload(self, filename: str, content: bytes, *, acl, reindex: bool = False) -> IngestResponse:  # noqa: ANN001, ARG002
@@ -207,6 +239,37 @@ def test_documents_ingest_and_delete(client) -> None:
     deleted = client.delete("/documents/d_1")
     assert deleted.status_code == 200
     assert deleted.json()["deleted"]["milvus"] == 1
+
+
+def test_documents_list_is_scoped_to_identity_tenant(client) -> None:
+    resp = client.get("/documents", params={"keyword": "手册"})
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["total"] == 1
+    assert body["items"][0]["doc_id"] == "d_1"
+
+    query = client.app.state.ingestion.list_query  # type: ignore[attr-defined]
+    # 租户必须来自身份，不接受客户端传参
+    assert query["tenant_id"] == "default"
+    assert query["keyword"] == "手册"
+
+
+def test_ingest_cannot_override_tenant_or_department(client) -> None:
+    """越权写入防护：客户端只能选可见范围，租户/部门一律由身份决定。"""
+    resp = client.post(
+        "/documents/ingest",
+        json={
+            "content": "# x",
+            "filename": "a.md",
+            "acl": {"tenant_id": "other-tenant", "department_id": "other-dept", "visibility": "department"},
+        },
+    )
+    assert resp.status_code == 200
+    req = client.app.state.ingestion.ingest_requests[-1]  # type: ignore[attr-defined]
+    assert req.acl is not None
+    assert req.acl.tenant_id == "default"
+    assert req.acl.department_id == "default"
+    assert req.acl.visibility.value == "department"
 
 
 def test_admin_stats_requires_authz_when_enabled(client) -> None:

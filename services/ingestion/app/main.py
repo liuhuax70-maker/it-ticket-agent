@@ -90,7 +90,7 @@ async def get_job(job_id: str) -> dict[str, object]:
 @app.get("/stats")
 async def stats() -> dict[str, object]:
     """文档/分块总量，供管理面与验收脚本使用。"""
-    return await _service()._metadata.stats()  # noqa: SLF001
+    return await _service().stats()
 
 
 @app.get("/documents")
@@ -98,17 +98,24 @@ async def list_documents(
     limit: int = 100,
     offset: int = 0,
     tenant_id: str = "",
+    keyword: str = "",
 ) -> dict[str, object]:
-    """文档台账（按创建时间倒序）。供增量同步与留存清理任务使用。"""
-    rows = await _service()._metadata.list_documents(  # noqa: SLF001
-        limit=min(max(limit, 1), 500), offset=max(offset, 0), tenant_id=tenant_id or None
+    """文档台账（按更新时间倒序）。
+
+    返回体形状 ``{total, limit, offset, items}`` 是稳定契约：
+    ``pipelines/cleanup_dag`` 依赖 ``items`` 做留存清理，管理界面依赖 ``total`` 做分页。
+    """
+    return await _service().list_documents(
+        limit=min(max(limit, 1), 500),
+        offset=max(offset, 0),
+        tenant_id=tenant_id or None,
+        keyword=keyword or None,
     )
-    return {"total": len(rows), "items": rows}
 
 
 @app.get("/documents/{doc_id}")
 async def get_document(doc_id: str) -> dict[str, object]:
-    document = await _service()._metadata.get_document(doc_id)  # noqa: SLF001
+    document = await _service().get_document(doc_id)
     if document is None:
         raise NotFoundError(f"文档不存在: {doc_id}")
     return document

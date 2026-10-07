@@ -650,6 +650,374 @@
     $('scrollBottom').addEventListener('click', function () { scrollToBottom(true); });
   }
 
+  // ---------------- 轻提示 ----------------
+
+  function toast(message, kind) {
+    var wrap = $('toasts');
+    var el = document.createElement('div');
+    el.className = 'toast ' + (kind || '');
+    el.textContent = message;
+    wrap.appendChild(el);
+    setTimeout(function () {
+      el.style.transition = 'opacity .2s';
+      el.style.opacity = '0';
+      setTimeout(function () { el.remove(); }, 220);
+    }, 3200);
+  }
+
+  // ---------------- 弹窗 ----------------
+
+  function openModal(id) {
+    var modal = $(id);
+    modal.hidden = false;
+    var focusable = modal.querySelector('input, button.btn, button.btn-ghost');
+    if (focusable) focusable.focus();
+  }
+
+  function closeModal(modal) {
+    modal.hidden = true;
+  }
+
+  function wireModals() {
+    document.addEventListener('click', function (event) {
+      var closer = event.target.closest('[data-close]');
+      if (closer) {
+        var modal = closer.closest('.modal');
+        if (modal) closeModal(modal);
+      }
+    });
+    document.addEventListener('keydown', function (event) {
+      if (event.key !== 'Escape') return;
+      var open = Array.prototype.filter.call(
+        document.querySelectorAll('.modal'), function (m) { return !m.hidden; }
+      );
+      if (open.length) closeModal(open[open.length - 1]);
+    });
+  }
+
+  // ---------------- 上传 / 知识库 ----------------
+
+  function fmtBytes(bytes) {
+    if (!bytes && bytes !== 0) return '';
+    if (bytes < 1024) return bytes + ' B';
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+    return (bytes / 1024 / 1024).toFixed(1) + ' MB';
+  }
+
+  function fmtDate(iso) {
+    if (!iso) return '';
+    try {
+      var d = new Date(iso);
+      return d.toLocaleString('zh-CN', { hour12: false, month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
+    } catch (err) {
+      return '';
+    }
+  }
+
+  var STATUS_TEXT = { indexed: '已索引', pending: '待索引', running: '进行中', failed: '失败' };
+
+  function options() {
+    return {
+      visibility: $('visibility').value,
+      reindex: $('reindex').checked
+    };
+  }
+
+  function makeQueueItem(name) {
+    var el = document.createElement('div');
+    el.className = 'queue-item';
+    el.innerHTML = '<span class="queue-name"></span><span class="badge">排队中</span>' +
+      '<span class="queue-detail"></span>';
+    el.querySelector('.queue-name').textContent = name;
+    var badge = el.querySelector('.badge');
+    var detail = el.querySelector('.queue-detail');
+    return {
+      el: el,
+      badge: function (text, cls) { badge.textContent = text; badge.className = 'badge ' + (cls || ''); },
+      detail: function (text, isError) { detail.textContent = text; detail.className = 'queue-detail' + (isError ? ' error' : ''); }
+    };
+  }
+
+  function uploadOne(file, item, opts) {
+    var form = new FormData();
+    form.append('file', file, file.name);
+    form.append('visibility', opts.visibility);
+    form.append('reindex', opts.reindex ? 'true' : 'false');
+    return fetch('/documents/upload', { method: 'POST', body: form }).then(function (resp) {
+      return resp.json().then(function (data) {
+        if (!resp.ok) throw new Error(data.message || data.detail || ('HTTP ' + resp.status));
+        return data;
+      });
+    });
+  }
+
+  function startUploads(files) {
+    if (!files || !files.length) return;
+    var opts = options();
+    var list = $('queue');
+    list.hidden = false;
+
+    var pending = Array.prototype.slice.call(files);
+    var done = 0;
+    var failed = 0;
+    $('uploadSummary').textContent = '共 ' + pending.length + ' 个文件，开始上传…';
+
+    // 串行上传：入库本身会打满 Milvus/OpenSearch 的写入路径，并发只会互相拖慢
+    var chain = Promise.resolve();
+    pending.forEach(function (file) {
+      var item = makeQueueItem(file.name);
+      list.appendChild(item.el);
+      chain = chain.then(function () {
+        item.badge('上传中', 'running');
+        return uploadOne(file, item, opts).then(function (data) {
+          done += 1;
+          item.badge('完成', 'ok');
+          item.detail('分块 ' + data.chunk_count + ' 个 · doc_id ' + (data.doc_ids || []).join(','));
+        }).catch(function (err) {
+          failed += 1;
+          item.badge('失败', 'fail');
+          item.detail(String((err && err.message) || err), true);
+        });
+      });
+    });
+
+    chain.then(function () {
+      $('uploadSummary').textContent = '成功 ' + done + ' 个' + (failed ? '，失败 ' + failed + ' 个' : '');
+      toast('上传完成：成功 ' + done + ' 个' + (failed ? '，失败 ' + failed + ' 个' : ''), failed ? 'fail' : 'ok');
+      refreshKbCount();
+      if (!$('kbModal').hidden) loadKbList();
+    });
+  }
+
+  function importServerPath() {
+    var path = $('serverPath').value.trim();
+    if (!path) {
+      toast('请先填写服务器路径', 'fail');
+      return;
+    }
+    var opts = options();
+    var btn = $('pathImport');
+    btn.disabled = true;
+    btn.textContent = '导入中…';
+    $('uploadSummary').textContent = '正在解析并入索引，目录较大时需要等待…';
+
+    fetch('/documents/ingest', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        path: path,
+        reindex: opts.reindex,
+        acl: { visibility: opts.visibility }
+      })
+    })
+      .then(function (resp) {
+        return resp.json().then(function (data) {
+          if (!resp.ok) throw new Error(data.message || data.detail || ('HTTP ' + resp.status));
+          return data;
+        });
+      })
+      .then(function (data) {
+        $('uploadSummary').textContent =
+          '导入完成：文档 ' + data.documents + ' 篇，分块 ' + data.chunk_count + ' 个，耗时 ' +
+          (data.timings_ms && data.timings_ms.total ? (data.timings_ms.total / 1000).toFixed(1) + 's' : '-');
+        toast('已导入 ' + data.documents + ' 篇文档（' + data.chunk_count + ' 个分块）', 'ok');
+        refreshKbCount();
+        if (!$('kbModal').hidden) loadKbList();
+      })
+      .catch(function (err) {
+        $('uploadSummary').textContent = '';
+        toast('导入失败：' + ((err && err.message) || err), 'fail');
+      })
+      .then(function () {
+        btn.disabled = false;
+        btn.textContent = '导入';
+      });
+  }
+
+  function loadKbList() {
+    var list = $('kbList');
+    var keyword = $('kbSearch').value.trim();
+    list.innerHTML = '<div class="kb-empty">加载中…</div>';
+
+    return fetch('/documents?limit=100' + (keyword ? '&keyword=' + encodeURIComponent(keyword) : ''))
+      .then(function (resp) {
+        return resp.json().then(function (data) {
+          if (!resp.ok) throw new Error(data.message || data.detail || ('HTTP ' + resp.status));
+          return data;
+        });
+      })
+      .then(function (data) {
+        var items = data.items || [];
+        $('kbFooter').textContent = '共 ' + (data.total || 0) + ' 篇文档';
+        list.innerHTML = '';
+        if (!items.length) {
+          list.innerHTML = '<div class="kb-empty">' +
+            (keyword ? '没有匹配「' + escapeHtml(keyword) + '」的文档' : '知识库还是空的<br>点上方「上传」把资料加进来') +
+            '</div>';
+          return;
+        }
+        items.forEach(function (doc) { list.appendChild(buildKbItem(doc)); });
+      })
+      .catch(function (err) {
+        list.innerHTML = '<div class="kb-empty">加载失败：' + escapeHtml(String((err && err.message) || err)) + '</div>';
+      });
+  }
+
+  function buildKbItem(doc) {
+    var el = document.createElement('div');
+    el.className = 'kb-item';
+    el.innerHTML =
+      '<div class="kb-title"></div>' +
+      '<div class="kb-meta">' +
+        '<span class="kb-stats"></span>' +
+        '<div class="kb-ops">' +
+          '<button class="op" type="button" data-op="reindex">重建索引</button>' +
+          '<button class="op danger" type="button" data-op="delete">删除</button>' +
+        '</div>' +
+      '</div>' +
+      '<div class="kb-source"></div>';
+
+    el.querySelector('.kb-title').textContent = doc.title || doc.doc_id;
+    el.querySelector('.kb-source').textContent = doc.source || '';
+    el.querySelector('.kb-stats').textContent =
+      (STATUS_TEXT[doc.status] || doc.status) + ' · ' + (doc.chunk_count || 0) + ' 分块 · ' +
+      fmtBytes(doc.size_bytes) + ' · ' + fmtDate(doc.updated_at);
+
+    el.querySelector('[data-op="reindex"]').addEventListener('click', function (event) {
+      reindexDoc(doc, event.currentTarget);
+    });
+    el.querySelector('[data-op="delete"]').addEventListener('click', function () {
+      deleteDoc(doc);
+    });
+    return el;
+  }
+
+  function reindexDoc(doc, btn) {
+    if (!doc.source) {
+      toast('该文档没有来源路径，无法重建索引', 'fail');
+      return;
+    }
+    btn.disabled = true;
+    btn.textContent = '重建中…';
+    fetch('/documents/ingest', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path: doc.source, reindex: true })
+    })
+      .then(function (resp) {
+        return resp.json().then(function (data) {
+          if (!resp.ok) throw new Error(data.message || data.detail || ('HTTP ' + resp.status));
+          return data;
+        });
+      })
+      .then(function (data) {
+        toast('已重建：' + doc.title + '（' + data.chunk_count + ' 个分块）', 'ok');
+        loadKbList();
+      })
+      .catch(function (err) {
+        toast('重建失败：' + ((err && err.message) || err), 'fail');
+      })
+      .then(function () {
+        btn.disabled = false;
+        btn.textContent = '重建索引';
+      });
+  }
+
+  function deleteDoc(doc) {
+    if (!window.confirm('确定从知识库删除「' + (doc.title || doc.doc_id) + '」？\n将同时清除向量索引、全文索引与元数据。')) return;
+    fetch('/documents/' + encodeURIComponent(doc.doc_id), { method: 'DELETE' })
+      .then(function (resp) {
+        if (!resp.ok) {
+          return resp.json().then(function (data) {
+            throw new Error(data.message || data.detail || ('HTTP ' + resp.status));
+          });
+        }
+        return resp.json();
+      })
+      .then(function () {
+        toast('已删除「' + (doc.title || doc.doc_id) + '」', 'ok');
+        refreshKbCount();
+        loadKbList();
+      })
+      .catch(function (err) {
+        toast('删除失败：' + ((err && err.message) || err), 'fail');
+      });
+  }
+
+  function refreshKbCount() {
+    return fetch('/documents?limit=1')
+      .then(function (resp) { return resp.ok ? resp.json() : null; })
+      .then(function (data) {
+        var badge = $('kbCount');
+        if (!data) { badge.hidden = true; return; }
+        var total = data.total || 0;
+        badge.textContent = String(total);
+        badge.hidden = total === 0;
+      })
+      .catch(function () { /* 忽略：计数失败不该干扰问答 */ });
+  }
+
+  function wireKnowledge() {
+    $('uploadOpen').addEventListener('click', function () { openModal('uploadModal'); });
+    $('kbUpload').addEventListener('click', function () { openModal('uploadModal'); });
+    $('kbOpen').addEventListener('click', function () {
+      openModal('kbModal');
+      loadKbList();
+    });
+    $('kbRefresh').addEventListener('click', loadKbList);
+    $('pathImport').addEventListener('click', importServerPath);
+
+    var debounce = null;
+    $('kbSearch').addEventListener('input', function () {
+      clearTimeout(debounce);
+      debounce = setTimeout(loadKbList, 300);
+    });
+
+    // 选择文件
+    var picker = $('filePicker');
+    $('dropzone').addEventListener('click', function () { picker.click(); });
+    $('dropzone').addEventListener('keydown', function (event) {
+      if (event.key === 'Enter' || event.key === ' ') {
+        event.preventDefault();
+        picker.click();
+      }
+    });
+    picker.addEventListener('change', function () {
+      startUploads(picker.files);
+      picker.value = '';
+    });
+
+    // 拖拽上传
+    var zone = $('dropzone');
+    ['dragenter', 'dragover'].forEach(function (type) {
+      zone.addEventListener(type, function (event) {
+        event.preventDefault();
+        zone.classList.add('dragover');
+      });
+    });
+    ['dragleave', 'drop'].forEach(function (type) {
+      zone.addEventListener(type, function (event) {
+        event.preventDefault();
+        zone.classList.remove('dragover');
+      });
+    });
+    zone.addEventListener('drop', function (event) {
+      var files = (event.dataTransfer && event.dataTransfer.files) || [];
+      startUploads(files);
+    });
+
+    // 整页拖入也能上传：避免用户必须先打开弹窗
+    window.addEventListener('dragover', function (event) { event.preventDefault(); });
+    window.addEventListener('drop', function (event) {
+      if (event.target.closest && event.target.closest('#dropzone')) return;
+      event.preventDefault();
+      var files = (event.dataTransfer && event.dataTransfer.files) || [];
+      if (!files.length) return;
+      openModal('uploadModal');
+      startUploads(files);
+    });
+  }
+
   // ---------------- 启动 ----------------
 
   function init() {
@@ -662,9 +1030,12 @@
     wireInput();
     wireCitations();
     wireScroll();
+    wireModals();
+    wireKnowledge();
     renderSidebar();
     renderMessages();
     $('input').focus();
+    refreshKbCount();
 
     // 顶栏显示当前生效模型（失败时静默，不影响问答）
     fetch('/admin/models')

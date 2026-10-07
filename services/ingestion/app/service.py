@@ -227,6 +227,28 @@ class IngestionService:
         logger.info("已保存上传文件: %s (%s bytes)", target, len(data))
         return await self.ingest(IngestRequest(path=str(target), acl=acl, reindex=reindex))
 
+    # ---------------- 台账查询 ----------------
+    async def list_documents(
+        self,
+        *,
+        tenant_id: str | None = None,
+        keyword: str | None = None,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> dict:
+        return await self._metadata.list_documents(
+            tenant_id=tenant_id, keyword=keyword, limit=limit, offset=offset
+        )
+
+    async def get_document(self, doc_id: str) -> dict | None:
+        return await self._metadata.get_document(doc_id)
+
+    async def get_job(self, job_id: str) -> dict | None:
+        return await self._metadata.get_job(job_id)
+
+    async def stats(self) -> dict[str, int]:
+        return await self._metadata.stats()
+
     # ---------------- 观测 ----------------
     async def health(self) -> dict[str, str]:
         ok_pg, msg_pg = await self._metadata.health()
