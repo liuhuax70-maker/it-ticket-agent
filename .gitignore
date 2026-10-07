@@ -29,7 +29,14 @@ data/index/
 data/uploads/
 data/manifest.json
 data/*.lock
-eval_data/reports/
+
+# 评测报告：只把最新基线的 Markdown 入库（人读，几 KB），供后续对比与回归参照。
+# JSON 报告包含全部样本答案与上下文，体积大且每次跑都变，不入库——
+# CI 门禁读的是当次跑出来的报告文件。
+# 注意：不能写 `eval_data/reports/`（整目录排除后，白名单规则无法再放行其中的文件）。
+eval_data/reports/*.json
+eval_data/reports/*.md
+!eval_data/reports/*_latest.md
 eval_data/bad_cases/
 volumes/
 logs/

@@ -45,6 +45,30 @@ jobs:
           fi
           python -m pipelines.eval_dag.run --limit "$EVAL_LIMIT"
 
+      - name: L1 门禁（越权必须为 0）
+        # 越权泄露是**绝对不变量**，不设阈值、不看波动：出现即失败。
+        # hit@k 之类的指标先只打印，等基线稳定后再加"不许下降"的门禁。
+        run: |
+          python - <<'PY'
+          import json, pathlib, sys
+
+          path = pathlib.Path("eval_data/reports/baseline_latest.json")
+          if not path.exists():
+              print("没有找到报告文件，跳过门禁")
+              sys.exit(0)
+
+          summary = json.loads(path.read_text(encoding="utf-8"))["summary"]
+          print("评测摘要:")
+          print(json.dumps(summary, ensure_ascii=False, indent=2))
+
+          if summary.get("leak_count", 0) > 0:
+              print(f"::error::检测到 {summary['leak_count']} 条越权泄露，评测不通过")
+              sys.exit(1)
+          if summary.get("count", 0) == 0:
+              print("::error::零样本，评测没有真正执行")
+              sys.exit(1)
+          PY
+
       - name: 上传评测报告
         if: always()
         uses: actions/upload-artifact@v4

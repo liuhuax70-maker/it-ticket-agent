@@ -153,7 +153,36 @@ python scripts/verify_loop.py --skip-chat   # 只验服务健康、接入幂等�
 | V4 | 正样本返回非空答案 + 非空 `citations`，且引用区间与原文一致 |
 | V5 | 负样本（文档里没有的问题）走拒答，`refused=true` 且 `citations=[]` |
 
-### 2.7 权限闭环验收（S7，本项目的主线）
+### 2.7 评测基线（L1 确定性 + L2 RAGAS）
+
+评测拆两层（理由见 `docs/adr/0005`）：**L1 用可判定的硬事实，不依赖裁判模型**；
+L2 用 RAGAS 打答案质量分。
+
+```bash
+python scripts/prepare_corpus.py                 # 准备语料（10 篇通用 + 3 篇权限）
+# 启动 eval 服务（:8006）后：
+curl -X POST localhost:8006/eval/preflight -H 'Content-Type: application/json' -d '{}'   # 只做前置检查，秒级
+curl -X POST localhost:8006/eval/run -H 'Content-Type: application/json' \
+     -d '{"run_ragas": false}'                   # 只跑 L1（快，适合迭代）
+python -m pipelines.eval_dag.run                 # 全量（含 L2）
+```
+
+评测集 `configs/eval/golden.jsonl`（41 条）分四类：
+
+| 类别 | 条数 | 目的 |
+| --- | --- | --- |
+| 单文档事实题 | 24 | 命中与排序精度（hit@k / MRR） |
+| 干扰题 | 4 | 体检费/年假/培训费/调薪/发布窗口在多篇文档里都出现，考察能否选对来源 |
+| 负样本 | 5 | 文档外问题必须拒答（含一条"帮我写诗"的难题与一条问他人绩效的敏感题） |
+| **权限切片** | 8 | 同一问题不同身份期望相反：HR 专属、工程专属、他人私有、跨租户 |
+
+L1 指标：`hit@k`（带 Wilson 95% 区间）、`MRR`、片段召回、引用覆盖率、拒答准确率、
+漏答率、误答率、**越权泄露数（必须为 0）**，并给出标签分组与失败样本明细。
+L2 指标：`faithfulness`、`context_precision`、`context_recall`（负样本不参与）。
+
+报告落盘 `eval_data/reports/baseline_latest.json` 与 `.md`（JSON 供机器比对，Markdown 供人读）。
+
+### 2.8 权限闭环验收（S7，本项目的主线）
 
 V1~V5 只证明「链路能跑」，且是在**单租户单部门**下跑的。要证明「权限感知」，必须用
 **真实身份**跑一遍隔离矩阵：

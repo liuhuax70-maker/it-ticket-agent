@@ -14,6 +14,7 @@ class SecuritySettings(BaseAppSettings):
     keycloak_url: str = "http://localhost:8180"
     keycloak_realm: str = "rag"
     keycloak_client_id: str = "rag-api"
+    keycloak_client_secret: str = "rag-api-dev-secret"
     keycloak_audience: str = ""
     # 生产保持 True。仅在开发环境因主机名（127.0.0.1 / localhost / 容器名）
     # 不一致导致 iss 对不上、且暂时无法统一 KC_HOSTNAME 时才关闭。
@@ -42,3 +43,6 @@ class SecuritySettings(BaseAppSettings):
 
     def issuer(self) -> str:
         return f"{self.keycloak_url.rstrip('/')}/realms/{self.keycloak_realm}"
+
+    def token_url(self) -> str:
+        return f"{self.issuer()}/protocol/openid-connect/token"

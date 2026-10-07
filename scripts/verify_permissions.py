@@ -44,27 +44,41 @@ ACCOUNTS = {
 }
 
 # 语料 -> 上传者 / 可见性 / 期望落库的部门
-CORPUS_FILES = {
-    "hr_policy.md": ("carol", "department", "hr"),
-    "eng_runbook.md": ("erin", "department", "engineering"),
-    "carol_note.md": ("carol", "private", "hr"),
+# 与 scripts/prepare_corpus.py 共用同一份定义，避免两处各写一套而悄悄漂移
+from prepare_corpus import PERMISSION_FILES as CORPUS_FILES  # noqa: E402
+
+# default 租户里所有身份都能看到的公共文档（internal 可见性）
+GENERAL_DOC_TITLES = {
+    "员工手册",
+    "费用报销管理制度",
+    "差旅管理制度",
+    "考勤与休假制度",
+    "信息安全管理制度",
+    "采购与供应商管理制度",
+    "研发规范",
+    "薪酬与晋升制度",
+    "培训管理制度",
+    "数据合规与留存制度",
 }
 
 # 每个身份**有权看到**的文档标题片段（由 ACL 推导，用作硬断言的上界）。
 # 断言形式：任意一次回答的 citations 必须 ⊆ 该集合。
 # 这比「只允许出现期望文档」正确得多——公共基线文档被引用是合法的。
 VISIBLE_DOCS = {
-    "alice": {"员工手册", "人力资源部内部制度"},
-    "carol": {"员工手册", "人力资源部内部制度", "入职交接清单"},
-    "bob": {"员工手册", "工程部运行手册"},
-    "erin": {"员工手册", "工程部运行手册"},
+    "alice": GENERAL_DOC_TITLES | {"人力资源部内部制度"},
+    "carol": GENERAL_DOC_TITLES | {"人力资源部内部制度", "入职交接清单"},
+    "bob": GENERAL_DOC_TITLES | {"工程部运行手册"},
+    "erin": GENERAL_DOC_TITLES | {"工程部运行手册"},
     "dave": set(),  # 其他租户：一份都看不到
 }
 
 # 查询 -> (问题, 该问题的"专属文档"标题片段, 应当命中它的账号集合)
+#
+# 探针问题刻意选**只在该受控文档里出现**的事实：扩语料后，"调薪窗口在四月"
+# 这类事实在公共文档里也有，用它做权限探针就不再能区分"看到了"和"没看到"。
 QUERIES = {
-    "hr": ("年度调薪窗口是什么时候启动？", "人力资源部内部制度", {"alice", "carol"}),
-    "eng": ("生产环境发布窗口是几点到几点？", "工程部运行手册", {"bob", "erin"}),
+    "hr": ("招聘需求审批中，编制核对需要在几个工作日内完成？", "人力资源部内部制度", {"alice", "carol"}),
+    "eng": ("P1 告警需要在几分钟内响应？", "工程部运行手册", {"bob", "erin"}),
     "priv": ("入职交接清单的第 3 项是什么？", "入职交接清单", {"carol"}),
     # 公共基线：租户内所有身份都应命中；tenant-b 因租户隔离拿不到
     "pub": ("年假有多少天？", "员工手册", {"alice", "carol", "bob", "erin"}),
