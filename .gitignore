@@ -26,6 +26,7 @@ htmlcov/
 
 # ---------- 本地运行时数据 ----------
 data/index/
+data/uploads/
 data/manifest.json
 volumes/
 logs/

@@ -1,0 +1,15 @@
+"""安全：身份解析（Keycloak）、策略决策（OPA）、PII 脱敏。"""
+
+from packages.security.config import SecuritySettings
+from packages.security.identity import Identity, build_filter_dict, resolve_identity
+from packages.security.opa import OpaClient
+from packages.security.pii import redact
+
+__all__ = [
+    "Identity",
+    "OpaClient",
+    "SecuritySettings",
+    "build_filter_dict",
+    "redact",
+    "resolve_identity",
+]

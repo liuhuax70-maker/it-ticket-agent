@@ -1,0 +1,245 @@
+"""OpenSearch 适配：索引模板、批量写入、BM25 检索、按文档删除。
+
+使用 ``AsyncOpenSearch`` 避免把同步客户端塞进线程池。
+过滤（ACL）在 ``_compile_filter`` 内下沉为 OpenSearch ``bool.filter``。
+"""
+
+from __future__ import annotations
+
+from typing import Any
+
+from opensearchpy import AsyncOpenSearch
+from opensearchpy.helpers import async_bulk
+
+from packages.common.errors import DependencyUnavailable
+from packages.common.logging import get_logger
+from packages.contracts import Chunk, SearchHit
+from packages.retrievers.base import FilterDict
+from packages.search.config import OpenSearchSettings
+
+logger = get_logger("search.opensearch")
+
+SOURCE_FIELDS = [
+    "chunk_id",
+    "doc_id",
+    "doc_title",
+    "source",
+    "text",
+    "chunk_index",
+    "section_path",
+    "char_start",
+    "char_end",
+    "tenant_id",
+    "department_id",
+    "visibility",
+    "owner",
+]
+
+
+def build_index_body(analyzer: str) -> dict[str, Any]:
+    """索引模板。text 与 section_path 走全文分析，ACL 字段一律 keyword。"""
+    return {
+        "settings": {
+            "number_of_shards": 1,
+            "number_of_replicas": 0,
+            "refresh_interval": "1s",
+        },
+        "mappings": {
+            "properties": {
+                "text": {"type": "text", "analyzer": analyzer},
+                "chunk_id": {"type": "keyword"},
+                "doc_id": {"type": "keyword"},
+                "doc_title": {
+                    "type": "text",
+                    "analyzer": analyzer,
+                    "fields": {"keyword": {"type": "keyword"}},
+                },
+                "source": {"type": "keyword"},
+                "chunk_index": {"type": "integer"},
+                "section_path": {"type": "text", "analyzer": analyzer},
+                "char_start": {"type": "integer"},
+                "char_end": {"type": "integer"},
+                "tenant_id": {"type": "keyword"},
+                "department_id": {"type": "keyword"},
+                "visibility": {"type": "keyword"},
+                "owner": {"type": "keyword"},
+            }
+        },
+    }
+
+
+class OpenSearchStore:
+    """BM25 全文检索存储。"""
+
+    name = "bm25"
+
+    def __init__(self, settings: OpenSearchSettings) -> None:
+        self._settings = settings
+        self.index = settings.opensearch_index
+        http_auth = (
+            (settings.opensearch_username, settings.opensearch_password)
+            if settings.opensearch_username
+            else None
+        )
+        self._client = AsyncOpenSearch(
+            hosts=[settings.opensearch_url],
+            http_auth=http_auth,
+            use_ssl=settings.opensearch_url.startswith("https"),
+            verify_certs=False,
+            timeout=settings.opensearch_timeout,
+            max_retries=2,
+            retry_on_timeout=True,
+        )
+
+    async def aclose(self) -> None:
+        await self._client.close()
+
+    # ---------------- 索引管理 ----------------
+    async def ensure_index(self) -> None:
+        try:
+            exists = await self._client.indices.exists(index=self.index)
+            if not exists:
+                await self._client.indices.create(
+                    index=self.index, body=build_index_body(self._settings.opensearch_analyzer)
+                )
+                logger.info("已创建 OpenSearch 索引 %s", self.index)
+        except Exception as exc:  # noqa: BLE001
+            raise DependencyUnavailable("OpenSearch", f"索引初始化失败: {exc}") from exc
+
+    async def health(self) -> tuple[bool, str]:
+        try:
+            info = await self._client.info()
+            return True, f"cluster={info.get('cluster_name')} version={info.get('version', {}).get('number')}"
+        except Exception as exc:  # noqa: BLE001
+            return False, str(exc)
+
+    async def count(self) -> int:
+        try:
+            resp = await self._client.count(index=self.index)
+            return int(resp.get("count", 0))
+        except Exception:  # noqa: BLE001
+            return 0
+
+    # ---------------- 写入 ----------------
+    def _to_doc(self, chunk: Chunk) -> dict[str, Any]:
+        return {
+            "chunk_id": chunk.chunk_id,
+            "doc_id": chunk.doc_id,
+            "doc_title": chunk.doc_title,
+            "source": chunk.source,
+            "text": chunk.text,
+            "chunk_index": chunk.chunk_index,
+            "section_path": chunk.section_path,
+            "char_start": chunk.char_start,
+            "char_end": chunk.char_end,
+            "tenant_id": chunk.acl.tenant_id,
+            "department_id": chunk.acl.department_id,
+            "visibility": chunk.acl.visibility.value,
+            "owner": chunk.acl.owner or "",
+        }
+
+    async def bulk_index(self, chunks: list[Chunk]) -> int:
+        """以 chunk_id 为 _id 写入，天然幂等。"""
+        if not chunks:
+            return 0
+        actions = [
+            {
+                "_op_type": "index",
+                "_index": self.index,
+                "_id": chunk.chunk_id,
+                "_source": self._to_doc(chunk),
+            }
+            for chunk in chunks
+        ]
+        try:
+            success, errors = await async_bulk(self._client, actions, raise_on_error=False, refresh=True)
+        except Exception as exc:  # noqa: BLE001
+            raise DependencyUnavailable("OpenSearch", f"批量写入失败: {exc}") from exc
+        if errors:
+            logger.warning("OpenSearch 写入存在失败项，成功 %s，失败 %s", success, len(errors))
+        return int(success)
+
+    async def delete_by_doc(self, doc_id: str) -> int:
+        try:
+            resp = await self._client.delete_by_query(
+                index=self.index,
+                body={"query": {"term": {"doc_id": doc_id}}},
+                refresh=True,
+                conflicts="proceed",
+            )
+            return int(resp.get("deleted", 0))
+        except Exception as exc:  # noqa: BLE001
+            raise DependencyUnavailable("OpenSearch", f"删除失败: {exc}") from exc
+
+    # ---------------- 检索 ----------------
+    @staticmethod
+    def _compile_filter(filters: FilterDict | None) -> list[dict[str, Any]]:
+        if not filters:
+            return []
+        clauses: list[dict[str, Any]] = []
+        for field, value in (filters.get("must") or {}).items():
+            clauses.append({"term": {field: value}})
+
+        visibility_clauses = filters.get("visibility_clauses") or []
+        if visibility_clauses:
+            shoulds: list[dict[str, Any]] = []
+            for clause in visibility_clauses:
+                musts = [{"term": {k: v}} for k, v in clause.items()]
+                shoulds.append({"bool": {"filter": musts}})
+            clauses.append({"bool": {"should": shoulds, "minimum_should_match": 1}})
+
+        doc_ids = filters.get("doc_ids") or []
+        if doc_ids:
+            clauses.append({"terms": {"doc_id": doc_ids}})
+        return clauses
+
+    async def search(
+        self,
+        query: str,
+        *,
+        top_k: int = 20,
+        filters: FilterDict | None = None,
+    ) -> list[SearchHit]:
+        body: dict[str, Any] = {
+            "size": top_k,
+            "track_total_hits": False,
+            "_source": SOURCE_FIELDS,
+            "query": {
+                "bool": {
+                    "must": [
+                        {
+                            "multi_match": {
+                                "query": query,
+                                "fields": ["text^1.0", "doc_title^0.5", "section_path^0.3"],
+                                "type": "best_fields",
+                            }
+                        }
+                    ],
+                    "filter": self._compile_filter(filters),
+                }
+            },
+        }
+        try:
+            resp = await self._client.search(index=self.index, body=body)
+        except Exception as exc:  # noqa: BLE001
+            raise DependencyUnavailable("OpenSearch", f"检索失败: {exc}") from exc
+
+        hits: list[SearchHit] = []
+        for item in resp.get("hits", {}).get("hits", []):
+            src = item.get("_source", {})
+            hits.append(
+                SearchHit(
+                    chunk_id=src.get("chunk_id", item.get("_id", "")),
+                    doc_id=src.get("doc_id", ""),
+                    doc_title=src.get("doc_title", ""),
+                    source=src.get("source", ""),
+                    text=src.get("text", ""),
+                    chunk_index=int(src.get("chunk_index", 0) or 0),
+                    section_path=src.get("section_path", ""),
+                    char_start=int(src.get("char_start", 0) or 0),
+                    char_end=int(src.get("char_end", 0) or 0),
+                    score=float(item.get("_score") or 0.0),
+                    retriever=self.name,
+                )
+            )
+        return hits

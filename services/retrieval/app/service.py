@@ -1,0 +1,95 @@
+"""检索服务编排：/search（召回+融合）与 /rerank（可选精排）。"""
+
+from __future__ import annotations
+
+from packages.common.logging import get_logger
+from packages.contracts import (
+    RerankRequest,
+    RerankResponse,
+    SearchRequest,
+    SearchResponse,
+)
+from packages.retrievers import FilterDict
+
+from app.config import Settings
+from app.filters import build_filters, extract_doc_ids
+from app.hybrid import HybridRetriever
+from app.opensearch_client import BM25Retriever
+from app.rerank import Reranker
+from app.vector_client import VectorRetriever
+
+logger = get_logger("retrieval.service")
+
+
+class RetrievalService:
+    def __init__(self, settings: Settings) -> None:
+        self._settings = settings
+        self._vector = VectorRetriever(settings, settings)
+        self._bm25 = BM25Retriever(settings)
+        self._hybrid = HybridRetriever(
+            self._vector,
+            self._bm25,
+            rrf_k=settings.rrf_k,
+            weight_vector=settings.rrf_weight_vector,
+            weight_bm25=settings.rrf_weight_bm25,
+            min_score=settings.min_score,
+        )
+        self._reranker = Reranker(settings.rerank_enabled, settings.rerank_model)
+
+    async def startup(self) -> None:
+        await self._vector.ensure()
+        await self._bm25.ensure()
+        logger.info(
+            "retrieval 就绪: mode=%s embed=%s dim=%s rerank=%s",
+            self._settings.retrieve_mode,
+            self._vector.model_name,
+            self._vector.dim,
+            self._settings.rerank_enabled,
+        )
+
+    def compile_filters(self, req: SearchRequest) -> FilterDict | None:
+        """把请求里的 ACL 编译为过滤契约；这是权限下推的唯一入口。"""
+        return build_filters(req.acl, extract_doc_ids(req.filters))
+
+    async def search(self, req: SearchRequest) -> SearchResponse:
+        mode = req.mode or self._settings.default_mode()
+        top_k = req.top_k or self._settings.top_k
+        filters = self.compile_filters(req)
+        if filters is None:
+            logger.warning("检索未携带 ACL，本次不做权限过滤（仅限内部调试场景）")
+
+        hits, timings = await self._hybrid.search(
+            req.query,
+            mode,
+            top_k=top_k,
+            vector_top_k=self._settings.vector_top_k,
+            bm25_top_k=self._settings.bm25_top_k,
+            filters=filters,
+        )
+        return SearchResponse(hits=hits, timings_ms=timings)
+
+    async def rerank(self, req: RerankRequest) -> RerankResponse:
+        hits, reranker, elapsed = await self._reranker.rerank(req.query, req.hits, req.top_k)
+        return RerankResponse(hits=hits, reranker=reranker, timings_ms={"rerank": elapsed})
+
+    async def health(self) -> dict[str, str]:
+        ok_v, msg_v = await self._vector.health()
+        ok_s, msg_s = await self._bm25.health()
+        details = {
+            "status": "ok" if (ok_v and ok_s) else "degraded",
+            "milvus": msg_v,
+            "opensearch": msg_s,
+            "embed_model": self._vector.model_name,
+            "embed_dim": str(self._vector.dim),
+            "mode": self._settings.retrieve_mode,
+            "rerank_enabled": str(self._settings.rerank_enabled),
+        }
+        try:
+            details["milvus_rows"] = str(await self._vector.count())
+            details["opensearch_rows"] = str(await self._bm25.count())
+        except Exception as exc:  # noqa: BLE001
+            details["count_error"] = str(exc)
+        return details
+
+    async def aclose(self) -> None:
+        await self._bm25.aclose()

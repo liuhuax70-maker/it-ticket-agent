@@ -47,17 +47,18 @@ dev = [
 ]
 # 评测服务需要（较重）
 eval = ["ragas>=0.2", "datasets>=2.20"]
+# Langfuse trace 上报（未安装时 observability 自动降级为 no-op）
+observability = ["langfuse>=2.50"]
 # 备选本地向量化后端（体积大，默认用 fastembed）
 local-embed = ["sentence-transformers>=3.0"]
 
 [tool.setuptools]
 # 只打包共享库；apps/ 与 services/ 以 --app-dir 方式运行，不做 site-packages 安装
-packages = ["packages"]
 
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["packages*"]
-exclude = ["apps*", "services*", "pipelines*", "tests*", "migrations*"]
+exclude = ["apps*", "services*", "pipelines*", "tests*", "migrations*", "data*", "configs*"]
 
 [tool.pytest.ini_options]
 # 仓库根可导入 packages.*；服务内 app.* 由各服务 tests 的 conftest 自行注入
