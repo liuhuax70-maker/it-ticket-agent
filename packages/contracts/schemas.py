@@ -167,6 +167,22 @@ class ContextItem(BaseModel):
     text: str
 
 
+class ChatMessage(BaseModel):
+    """原始对话消息，用于只要求「按我给的 prompt 调一次模型」的场景
+    （查询改写、合规审核），避免为了复用它们而把业务 prompt 塞进 RAG 模板。"""
+
+    role: Literal["system", "user", "assistant"] = "user"
+    content: str
+
+
+class CompletionRequest(BaseModel):
+    messages: list[ChatMessage]
+    model: str | None = None
+    temperature: float | None = None
+    max_tokens: int | None = None
+    tenant_id: str | None = None
+
+
 class GenerateRequest(BaseModel):
     query: str
     contexts: list[ContextItem] = Field(default_factory=list)
@@ -280,3 +296,23 @@ class HealthResponse(BaseModel):
     service: str
     version: str = "0.1.0"
     details: dict[str, str] = Field(default_factory=dict)
+
+
+# --------------------------------------------------------------------------
+# 反馈
+# --------------------------------------------------------------------------
+
+
+class FeedbackRequest(BaseModel):
+    """用户反馈。评级沿用点赞/点踩：1 有用，-1 无用，None 仅留言。"""
+
+    query: str = ""
+    answer: str = ""
+    rating: int | None = None
+    comment: str | None = None
+    trace_id: str | None = None
+
+
+class FeedbackResponse(BaseModel):
+    id: str
+    status: Literal["accepted", "duplicate"] = "accepted"

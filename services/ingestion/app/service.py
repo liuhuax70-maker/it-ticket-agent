@@ -201,6 +201,18 @@ class IngestionService:
             await self._metadata.update_job(job_id, status="failed", message=str(exc))
             raise
 
+    async def delete_document(self, doc_id: str) -> dict[str, object]:
+        """合规删除：先清检索索引，再清元数据。
+
+        顺序不能反——元数据先删会让索引清理失去 doc_id 依据，
+        留下「检索得到但查不到来源」的孤儿向量。删除是幂等的。
+        """
+        document = await self._metadata.get_document(doc_id)
+        index_counts = await self._sink.delete_document(doc_id)
+        await self._metadata.delete_document(doc_id)
+        logger.info("已删除文档 doc_id=%s index=%s", doc_id, index_counts)
+        return {"doc_id": doc_id, "deleted": index_counts, "existed": document is not None}
+
     async def ingest_bytes(
         self, filename: str, data: bytes, *, acl: ACL | None = None, reindex: bool = False
     ) -> IngestResponse:

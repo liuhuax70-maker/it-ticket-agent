@@ -7,6 +7,7 @@ from packages.retrievers.base import (
     FilterDict,
     Retriever,
 )
+from packages.retrievers.filters import compile_filters
 from packages.retrievers.rrf import reciprocal_rank_fusion
 
 __all__ = [
@@ -15,5 +16,6 @@ __all__ = [
     "RETRIEVER_VECTOR",
     "FilterDict",
     "Retriever",
+    "compile_filters",
     "reciprocal_rank_fusion",
 ]

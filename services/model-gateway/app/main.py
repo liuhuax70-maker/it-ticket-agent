@@ -11,6 +11,7 @@ from packages.common.errors import ConfigError, install_exception_handlers
 from packages.common.logging import get_logger, setup_logging
 from packages.common.settings import load_settings
 from packages.contracts import (
+    CompletionRequest,
     EmbedRequest,
     EmbedResponse,
     GenerateRequest,
@@ -67,9 +68,22 @@ async def generate(req: GenerateRequest) -> GenerateResponse:
     return await _router().generate(req)
 
 
+@app.post("/complete", response_model=GenerateResponse)
+async def complete(req: CompletionRequest) -> GenerateResponse:
+    """原始补全：调用方自带 prompt（查询改写、合规审核）。"""
+    return await _router().complete(req)
+
+
 @app.post("/embed", response_model=EmbedResponse)
 async def embed(req: EmbedRequest) -> EmbedResponse:
     return await _router().embed(req)
+
+
+@app.get("/quota/{tenant_id}")
+async def quota(tenant_id: str) -> dict[str, object]:
+    """租户当日 token 用量（仅供管理面查看）。"""
+    snapshot = await _router().quota_snapshot(tenant_id)
+    return {"tenant_id": tenant_id, **snapshot}
 
 
 @app.get("/models", response_model=list[ModelInfo])

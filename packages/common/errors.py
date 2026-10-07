@@ -25,6 +25,10 @@ class NotFoundError(RagError):
     status_code = 404
 
 
+class Forbidden(RagError):
+    status_code = 403
+
+
 class ValidationError(RagError):
     status_code = 422
 

@@ -87,6 +87,26 @@ async def get_job(job_id: str) -> dict[str, object]:
     return job
 
 
+@app.get("/stats")
+async def stats() -> dict[str, object]:
+    """文档/分块总量，供管理面与验收脚本使用。"""
+    return await _service()._metadata.stats()  # noqa: SLF001
+
+
+@app.get("/documents/{doc_id}")
+async def get_document(doc_id: str) -> dict[str, object]:
+    document = await _service()._metadata.get_document(doc_id)  # noqa: SLF001
+    if document is None:
+        raise NotFoundError(f"文档不存在: {doc_id}")
+    return document
+
+
+@app.delete("/documents/{doc_id}")
+async def delete_document(doc_id: str) -> dict[str, object]:
+    """合规删除：同时清检索索引与元数据（幂等）。"""
+    return await _service().delete_document(doc_id)
+
+
 @app.get("/health", response_model=HealthResponse)
 async def health() -> HealthResponse:
     details = await _service().health()

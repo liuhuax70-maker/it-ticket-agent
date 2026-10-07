@@ -9,6 +9,7 @@ from packages.common.constants import REFUSE_TEXT
 from packages.common.errors import UpstreamError
 from packages.common.logging import get_logger
 from packages.contracts import (
+    CompletionRequest,
     EmbedRequest,
     EmbedResponse,
     GenerateRequest,
@@ -68,9 +69,11 @@ class ModelRouter:
         )
 
     # ---------------- 目标解析 ----------------
-    def targets(self) -> list[ModelTarget]:
+    def targets(self, model_override: str | None = None) -> list[ModelTarget]:
         """主模型 + 配置的兜底模型。配置不全的兜底项会被跳过而不是整体失败。"""
-        chain: list[ModelTarget] = [build_target(self._settings)]
+        chain: list[ModelTarget] = [build_target(self._settings, model_override)]
+        if model_override:
+            return chain  # 显式指定模型时不叠加兜底，避免调用方预期被破坏
         for name in self._settings.fallback_list():
             try:
                 chain.append(build_target(self._settings, name))
@@ -83,10 +86,17 @@ class ModelRouter:
             len(self._settings.fallback_list()), self._settings.fallback_cooldown_seconds
         )
 
-    # ---------------- 业务 ----------------
-    async def generate(self, req: GenerateRequest) -> GenerateResponse:
-        messages = build_messages(req)
-        chain = self.targets()
+    # ---------------- 内部：带降级的执行 ----------------
+    async def _run(
+        self,
+        messages: list[dict[str, str]],
+        *,
+        model: str | None,
+        temperature: float | None,
+        max_tokens: int | None,
+        tenant_id: str | None,
+    ) -> GenerateResponse:
+        chain = self.targets(model)
         policy = self.policy()
         attempts = chain[: policy.max_attempts]
         errors: list[str] = []
@@ -96,14 +106,11 @@ class ModelRouter:
             try:
                 started = time.perf_counter()
                 result = await self._client.complete_target(
-                    target,
-                    messages,
-                    temperature=req.temperature,
-                    max_tokens=req.max_tokens,
+                    target, messages, temperature=temperature, max_tokens=max_tokens
                 )
                 if idx > 0:
                     logger.warning("主模型不可用，已降级到 %s", target.name)
-                await self._quota.consume(req.tenant_id, result.usage.get("total_tokens", 0))
+                await self._quota.consume(tenant_id, result.usage.get("total_tokens", 0))
                 timings = dict(result.timings_ms)
                 timings["total"] = round((time.perf_counter() - started_total) * 1000, 1)
                 return GenerateResponse(
@@ -121,6 +128,28 @@ class ModelRouter:
                 await asyncio.sleep(policy.cooldown_seconds)
 
         raise UpstreamError("model-gateway", "全部模型均失败: " + " | ".join(errors))
+
+    # ---------------- 业务 ----------------
+    async def generate(self, req: GenerateRequest) -> GenerateResponse:
+        """RAG 生成：上下文 + 引用约束提示词。"""
+        return await self._run(
+            build_messages(req),
+            model=req.model,
+            temperature=req.temperature,
+            max_tokens=req.max_tokens,
+            tenant_id=req.tenant_id,
+        )
+
+    async def complete(self, req: CompletionRequest) -> GenerateResponse:
+        """原始补全：调用方自带 prompt（查询改写、合规审核等）。"""
+        messages = [m.model_dump() for m in req.messages]
+        return await self._run(
+            messages,
+            model=req.model,
+            temperature=req.temperature,
+            max_tokens=req.max_tokens,
+            tenant_id=req.tenant_id,
+        )
 
     async def embed(self, req: EmbedRequest) -> EmbedResponse:
         embedder = get_embedder(self._settings)

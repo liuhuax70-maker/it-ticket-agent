@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>企业知识库问答</title>
+  <style>
+    :root { color-scheme: light dark; --fg:#1f2328; --bg:#f6f8fa; --card:#fff; --line:#d0d7de; --accent:#0969da; }
+    @media (prefers-color-scheme: dark) {
+      :root { --fg:#e6edf3; --bg:#0d1117; --card:#161b22; --line:#30363d; --accent:#58a6ff; }
+    }
+    * { box-sizing: border-box; }
+    body { margin:0; font: 15px/1.6 -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif;
+           background: var(--bg); color: var(--fg); display:flex; justify-content:center; padding:24px; }
+    main { width: min(760px, 100%); background: var(--card); border:1px solid var(--line);
+           border-radius:12px; padding:20px; }
+    h1 { font-size:18px; margin:0 0 4px; }
+    p.hint { margin:0 0 16px; font-size:13px; opacity:.7; }
+    form { display:flex; gap:8px; }
+    input[type=text] { flex:1; padding:10px 12px; border:1px solid var(--line); border-radius:8px;
+           background: transparent; color: inherit; font-size:15px; }
+    button { padding:10px 18px; border:0; border-radius:8px; background: var(--accent); color:#fff;
+           font-size:15px; cursor:pointer; }
+    button:disabled { opacity:.5; cursor:progress; }
+    #answer { margin-top:18px; white-space:pre-wrap; }
+    .citations { margin-top:14px; border-top:1px dashed var(--line); padding-top:12px; font-size:13px; }
+    .citations li { margin-bottom:8px; }
+    .meta { margin-top:10px; font-size:12px; opacity:.65; }
+    .refused { color:#d1242f; }
+  </style>
+</head>
+<body>
+<main>
+  <h1>企业知识库问答</h1>
+  <p class="hint">答案只依据知识库原文生成，并附带可回查的引用。</p>
+
+  <form id="form">
+    <input id="q" type="text" placeholder="例如：入职体检费用怎么报销？" autocomplete="off" required />
+    <button id="send" type="submit">提问</button>
+  </form>
+
+  <div id="answer"></div>
+  <ul class="citations" id="citations"></ul>
+  <div class="meta" id="meta"></div>
+</main>
+
+<script>
+  const form = document.getElementById('form');
+  const input = document.getElementById('q');
+  const send = document.getElementById('send');
+  const answerEl = document.getElementById('answer');
+  const citationsEl = document.getElementById('citations');
+  const metaEl = document.getElementById('meta');
+
+  form.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const query = input.value.trim();
+    if (!query) return;
+
+    send.disabled = true;
+    answerEl.className = '';
+    answerEl.textContent = '检索中…';
+    citationsEl.innerHTML = '';
+    metaEl.textContent = '';
+
+    try {
+      const resp = await fetch('/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query })
+      });
+      const data = await resp.json();
+      if (!resp.ok) throw new Error(data.message || data.detail || `HTTP ${resp.status}`);
+
+      answerEl.textContent = data.answer;
+      if (data.refused) answerEl.className = 'refused';
+
+      (data.citations || []).forEach((c) => {
+        const li = document.createElement('li');
+        li.innerHTML = `<strong>[${c.index}] ${c.doc_title || c.doc_id}</strong>
+          <div>${c.section_path || ''}</div>
+          <div style="opacity:.75">${(c.snippet || '').replace(/</g, '&lt;')}</div>
+          <div style="opacity:.55">chunk ${c.chunk_index} · 字符 ${c.char_start}-${c.char_end}</div>`;
+        citationsEl.appendChild(li);
+      });
+
+      const t = data.timings_ms || {};
+      metaEl.textContent = `model=${data.model || '-'} cached=${data.cached} `
+        + `retrieve=${t.retrieve ?? '-'}ms generate=${t.generate ?? '-'}ms total=${t.total ?? '-'}ms`;
+    } catch (err) {
+      answerEl.className = 'refused';
+      answerEl.textContent = `请求失败：${err.message}`;
+    } finally {
+      send.disabled = false;
+    }
+  });
+</script>
+</body>
+</html>

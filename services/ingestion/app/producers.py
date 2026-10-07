@@ -21,6 +21,8 @@ logger = get_logger("ingestion.producers")
 class ChunkSink(Protocol):
     async def send(self, chunks: list[Chunk], *, reindex: bool) -> IndexResponse: ...
 
+    async def delete_document(self, doc_id: str) -> dict[str, int]: ...
+
     async def ping(self) -> tuple[bool, str]: ...
 
     async def aclose(self) -> None: ...
@@ -38,6 +40,11 @@ class HttpChunkSink:
             IndexRequest(chunks=chunks, reindex=reindex),
             response_model=IndexResponse,
         )
+
+    async def delete_document(self, doc_id: str) -> dict[str, int]:
+        resp = await self._client.post(f"/documents/{doc_id}/delete")
+        deleted = (resp or {}).get("deleted", {}) or {}
+        return {k: int(v) for k, v in deleted.items()}
 
     async def ping(self) -> tuple[bool, str]:
         ok = await self._client.ping("/health")
@@ -73,6 +80,12 @@ class KafkaChunkSink:
             chunks_indexed=len(chunks),
             status="ok",
         )
+
+    async def delete_document(self, doc_id: str) -> dict[str, int]:
+        """投递删除事件。异步通道下索引删除是最终一致的，此处无法给出条数。"""
+        await self._publisher.publish({"op": "delete", "doc_id": doc_id}, key=doc_id)
+        logger.info("已投递删除事件 doc_id=%s", doc_id)
+        return {"milvus": 0, "opensearch": 0}
 
     async def ping(self) -> tuple[bool, str]:
         # 生产者未启动时不报错：Kafka 是异步通道，未启用时不应拉低健康分

@@ -48,12 +48,23 @@ class ServiceClient:
         path: str,
         *,
         json_body: dict[str, Any] | None = None,
+        files: list[tuple[str, tuple[str, bytes, str]]] | None = None,
+        data: dict[str, Any] | None = None,
+        headers: dict[str, str] | None = None,
         response_model: type[M] | None = None,
         timeout: float | None = None,
     ) -> Any:
         url = path if path.startswith("/") else f"/{path}"
         try:
-            resp = await self._client.request(method, url, json=json_body, timeout=timeout)
+            resp = await self._client.request(
+                method,
+                url,
+                json=json_body,
+                files=files,
+                data=data,
+                headers=headers,
+                timeout=timeout,
+            )
         except httpx.HTTPError as exc:
             raise UpstreamError(self.name, f"连接失败: {exc}") from exc
 
@@ -90,6 +101,7 @@ class ServiceClient:
         path: str,
         payload: BaseModel | dict[str, Any] | None = None,
         *,
+        headers: dict[str, str] | None = None,
         response_model: type[M] | None = None,
         timeout: float | None = None,
     ) -> Any:
@@ -98,7 +110,47 @@ class ServiceClient:
         else:
             body = payload
         return await self._request(
-            "POST", path, json_body=body, response_model=response_model, timeout=timeout
+            "POST",
+            path,
+            json_body=body,
+            headers=headers,
+            response_model=response_model,
+            timeout=timeout,
+        )
+
+    async def delete(
+        self,
+        path: str,
+        *,
+        headers: dict[str, str] | None = None,
+        response_model: type[M] | None = None,
+        timeout: float | None = None,
+    ) -> Any:
+        return await self._request(
+            "DELETE", path, headers=headers, response_model=response_model, timeout=timeout
+        )
+
+    async def post_file(
+        self,
+        path: str,
+        *,
+        filename: str,
+        content: bytes,
+        fields: dict[str, Any] | None = None,
+        headers: dict[str, str] | None = None,
+        response_model: type[M] | None = None,
+        timeout: float | None = None,
+    ) -> Any:
+        """multipart/form-data 上传。"""
+        files = [("file", (filename, content, "application/octet-stream"))]
+        return await self._request(
+            "POST",
+            path,
+            files=files,
+            data={k: str(v) for k, v in (fields or {}).items()},
+            headers=headers,
+            response_model=response_model,
+            timeout=timeout,
         )
 
     async def ping(self, path: str = "/health") -> bool:

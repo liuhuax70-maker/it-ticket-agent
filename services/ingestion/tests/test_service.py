@@ -45,6 +45,15 @@ class FakeMetadata:
     async def update_document_status(self, doc_id: str, status: str, chunk_count=None) -> None:
         self.documents[doc_id] = status
 
+    async def get_document(self, doc_id: str) -> dict | None:
+        if doc_id not in self.documents:
+            return None
+        return {"doc_id": doc_id, "status": self.documents[doc_id]}
+
+    async def delete_document(self, doc_id: str) -> None:
+        self.documents.pop(doc_id, None)
+        self.chunks.pop(doc_id, None)
+
     async def health(self) -> tuple[bool, str]:
         return True, "fake"
 
@@ -61,6 +70,10 @@ class FakeSink:
         return IndexResponse(
             doc_id=chunks[0].doc_id, chunks_indexed=len(chunks), milvus=len(chunks), opensearch=len(chunks)
         )
+
+    async def delete_document(self, doc_id: str) -> dict[str, int]:
+        self.calls.append((-1, False))
+        return {"milvus": 1, "opensearch": 1}
 
     async def ping(self) -> tuple[bool, str]:
         return not self.fail, "fake"
@@ -114,6 +127,19 @@ async def test_ingest_requires_target(wire) -> None:
     state = wire()
     with pytest.raises(ValidationError):
         await state["service"].ingest(IngestRequest())  # type: ignore[union-attr]
+
+
+async def test_delete_document_clears_index_and_metadata(wire) -> None:
+    state = wire()
+    metadata = state["metadata"]
+    metadata.documents["d_x"] = "indexed"  # type: ignore[union-attr]
+    metadata.chunks["d_x"] = []  # type: ignore[union-attr]
+
+    result = await state["service"].delete_document("d_x")  # type: ignore[union-attr]
+    assert result["existed"] is True
+    assert result["deleted"] == {"milvus": 1, "opensearch": 1}
+    assert "d_x" not in metadata.documents  # type: ignore[union-attr]
+    assert "d_x" not in metadata.chunks  # type: ignore[union-attr]
 
 
 async def test_timings_are_reported(wire) -> None:

@@ -1,0 +1,234 @@
+"""api-gateway 集成式测试（TestClient + 假下游，不依赖任何外部服务）。"""
+
+from __future__ import annotations
+
+import pytest
+from fastapi.testclient import TestClient
+
+from packages.contracts import (
+    ChatRequest,
+    ChatResponse,
+    Citation,
+    FeedbackRequest,
+    FeedbackResponse,
+    IngestRequest,
+    IngestResponse,
+    ModelInfo,
+)
+
+import app.main as main_module
+from app.config import Settings
+
+
+class FakeCounter:
+    """替代 RedisCounter：内存计数，测试可重复运行。"""
+
+    def __init__(self, url: str) -> None:  # noqa: ARG002
+        self.counts: dict[str, int] = {}
+
+    async def incr(self, key: str, ttl_seconds: int) -> int:  # noqa: ARG002
+        self.counts[key] = self.counts.get(key, 0) + 1
+        return self.counts[key]
+
+    async def get(self, key: str) -> int:
+        return self.counts.get(key, 0)
+
+    async def aclose(self) -> None:
+        return None
+
+
+class FakeOrchestrator:
+    def __init__(self) -> None:
+        self.calls: list[tuple[ChatRequest, object]] = []
+
+    async def chat(self, req: ChatRequest, identity) -> ChatResponse:  # noqa: ANN001
+        self.calls.append((req, identity))
+        return ChatResponse(
+            answer="转正后凭发票报销，上限五百元[1]。",
+            citations=[
+                Citation(
+                    index=1,
+                    chunk_id="d_1:4",
+                    doc_id="d_1",
+                    doc_title="员工手册",
+                    chunk_index=4,
+                    section_path="第三章 福利 > 3.2 入职体检",
+                    char_start=120,
+                    char_end=180,
+                    snippet="转正后凭发票报销，上限五百元。",
+                )
+            ],
+            timings_ms={"retrieve": 3.0, "generate": 12.0, "total": 20.0},
+            model="deepseek-chat",
+            trace_id="tr_1",
+        )
+
+    async def ping(self) -> bool:
+        return True
+
+    async def aclose(self) -> None:
+        return None
+
+
+class FakeIngestion:
+    async def stats(self) -> dict:
+        return {"documents": 1, "chunks": 6}
+
+    async def get_document(self, doc_id: str) -> dict:
+        return {"doc_id": doc_id, "status": "indexed"}
+
+    async def delete_document(self, doc_id: str) -> dict:
+        return {"doc_id": doc_id, "deleted": {"milvus": 1, "opensearch": 1}, "existed": True}
+
+    async def ingest(self, req: IngestRequest) -> IngestResponse:
+        return IngestResponse(job_id="j1", status="succeeded", documents=1, chunk_count=6, indexed=6)
+
+    async def upload(self, filename: str, content: bytes, *, acl, reindex: bool = False) -> IngestResponse:  # noqa: ANN001, ARG002
+        return IngestResponse(job_id="j2", status="succeeded", documents=1, chunk_count=2, indexed=2)
+
+    async def get_job(self, job_id: str) -> dict:
+        return {"job_id": job_id, "status": "succeeded"}
+
+    async def ping(self) -> bool:
+        return True
+
+    async def aclose(self) -> None:
+        return None
+
+
+class FakeModelGateway:
+    async def models(self) -> list[ModelInfo]:
+        return [ModelInfo(name="deepseek-chat", provider="deepseek", note="当前生效")]
+
+    async def quota(self, tenant_id: str) -> dict:
+        return {"tenant_id": tenant_id, "used_today": 10, "daily_limit": 100, "enforced": False}
+
+    async def ping(self) -> bool:
+        return True
+
+    async def aclose(self) -> None:
+        return None
+
+
+class FakeFeedback:
+    def __init__(self) -> None:
+        self.received: list[FeedbackRequest] = []
+
+    async def submit(self, req: FeedbackRequest) -> FeedbackResponse:
+        self.received.append(req)
+        return FeedbackResponse(id="f_1")
+
+    async def ping(self) -> bool:
+        return True
+
+    async def aclose(self) -> None:
+        return None
+
+
+def _build_app(monkeypatch, **overrides):
+    monkeypatch.setattr(main_module, "RedisCounter", FakeCounter)
+    defaults = dict(
+        rate_limit_enabled=True,
+        rate_limit_per_minute=3,
+        serve_ui=False,
+        audit_enabled=True,
+        authz_enabled=False,
+        cors_origins="",
+    )
+    defaults.update(overrides)
+    app = main_module.create_app(Settings(**defaults))
+    return app
+
+
+@pytest.fixture()
+def client(monkeypatch):
+    app = _build_app(monkeypatch)
+    with TestClient(app) as test_client:
+        app.state.orchestrator = FakeOrchestrator()
+        app.state.ingestion = FakeIngestion()
+        app.state.model_gateway = FakeModelGateway()
+        app.state.feedback = FakeFeedback()
+        test_client.app = app  # type: ignore[attr-defined]
+        yield test_client
+
+
+# ---------------- chat ----------------
+
+
+def test_chat_returns_answer_with_citations(client) -> None:
+    resp = client.post("/chat", json={"query": "入职体检费用怎么报销？"})
+    assert resp.status_code == 200
+    body = resp.json()
+    assert "五百元" in body["answer"]
+    assert body["citations"][0]["chunk_id"] == "d_1:4"
+    assert body["timings_ms"]["total"] == 20.0
+
+
+def test_identity_is_forwarded_downstream(client) -> None:
+    client.post("/chat", json={"query": "x"})
+    app = client.app  # type: ignore[attr-defined]
+    _, identity = app.state.orchestrator.calls[0]
+    assert identity.tenant_id == "default"  # 鉴权关闭时使用默认身份
+    assert identity.user_id == "u_demo"
+
+
+def test_request_id_header_is_returned(client) -> None:
+    resp = client.post("/chat", json={"query": "x"})
+    assert resp.headers["x-request-id"]
+
+
+def test_invalid_body_is_422(client) -> None:
+    assert client.post("/chat", json={}).status_code == 422
+
+
+# ---------------- 限流 ----------------
+
+
+def test_rate_limit_blocks_after_threshold(client) -> None:
+    for _ in range(3):
+        assert client.post("/chat", json={"query": "q"}).status_code == 200
+    blocked = client.post("/chat", json={"query": "q"})
+    assert blocked.status_code == 429
+    assert "retry-after" in blocked.headers
+
+
+def test_health_is_exempt_from_rate_limit(client) -> None:
+    for _ in range(6):
+        assert client.get("/health").status_code == 200
+
+
+# ---------------- documents / admin / feedback ----------------
+
+
+def test_documents_ingest_and_delete(client) -> None:
+    resp = client.post("/documents/ingest", json={"path": "data/corpus"})
+    assert resp.status_code == 200
+    assert resp.json()["chunk_count"] == 6
+
+    deleted = client.delete("/documents/d_1")
+    assert deleted.status_code == 200
+    assert deleted.json()["deleted"]["milvus"] == 1
+
+
+def test_admin_stats_requires_authz_when_enabled(client) -> None:
+    assert client.get("/admin/stats").status_code == 200
+    assert client.get("/admin/models").json()[0]["name"] == "deepseek-chat"
+    assert client.get("/admin/quotas/default").json()["used_today"] == 10
+
+
+def test_feedback_is_forwarded(client) -> None:
+    resp = client.post("/feedback", json={"query": "q", "answer": "a", "rating": 1})
+    assert resp.status_code == 200
+    assert resp.json()["id"] == "f_1"
+    app = client.app  # type: ignore[attr-defined]
+    assert app.state.feedback.received[0].rating == 1
+
+
+# ---------------- 鉴权开关 ----------------
+
+
+def test_authz_enabled_rejects_missing_token(monkeypatch) -> None:
+    app = _build_app(monkeypatch, authz_enabled=True, keycloak_url="http://localhost:8180")
+    with TestClient(app) as test_client:
+        resp = test_client.post("/chat", json={"query": "x"})
+    assert resp.status_code == 401

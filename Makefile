@@ -53,8 +53,11 @@ ingestion: ## 启动 ingestion (:8004)
 indexing: ## 启动 indexing (:8005)
 	$(PY) -m uvicorn app.main:app --app-dir services/indexing --port 8005 --reload
 
-test: ## 运行测试
-	$(PY) -m pytest
+test: ## 运行全部测试（按服务分进程）
+	$(PY) scripts/test_all.py
+
+test-packages: ## 只跑共享库测试
+	$(PY) -m pytest packages/tests -q
 
 lint: ## 静态检查
 	ruff check .

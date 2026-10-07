@@ -16,7 +16,6 @@ from pydantic import BaseModel, Field
 from packages.common.errors import RagError
 from packages.common.logging import get_logger
 from packages.contracts import ACL, Visibility
-from packages.retrievers.base import FilterDict
 from packages.security.config import SecuritySettings
 
 logger = get_logger("security.identity")
@@ -30,7 +29,12 @@ class Identity(BaseModel):
     email: str | None = None
     is_admin: bool = False
 
-    def to_acl(self, *, owner: bool = False) -> ACL:
+    def to_acl(self, *, owner: bool = True) -> ACL:
+        """转成请求方 ACL。
+
+        ``owner=True`` 时携带 user_id，使 ``private`` 可见性分支生效
+        （用户能检索到自己的私有文档）。
+        """
         return ACL(
             tenant_id=self.tenant_id,
             department_id=self.department_id,
@@ -116,30 +120,5 @@ def resolve_identity(request: Request, settings: SecuritySettings) -> Identity:
     )
 
 
-# --------------------------------------------------------------------------
-# ACL 过滤契约
-# --------------------------------------------------------------------------
-
-
-def build_filter_dict(identity: Identity, doc_ids: list[str] | None = None) -> FilterDict:
-    """把身份编译为检索层过滤契约。
-
-    可见性语义（``must.tenant_id`` 对所有分支生效，即 public 亦限本租户）：
-        public      -> 租户内所有可见
-        internal    -> 租户内所有可见
-        department  -> 同部门可见
-        private     -> 仅 owner 可见
-    """
-    clauses: list[dict[str, Any]] = [{"visibility": "public"}, {"visibility": "internal"}]
-    if identity.department_id:
-        clauses.append({"visibility": "department", "department_id": identity.department_id})
-    if identity.user_id:
-        clauses.append({"visibility": "private", "owner": identity.user_id})
-
-    filters: FilterDict = {
-        "must": {"tenant_id": identity.tenant_id},
-        "visibility_clauses": clauses,
-    }
-    if doc_ids:
-        filters["doc_ids"] = list(doc_ids)
-    return filters
+# 说明：ACL -> 过滤契约的编译只此一处实现，位于
+# ``packages.retrievers.filters.compile_filters``；此处只负责把请求解析成 Identity。
