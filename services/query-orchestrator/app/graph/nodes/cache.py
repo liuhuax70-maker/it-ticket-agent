@@ -35,8 +35,10 @@ def _cache_key(
 def make_cache_lookup_node(cache: QueryCache, settings: Settings):
     async def cache_lookup(state: RAGState) -> dict:
         started = time.perf_counter()
-        if not cache.enabled:
-            # skip 与 miss 必须分开：把"缓存没开"算成未命中会让命中率看起来永远很低
+        if not cache.enabled or not state.get("use_cache", True):
+            # 两种"跳过"都记 skip：不给指标加新标签维度（那会让历史序列不可比，
+            # 而"为什么跳过"并不是运维需要区分的事）。
+            # skip 与 miss 必须分开：把"缓存没开"算成未命中会让命中率看起来永远很低。
             CACHE_LOOKUP_COUNTER.inc({"result": "skip"})
             return merge_timing(state, "cache_lookup", started, cached=False)
 
@@ -76,7 +78,9 @@ def make_cache_lookup_node(cache: QueryCache, settings: Settings):
 def make_cache_store_node(cache: QueryCache, settings: Settings):
     async def cache_store(state: RAGState) -> dict:
         started = time.perf_counter()
-        if not cache.enabled or state.get("cached"):
+        # use_cache=False 的请求**既不读也不写**：让评测流量灌进生产缓存，
+        # 会让下一轮评测拿到一堆命中，检索侧指标的样本分母随之变化。
+        if not cache.enabled or not state.get("use_cache", True) or state.get("cached"):
             return {}
         # 不缓存拒答：把「资料缺失」固化下来，会在文档补录后继续吐旧答案
         if state.get("refused"):

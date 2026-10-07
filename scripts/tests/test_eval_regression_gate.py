@@ -124,3 +124,25 @@ def test_partial_run_still_enforces_invariants(tmp_path: Path) -> None:
     result = _run(tmp_path, _report(summary={"count": 20, "leak_count": 1}))
     assert result.returncode == 1
     assert "越权泄露" in result.stdout
+
+
+def test_l2_tolerance_stays_above_measured_judge_noise() -> None:
+    """L2 容差必须**高于实测裁判噪声**，否则门禁会随机误报。
+
+    实测（2026-10-08）：同一份答案、同一裁判（deepseek-flash，temperature=0）
+    连打 5 次，faithfulness 落在 0.788 ~ 0.840，**极差 0.052**。
+    门禁容差曾设为 0.05——比噪声下限还小，于是同一份代码有时过有时不过。
+
+    这条测试的作用是让"把容差调回 0.05 省得误报"变成一次显式失败：
+    误报的门禁比没有门禁更糟，人会学会给它加 `|| true`。
+    """
+    sys.path.insert(0, str(SCRIPT.parent))
+    from check_eval_regression import RULES  # noqa: PLC0415
+
+    measured_spread = 0.0521  # 5 次同输入重打分的极差
+    for key, where, _direction, tolerance, _reason in RULES:
+        if where != "l2":
+            continue
+        assert tolerance > measured_spread, (
+            f"{key} 的容差 {tolerance} 不高于实测裁判噪声 {measured_spread}，门禁会随机误报"
+        )

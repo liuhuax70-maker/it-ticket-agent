@@ -69,6 +69,7 @@ class OrchestratorService:
                         "top_k": top_k,
                         "mode": mode,
                         "temperature": req.temperature,
+                        "use_cache": req.use_cache,
                         "trace_id": trace_id,
                         "timings": {},
                         "errors": [],

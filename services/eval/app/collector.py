@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import time
 from pathlib import PurePosixPath
-from typing import Any
+from typing import Any, NamedTuple
 
 import httpx
 
@@ -187,6 +187,11 @@ def _chat_payload(sample: GoldenSample, settings: Settings) -> dict[str, Any]:
         include_contexts=True,
         top_k=settings.top_k,
         temperature=settings.answer_temperature,
+        # 必须绕过缓存，两个理由都不是"想看慢一点的数"：
+        # ① 命中响应里没有 contexts -> 检索侧指标（NDCG / 检索侧 MRR）只能把这些行
+        #    排除出分母，缓存越多分母越小，两轮评测的 NDCG 就不可比；
+        # ② 评测若允许写缓存，会把评测流量灌进生产缓存，让**下一次**评测拿到一堆命中。
+        use_cache=False,
     ).model_dump(mode="json")
 
 
@@ -214,16 +219,54 @@ async def _ask(
     return body, error, round((time.perf_counter() - started) * 1000, 1)
 
 
-def _extract_contexts(body: dict[str, Any]) -> tuple[list[str], list[dict[str, Any]]]:
-    """取出 (上下文列表, 引用列表)。
+class _Extracted(NamedTuple):
+    """一次采集里"能看到什么"的四份数据。
 
-    网关未返回上下文时（如拒答路径）用引用片段兜底，保证片段召回仍有可判定的依据。
+    ``contexts`` 与 ``chunk_doc_ids`` **等长且同序**——正因如此才能把每个召回分块
+    归属到它的文档，而不必把分块文本再抄一遍（报告里文本已经有 ``contexts``）。
+    """
+
+    contexts: list[str]
+    citations: list[dict[str, Any]]
+    # 检索侧 doc 名次（去重、保持首次出现位置）；缓存命中/无 contexts 时为空
+    retrieved_doc_ids: list[str]
+    # 与 contexts 等长同序：该分块属于哪篇文档
+    chunk_doc_ids: list[str]
+
+
+def _extract_contexts(body: dict[str, Any]) -> _Extracted:
+    """取出上下文文本、引用列表，以及**检索侧**的 doc 名次。
+
+    检索名次与引用顺序**刻意不同源**，这是本函数存在的理由：
+
+    ``citations`` 的顺序是**生成侧**的选择——模型挑哪几条引用、按什么顺序排列。
+    而 NDCG 与检索侧 MRR 要量的是**检索侧**的名次（RRF 融合 / 重排后的顺序，
+    由重排节点的 ``build_context_items(hits)`` 按 hits 顺序构建）。
+    两者混用会把"模型引用顺序"当成"检索排序质量"，指标含义就错了。
+
+    所以 ``retrieved_doc_ids`` 只从**真正的** ``contexts`` 取，且**不做引用兜底**：
+    缓存命中的请求根本不返回 contexts，那种行应该被排除在检索侧指标之外，
+    而不是拿引用顺序顶替——否则缓存越多，检索侧指标越"好看"。
     """
     citations = body.get("citations") or []
-    contexts = [str(item.get("text", "")) for item in (body.get("contexts") or [])]
+    raw_contexts = body.get("contexts") or []
+
+    contexts = [str(item.get("text", "")) for item in raw_contexts]
+    chunk_doc_ids = [str(item.get("doc_id", "")) for item in raw_contexts]
+
+    retrieved_doc_ids: list[str] = []
+    seen: set[str] = set()
+    for doc_id in chunk_doc_ids:
+        # 同一篇文档常因多个分块重复出现；只保留**首次**出现的位置，那就是它的名次
+        if doc_id and doc_id not in seen:
+            seen.add(doc_id)
+            retrieved_doc_ids.append(doc_id)
+
     if not contexts:
+        # 兜底只保证"片段召回"仍有可判定依据（拒答路径与缓存命中都没有 contexts）
         contexts = [str(citation.get("snippet", "")) for citation in citations]
-    return contexts, citations
+
+    return _Extracted(contexts, citations, retrieved_doc_ids, chunk_doc_ids)
 
 
 def _expected_and_forbidden(
@@ -250,7 +293,7 @@ def _build_row(
     forbidden: set[str],
 ) -> dict[str, Any]:
     """把一次采集结果整理成指标层可直接消费的行。"""
-    contexts, citations = _extract_contexts(body)
+    extracted = _extract_contexts(body)
     return {
         "sample_id": sample.id,
         "question": sample.question,
@@ -268,8 +311,12 @@ def _build_row(
         "answer_model": body.get("model"),
         "refused": bool(body.get("refused")),
         "cached": bool(body.get("cached")),
-        "citations": citations,
-        "contexts": contexts,
+        "citations": extracted.citations,
+        "contexts": extracted.contexts,
+        # 检索侧信息：NDCG / 检索侧 MRR 的输入。缓存命中时为空（响应里没有 contexts），
+        # 指标层据此把这些行排除在检索侧分母之外。
+        "retrieved_doc_ids": extracted.retrieved_doc_ids,
+        "chunk_doc_ids": extracted.chunk_doc_ids,
         "latency_ms": latency_ms,
         "timings_ms": body.get("timings_ms") or {},
         "error": error,

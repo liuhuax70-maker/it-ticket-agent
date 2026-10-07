@@ -41,7 +41,12 @@ def _print_summary(summary: dict) -> None:
         f"  样本            {summary.get('count')}（正 {summary.get('positive')} / 负 {summary.get('negative')}）"
     )
     print(f"  hit@k           {pct(summary.get('hit_at_k'))}   区间 {summary.get('hit_at_k_ci95')}")
-    print(f"  MRR             {summary.get('mrr')}")
+    # 引用序 vs 检索序：两个 MRR 不是同一个东西，标签必须写清，否则会被当成重复指标
+    print(f"  MRR(引用序)     {summary.get('mrr')}")
+    print(f"  MRR(检索侧)     {summary.get('retrieval_mrr')}")
+    print(
+        f"  NDCG@5          {summary.get('ndcg_at_k')}   样本 {summary.get('ranking_sample_count')}"
+    )
     print(f"  片段召回        {pct(summary.get('snippet_recall'))}")
     print(f"  引用覆盖率      {pct(summary.get('citation_coverage'))}")
     print(f"  漏答率          {pct(summary.get('false_refusal_rate'))}")

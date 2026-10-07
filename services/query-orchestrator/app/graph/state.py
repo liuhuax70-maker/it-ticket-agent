@@ -24,6 +24,10 @@ class RAGState(TypedDict, total=False):
     mode: RetrieveMode
     temperature: float | None
     trace_id: str
+    # 本次请求是否允许读写查询缓存。由 ChatRequest.use_cache 决定，
+    # 缓存节点据此整体跳过——评测传 False，否则缓存命中会改变可测量的指标
+    # （命中响应没有 contexts，检索侧指标的样本会被悄悄剔除）。
+    use_cache: bool
 
     # ---- 中间态 ----
     rewritten_query: str

@@ -245,6 +245,14 @@ class ChatRequest(BaseModel):
     #   过滤之前的内容形态，回传范围越大越容易在下游被误记日志。
     # 需要它的场景：RAGAS 的 context 类指标（评测采集时显式传 True）。
     include_contexts: bool = False
+    # 是否允许读写查询缓存。默认 True（生产行为不变）。
+    #
+    # 评测必须传 False，理由不是"想看慢一点的数"，而是**缓存命中会改变可测量的东西**：
+    # ① 命中响应里没有 contexts，检索侧指标（NDCG、检索侧 MRR）只能把这些行排除出分母——
+    #    于是"缓存越多，NDCG 的样本越少"，两轮评测的 NDCG 不可比；
+    # ② 延迟变成"命中/未命中"的混合值，P50 随缓存状态漂移（实测同代码 1.29s vs 2.13s）。
+    # 另外评测跑批若允许写缓存，会把评测流量灌进生产缓存，让**下一次**评测拿到一堆命中。
+    use_cache: bool = True
 
 
 class ChatResponse(BaseModel):

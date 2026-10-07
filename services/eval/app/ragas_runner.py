@@ -71,6 +71,9 @@ def _to_ragas_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
             continue
         converted.append(
             {
+                # sample_id 必须带进 RAGAS：否则 L2 只有一列匿名分数，
+                # 看到某条 faithfulness 低也无法知道是哪条样本，L2 失分无法定位。
+                "sample_id": row["sample_id"],
                 "user_input": row["question"],
                 "response": row.get("answer", ""),
                 "retrieved_contexts": list(row.get("contexts") or []) or [""],
@@ -78,6 +81,39 @@ def _to_ragas_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
             }
         )
     return converted
+
+
+def _per_sample_by_id(
+    frame: Any, per_sample: dict[str, list[float | None]], sample_ids: list[str]
+) -> list[dict[str, Any]]:
+    """把逐样本分数与 ``sample_id`` 对齐（RAGAS 0.4 不保留自定义列，只能按顺序映射）。
+
+    为什么不能靠列：``EvaluationDataset.from_list`` 只保留它认识的 4 个字段
+    （user_input / response / retrieved_contexts / reference），``sample_id`` 会被丢掉——
+    实测 ``features()`` 里确实没有它。所以 id 只能由我们自己按**数据集顺序**配回去。
+
+    这个映射依赖"RAGAS 按数据集顺序返回逐样本分数"。为把风险挡住，这里做**行数校验**：
+    结果行数与输入条数不一致就返回空列表并告警，**绝不返回可能错位的 id**——
+    分数挂到错的样本上比没有分数更危险：它会让人去修一个其实没问题的样本。
+    """
+    try:
+        row_count = len(frame)
+    except Exception:  # noqa: BLE001 - 拿不到就当对不齐，绝不猜
+        row_count = -1
+    scores = per_sample.get("faithfulness") or []
+    if row_count != len(sample_ids) or len(scores) != len(sample_ids):
+        logger.warning(
+            "结果行数(%s) / 分数条数(%s) / 输入条数(%s) 不一致，L2 逐样本明细不标注样本",
+            row_count,
+            len(scores),
+            len(sample_ids),
+        )
+        return []
+    keys = sorted(per_sample)
+    return [
+        {"sample_id": sample_id, **{key: per_sample[key][index] for key in keys}}
+        for index, sample_id in enumerate(sample_ids)
+    ]
 
 
 def _aggregate(frame: Any, metrics: list[tuple[str, Any]]) -> tuple[dict, dict]:
@@ -166,10 +202,13 @@ def score(rows: list[dict[str, Any]], settings: Settings) -> dict[str, Any]:
     # 结果表，所以显式收窄——避免内部执行器类型泄漏到业务代码。
     frame = result.to_pandas() if hasattr(result, "to_pandas") else result
     scores, per_sample = _aggregate(frame, metrics)
+    sample_ids = [str(row["sample_id"]) for row in ragas_rows]
 
     return {
         "metrics": scores,
         "per_sample": per_sample,
+        # 带样本 id 的逐样本明细：L2 分数低时能直接定位到是哪条问题
+        "per_sample_by_id": _per_sample_by_id(frame, per_sample, sample_ids),
         "judge_model": judge.target_name,
         # 端点实际服务的模型名（与请求名不同时才有值，例如中转把 chat 映射成 flash）
         "judge_served_model": judge.served_name or None,

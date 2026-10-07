@@ -14,6 +14,11 @@ RAGAS（L2）负责答案质量这类需要主观判断的维度，两层互补�
 指标定义：
     hit@k            正样本中，引用/上下文里出现过期望来源（doc_id）的比例
     mrr              首个命中期望来源的排名的倒数，均值（越接近 1 说明命中越靠前）
+                     ⚠️ 取自**引用顺序**——那是生成侧的选择，不是检索侧的名次
+    retrieval_mrr    同上，但取自**检索名次**（RRF 融合 / 重排后的真实顺序）
+    ndcg_at_k        分级相关性（0/2/3）下的排序质量，检索侧。能区分"检索到对的文档
+                     但切错分块"与"文档都不对"，这是二值指标做不到的。
+                     ⚠️ 与 mrr/retrieval_mrr 不可直接比高低：对数折线 vs 线性折线
     snippet_recall   期望原文片段出现在召回上下文中的比例（比 doc_id 更宽容，且不受切分参数影响）
     citation_coverage  作答样本中带引用的比例（引用强制是产品约束）
     false_refusal    正样本被误判为拒答（漏答）
@@ -29,6 +34,7 @@ RAGAS（L2）负责答案质量这类需要主观判断的维度，两层互补�
 from __future__ import annotations
 
 import math
+from collections.abc import Sequence
 from typing import Any
 
 from pydantic import BaseModel, Field
@@ -60,7 +66,13 @@ class MetricsReport(BaseModel):
 
     hit_at_k: float | None = None
     hit_at_k_ci95: tuple[float, float] | None = None
+    # mrr 量的是**引用顺序**（生成侧）；retrieval_mrr / ndcg_at_k 量的是**检索名次**（检索侧）
     mrr: float | None = None
+    retrieval_mrr: float | None = None
+    ndcg_at_k: float | None = None
+    # 检索侧指标的实际样本数。**必须落盘**：光看 ndcg_at_k=0.98 无法知道分母是 23 还是 35，
+    # 而分母一变（新增样本、缓存命中行被排除）数字就不可比——这个坑已经踩过两次。
+    ranking_sample_count: int | None = None
     snippet_recall: float | None = None
     citation_coverage: float | None = None
 
@@ -133,6 +145,161 @@ def _unique_doc_ids(row: dict[str, Any]) -> list[str]:
     for doc_id in _cited_doc_ids(row):
         seen.setdefault(doc_id, None)
     return list(seen)
+
+
+# ---------------- 检索侧排序指标（NDCG / 检索侧 MRR）----------------
+
+# 固定 k，而不是用 len(retrieved)：检索返回的条数受 top_k 配置影响，
+# 若 k 跟着配置变，不同配置下的 NDCG 就不可比。而 NDCG 的意义本来就在"截断处发生了什么"。
+RANKING_K = 5
+
+# 分级相关度：0 不相关 / 2 期望文档但没召回含答案的分块 / 3 期望文档且分块里有答案原文。
+# 用 3 档而不是"命中=1、没命中=0"的二值，是为了让 NDCG 能区分两种截然不同的失败：
+# 「检索到对的文档但切错分块」与「文档都不对」。二值 NDCG 会把这两种混成同一个 0。
+GRADE_EXPECTED_WITH_SNIPPET = 3
+GRADE_EXPECTED_NO_SNIPPET = 2
+
+
+def dcg_at_k(gains: Sequence[float], k: int) -> float:
+    """DCG@k：``sum(gain_i / log2(i + 2))``，即第 1 位权重 1、第 2 位 1/log2(3)。
+
+    用标准折线权重而不是简化的 ``1/log2(i+1)``：后者会让第 1 位权重为 0，
+    于是"排在第一位"与"没排在前面"得分一样，是常见的手写错误。
+    """
+    return sum(gain / math.log2(rank + 2) for rank, gain in enumerate(gains[:k]))
+
+
+def ndcg_at_k(
+    grades: Sequence[int], k: int, ideal_grades: Sequence[int] | None = None
+) -> float | None:
+    """NDCG@k（指数增益 ``2^rel - 1``）。
+
+    ``ideal_grades`` 缺省用 ``grades`` 的降序排列，即"把已召回的东西排到最好能拿的名次"。
+
+    **返回一个全相关文档都没召回到的样本时结果是 0.0，而不是 None**——这是有意的：
+    IDCG 只在"连期望文档都不存在"时为 0，那种行不该进分母（见调用方）。
+
+    两个必须知道的性质，否则这个数字无法解释：
+
+    1. **它与 MRR 不等价，只在第 1 名重合。** DCG 用**对数**折线 ``1/log2(i+2)``，
+       MRR 用**线性**折线 ``1/(i+1)``，所以同一个名次下 NDCG 恒大于 MRR
+       （第 3 名：0.500 vs 0.333）。我曾在这里写成"单期望文档时 NDCG 退化成 MRR"，
+       那是错的——实测上两者只在 rank=1 相等。NDCG 因此**对靠后名次更宽容**，
+       拿它和 MRR 比高低前必须先确认折线方式一致。
+    2. 指数增益让"排第一的 3 分"远大于"排第三的 2 分"
+       （7 vs 0.63），这是分级相关性的价值：二值增益下两者同分，
+       "对文档但切错分块"就与"对文档且切对分块"无法区分。
+    """
+    if not grades:
+        return None
+    gains = [(2**grade) - 1 for grade in grades]
+    ideal = sorted(((2**grade) - 1 for grade in (ideal_grades or grades)), reverse=True)
+    idcg = dcg_at_k(ideal, k)
+    if idcg <= 0:
+        return None
+    return round(dcg_at_k(gains, k) / idcg, 4)
+
+
+def _docs_with_answer_snippet(row: dict[str, Any]) -> set[str]:
+    """哪些文档的**召回分块里出现了期望原文片段**。
+
+    ``contexts`` 与 ``chunk_doc_ids`` 由采集器保证等长同序；用 ``zip`` 而不是直接按下标取，
+    是因为拒答/缓存命中路径下 ``chunk_doc_ids`` 可能为空——此时 ``zip`` 自然产出空集，
+    而按下标取会越界或错位取到别人的分块。
+    """
+    snippets = [s for s in (row.get("expected_snippets") or []) if s]
+    if not snippets:
+        return set()
+    found: set[str] = set()
+    # strict=False 是刻意的：拒答/缓存命中路径下 contexts 有兜底而 chunk_doc_ids 为空，
+    # 两者**合法地不等长**。写成 strict=True 会让这类样本直接抛异常。
+    for text, doc_id in zip(
+        row.get("contexts") or [], row.get("chunk_doc_ids") or [], strict=False
+    ):
+        if doc_id and any(snippet in text for snippet in snippets):
+            found.add(str(doc_id))
+    return found
+
+
+def _retrieval_grades(row: dict[str, Any], retrieved_doc_ids: Sequence[str]) -> list[int]:
+    """给检索侧每个名次打相关度等级（0 / 2 / 3）。"""
+    expected = set(row.get("expected_doc_ids") or [])
+    with_snippet = _docs_with_answer_snippet(row)
+    grades: list[int] = []
+    for doc_id in retrieved_doc_ids:
+        if doc_id not in expected:
+            grades.append(0)
+        elif doc_id in with_snippet:
+            grades.append(GRADE_EXPECTED_WITH_SNIPPET)
+        else:
+            grades.append(GRADE_EXPECTED_NO_SNIPPET)
+    return grades
+
+
+def _ideal_grades(row: dict[str, Any]) -> list[int]:
+    """完美检索下的等级序列（用于 IDCG）。
+
+    只要数据集声明了期望片段，就假定理想的检索能命中它——否则 grade 3 永远拿不到，
+    IDCG 会被系统性低估，把所有 NDCG 都算低。
+    """
+    expected = sorted(row.get("expected_doc_ids") or [])
+    # 与 _docs_with_answer_snippet 用同一套"过滤空串"的判断，避免两处口径不一致
+    snippets = [s for s in (row.get("expected_snippets") or []) if s]
+    grade = GRADE_EXPECTED_WITH_SNIPPET if snippets else GRADE_EXPECTED_NO_SNIPPET
+    return [grade] * len(expected)
+
+
+def _retrieval_rank_of_first_expected(row: dict[str, Any]) -> int | None:
+    """首个期望来源在**检索侧**名次中的排名（1 起）。"""
+    expected = set(row.get("expected_doc_ids") or [])
+    for rank, doc_id in enumerate(row.get("retrieved_doc_ids") or [], start=1):
+        if doc_id in expected:
+            return rank
+    return None
+
+
+def _apply_ranking_metrics(report: MetricsReport, positive: list[dict[str, Any]]) -> None:
+    """检索侧 NDCG@k 与检索侧 MRR。
+
+    与 ``hit@k`` / ``mrr`` 的区别是**数据来源**，不是算法：那两个指标量的是
+    **引用顺序**（生成侧：模型挑哪些引用、按什么顺序排），这两个量的是
+    **检索名次**（RRF 融合 / 重排后的真实顺序）。两者会分开——引用顺序由生成侧决定，
+    把它当成检索排序会得出"检索变差了"的错误结论（曾据此误判过一次，见 ADR 0005）。
+
+    缓存命中的行**不进分母**：它们的响应里没有 contexts，拿不到检索名次，
+    用引用顺序顶替会让"缓存越多、检索指标越好看"。
+    """
+    graded = [row for row in positive if row.get("expected_doc_ids")]
+    scorable = [row for row in graded if row.get("retrieved_doc_ids")]
+    skipped = len(graded) - len(scorable)
+
+    if not scorable:
+        report.notes.append("没有样本带检索名次（retrieved_doc_ids），无法计算 NDCG 与检索侧 MRR")
+        return
+
+    ndcgs: list[float] = []
+    reciprocal_ranks: list[float] = []
+    for row in scorable:
+        retrieved = [str(d) for d in (row.get("retrieved_doc_ids") or [])]
+        value = ndcg_at_k(_retrieval_grades(row, retrieved), RANKING_K, _ideal_grades(row))
+        if value is not None:
+            ndcgs.append(value)
+        rank = _retrieval_rank_of_first_expected(row)
+        reciprocal_ranks.append(0.0 if rank is None else 1.0 / rank)
+
+    report.ndcg_at_k = round(sum(ndcgs) / len(ndcgs), 4) if ndcgs else None
+    report.retrieval_mrr = round(sum(reciprocal_ranks) / len(reciprocal_ranks), 4)
+    report.ranking_sample_count = len(scorable)
+    if skipped:
+        report.notes.append(
+            f"检索侧指标只覆盖 {len(scorable)}/{len(graded)} 条期望样本："
+            f"{skipped} 条是缓存命中或拒答路径，响应里没有检索名次"
+        )
+    if len(scorable) < 30:
+        report.notes.append(
+            f"NDCG@{RANKING_K} 只基于 {len(scorable)} 条样本；"
+            "且它与 MRR 不可直接比大小（对数折线 vs 线性折线），请勿据小差异下结论"
+        )
 
 
 def _apply_retrieval_metrics(report: MetricsReport, positive: list[dict[str, Any]]) -> set[str]:
@@ -371,6 +538,7 @@ def compute(rows: list[dict[str, Any]]) -> MetricsReport:
     report.negative_count = len(negative)
 
     hit_samples = _apply_retrieval_metrics(report, positive)
+    _apply_ranking_metrics(report, positive)
     _apply_snippet_recall(report, positive)
     _apply_citation_coverage(report, positive)
     _apply_refusal_metrics(report, positive, negative, len(rows))
@@ -403,8 +571,11 @@ def _metric_table(report: MetricsReport) -> list[str]:
         "",
         "| 指标 | 数值 | 说明 |",
         "| --- | --- | --- |",
-        f"| hit@k | {_pct(report.hit_at_k)} | 正样本中引用到期望来源的比例 |",
-        f"| MRR | {'—' if report.mrr is None else f'{report.mrr:.3f}'} | 首个命中来源的排名倒数均值 |",
+        f"| hit@k | {_pct(report.hit_at_k)} | 正样本中引用到期望来源的比例（**引用序**） |",
+        f"| MRR | {'—' if report.mrr is None else f'{report.mrr:.3f}'} | 首个命中来源的排名倒数均值（**引用序**，生成侧） |",
+        f"| MRR（检索侧） | {'—' if report.retrieval_mrr is None else f'{report.retrieval_mrr:.3f}'} | 同上，但按**检索名次**计算（RRF/重排后的真实顺序） |",
+        f"| NDCG@{RANKING_K} | {'—' if report.ndcg_at_k is None else f'{report.ndcg_at_k:.3f}'} | 分级相关性下的排序质量（检索侧，0~1） |",
+        f"| NDCG 样本数 | {'—' if report.ranking_sample_count is None else str(report.ranking_sample_count)} | 检索侧指标的分母；分母变了数字就不可比 |",
         f"| 片段召回 | {_pct(report.snippet_recall)} | 期望原文片段出现在召回上下文中的比例 |",
         f"| 引用覆盖 | {_pct(report.citation_coverage)} | 作答样本中带引用的比例 |",
         f"| 拒答准确率 | {_pct(report.refusal_accuracy)} | 正负样本整体判对比例 |",
@@ -530,4 +701,12 @@ def format_markdown(
     return "\n".join(sections) + "\n"
 
 
-__all__ = ["MetricsReport", "compute", "format_markdown", "wilson_interval"]
+__all__ = [
+    "RANKING_K",
+    "MetricsReport",
+    "compute",
+    "dcg_at_k",
+    "format_markdown",
+    "ndcg_at_k",
+    "wilson_interval",
+]

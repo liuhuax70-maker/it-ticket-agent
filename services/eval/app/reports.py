@@ -47,6 +47,10 @@ def summarize(payload: dict[str, Any]) -> dict[str, Any]:
         "hit_at_k": l1.hit_at_k,
         "hit_at_k_ci95": list(l1.hit_at_k_ci95) if l1.hit_at_k_ci95 else None,
         "mrr": l1.mrr,
+        # 检索侧排序指标：与上面的 mrr（引用序）数据来源不同，缺了就看不出名次质量
+        "retrieval_mrr": l1.retrieval_mrr,
+        "ndcg_at_k": l1.ndcg_at_k,
+        "ranking_sample_count": l1.ranking_sample_count,
         "snippet_recall": l1.snippet_recall,
         "citation_coverage": l1.citation_coverage,
         "refusal_accuracy": l1.refusal_accuracy,
@@ -90,18 +94,14 @@ def write_report(
         "dataset": dataset_path,
         "summary": summarize(payload),
         "preflight": payload["preflight"],
-        "l2": {
-            "judge_model": (l2 or {}).get("judge_model"),
-            # 端点实际服务的模型名。与 judge_model 不一致时说明配置名被中转映射了——
-            # 记录它才能回答"分数变了是系统变差还是模型换了一个"。
-            "judge_served_model": (l2 or {}).get("judge_served_model"),
-            "judge_usage": (l2 or {}).get("judge_usage"),
-            "scored_count": (l2 or {}).get("scored_count"),
-            "metrics": (l2 or {}).get("metrics"),
-            # 逐样本分数：只知道"faithfulness 0.78"无法定位是谁拖低的
-            "per_sample": (l2 or {}).get("per_sample"),
-            "error": (l2 or {}).get("error"),
-        },
+        # l2 段**整体透传**，不再逐字段登记。
+        #
+        # 原来这里是显式白名单，而每一项都只是 ``(l2 or {}).get(...)`` 的纯透传——
+        # 白名单除了"静默丢掉新字段"没有任何作用。已经因此丢过一次：
+        # 新增的 ``per_sample_by_id``（带样本 id 的逐样本明细）在报告里消失了，
+        # 而指标代码与报告代码都跑得好好的，看起来一切正常。
+        # 与其在两处各记一次（``summarize`` 与这里），不如让 schema 跟着代码走。
+        "l2": dict(l2 or {}),
         "l1_detail": l1.model_dump(mode="json"),
         "samples": payload["rows"],
     }
