@@ -35,14 +35,6 @@ class Settings(BaseAppSettings):
     cache_ttl_seconds: int = 3600
     redis_url: str = "redis://localhost:6379/0"
 
-    # ---- 最大追问/兜底 ----
-    # 检索为空时直接拒答，不调用 LLM（省一次调用，也彻底堵死幻觉）。
-    # ⚠️ 当前是**死配置**：图边（graph/edges.py 的 after_retrieve）无条件转到 refuse
-    # 节点，没有任何地方读它。设 REFUSE_ON_EMPTY=false 期望恢复"检索为空也作答"
-    # 是无效的，且不会有任何提示——而这恰好是幻觉高发的配置。
-    # 要启用这个开关，必须先把它接到 edges.after_retrieve 上。
-    refuse_on_empty: bool = True
-
     # ---- 身份默认值（鉴权开启后由网关透传真实身份）----
     default_tenant_id: str = "default"
     default_department_id: str = "default"

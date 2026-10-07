@@ -18,8 +18,5 @@ class FeedbackClient:
     async def submit(self, req: FeedbackRequest) -> FeedbackResponse:
         return await self._client.post("/feedback", req, response_model=FeedbackResponse)
 
-    async def ping(self) -> bool:
-        return await self._client.ping()
-
     async def aclose(self) -> None:
         await self._client.aclose()

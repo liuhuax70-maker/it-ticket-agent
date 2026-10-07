@@ -267,10 +267,6 @@ class IngestRequest(BaseModel):
     title: str | None = None
     acl: ACL | None = None
     reindex: bool = False
-    # ⚠️ 保留字段但**当前没有任何读取点**（全仓无 req.sync 的使用）。
-    # 同步/异步由 ingestion 的 sink 实现决定（USE_KAFKA 开关，见 producers.ChunkSink），
-    # 不由请求参数决定。新代码不要依赖它；要控制同步/异步请用环境变量。
-    sync: bool = True
 
 
 class IngestResponse(BaseModel):

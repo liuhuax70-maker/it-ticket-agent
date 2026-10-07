@@ -38,12 +38,3 @@ class KeycloakClient:
                 return str(resp.json()["access_token"])
         except Exception as exc:  # noqa: BLE001
             raise UpstreamError("keycloak", f"获取服务账号令牌失败: {exc}") from exc
-
-    async def health(self) -> tuple[bool, str]:
-        url = f"{self._settings.issuer()}/.well-known/openid-configuration"
-        try:
-            async with httpx.AsyncClient(timeout=self._timeout) as client:
-                resp = await client.get(url)
-                return resp.status_code == 200, f"{url} -> {resp.status_code}"
-        except Exception as exc:  # noqa: BLE001
-            return False, str(exc)

@@ -6,10 +6,9 @@
 ⚠️ 覆盖范围（别把它当全面检查用）：
     * **没有探测 OPA 与 Keycloak**。这两个是鉴权依赖，而 OPA 不可用时网关的策略是
       fail-open（直接放行，见 ``middleware/identity.py``）——也就是鉴权依赖挂了，
-      监控这里却看不到任何信号。``KeycloakClient.health()`` 与
-      ``FeedbackClient.ping()`` 已实现却没有任何调用方（死代码）。
-      要纳入的话，建议单独加 ``authz_dependency`` 字段而不是并入 probes，
-      否则 OPA 抖动会把整个网关标成 degraded、掩盖真正的链路故障。
+      监控这里却看不到任何信号。这是**已知缺口**：要补的话建议单独加一个
+      ``authz_dependency`` 字段而不是并入 probes，否则 OPA 抖动会把整个网关标成
+      degraded、掩盖真正的链路故障。
     * 限流用的 Redis 也不在 probes 里（限流是 fail-open，挂了不影响主链路）。
 """
 
