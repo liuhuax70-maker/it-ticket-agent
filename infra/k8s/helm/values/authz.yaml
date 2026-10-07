@@ -1,0 +1,34 @@
+# authz：控制面服务（策略可视化 / 决策排障）。
+# 注意：**策略执行点在 api-gateway**，本服务不参与请求链路，
+# 因此它的可用性不影响问答——这也是它可以只部署 1 副本的原因。
+serviceDir: services/authz
+containerPort: 8008
+service:
+  type: ClusterIP
+  port: 8008
+replicaCount: 1
+env:
+  OPA_URL: "http://rag-opa:8181"
+  KEYCLOAK_URL: "http://rag-keycloak-keycloakx-http:8080"
+  KEYCLOAK_REALM: "rag"
+  AUTHZ_ENABLED: "true"
+  POLICIES_DIR: "/app/services/authz/policies"
+configMap:
+  enabled: true
+  mountPath: /app/services/authz/policies
+  files:
+    rag.rego: |
+      # 线上策略以 services/authz/policies/rag.rego 为准；
+      # 此处仅为示例，实际部署请用 CI 从仓库同步（或由 Terraform 注入策略 ConfigMap）。
+      package rag
+      default allow = false
+      allow { input.action == "chat" }
+resources:
+  requests:
+    cpu: 100m
+    memory: 256Mi
+  limits:
+    cpu: 500m
+    memory: 512Mi
+hpa:
+  enabled: false

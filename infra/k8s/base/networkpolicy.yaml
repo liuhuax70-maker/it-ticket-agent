@@ -1,0 +1,73 @@
+# 默认拒绝入站，再按需放行。
+# 这套策略的意义：数据面（Milvus/OpenSearch/Postgres）**不应**能从集群里任意 Pod 直达，
+# 只有 retrieval/indexing/ingestion 这些被授权的服务能访问，缩小横向移动面。
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: rag-default-deny-ingress
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+---
+# api-gateway 是唯一允许从 Ingress Controller 进入的服务
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: rag-allow-ingress-to-gateway
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: rag-service
+      app.kubernetes.io/instance: api-gateway
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: ingress-nginx
+      ports:
+        - protocol: TCP
+          port: 8000
+---
+# 命名空间内服务互访（编排层调用 retrieval/model-gateway 等）
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: rag-allow-internal
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/part-of: permission-aware-rag
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/part-of: permission-aware-rag
+---
+# 依赖组件：只接受本命名空间的业务 Pod
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: rag-allow-dependencies
+spec:
+  podSelector:
+    matchExpressions:
+      - key: app.kubernetes.io/instance
+        operator: In
+        values:
+          - rag-postgres
+          - rag-redis
+          - rag-milvus
+          - rag-opensearch
+          - rag-kafka
+          - rag-opa
+          - rag-keycloak
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector: {}

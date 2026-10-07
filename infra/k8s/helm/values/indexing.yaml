@@ -1,0 +1,32 @@
+# indexing：写路径，负载与接入量相关；CPU 密集（向量化）
+serviceDir: services/indexing
+containerPort: 8005
+service:
+  type: ClusterIP
+  port: 8005
+replicaCount: 2
+env:
+  MILVUS_URI: "http://rag-milvus:19530"
+  OPENSEARCH_URL: "http://rag-opensearch:9200"
+  EMBED_BACKEND: "fastembed"
+  EMBED_MODEL: "BAAI/bge-small-zh-v1.5"
+  EMBED_DIM: "512"
+  USE_KAFKA: "true"
+  KAFKA_BOOTSTRAP: "rag-kafka:9092"
+  KAFKA_TOPIC_CHUNK_EVENTS: "chunk-events"
+  KAFKA_CONSUMER_GROUP: "indexing"
+resources:
+  requests:
+    cpu: "1"
+    memory: 2Gi
+  limits:
+    cpu: "4"
+    memory: 4Gi
+probes:
+  initialDelaySeconds: 60
+  periodSeconds: 20
+hpa:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 12
+  targetCPUUtilizationPercentage: 75

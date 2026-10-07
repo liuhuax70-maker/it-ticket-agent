@@ -1,0 +1,36 @@
+# retrieval：**有状态依赖**（Milvus + OpenSearch），扩缩容受下游连接数约束
+serviceDir: services/retrieval
+containerPort: 8002
+service:
+  type: ClusterIP
+  port: 8002
+replicaCount: 2
+env:
+  MILVUS_URI: "http://rag-milvus:19530"
+  OPENSEARCH_URL: "http://rag-opensearch:9200"
+  EMBED_BACKEND: "fastembed"
+  EMBED_MODEL: "BAAI/bge-small-zh-v1.5"
+  EMBED_DIM: "512"
+  RETRIEVE_MODE: "hybrid"
+  TOP_K: "5"
+  VECTOR_TOP_K: "20"
+  BM25_TOP_K: "20"
+  RRF_K: "60"
+  RERANK_ENABLED: "false"
+resources:
+  requests:
+    cpu: 500m
+    memory: 1Gi
+  limits:
+    cpu: "2"
+    memory: 2Gi
+# 首次启动要下载/加载 embedding 模型，给足就绪时间（否则会被探针反复重启）
+probes:
+  path: /health
+  initialDelaySeconds: 60
+  periodSeconds: 20
+hpa:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 6
+  targetCPUUtilizationPercentage: 70

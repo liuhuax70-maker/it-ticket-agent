@@ -1,0 +1,26 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: rag-prod
+
+resources:
+  - ../../base
+
+# 生产 networkPolicy 收紧：只允许同命名空间内的调用（base 里已是默认拒绝）
+patches:
+  - target:
+      kind: NetworkPolicy
+      name: rag-default-deny-ingress
+    patch: |-
+      - op: replace
+        path: /spec/podSelector/matchLabels
+        value:
+          app.kubernetes.io/part-of: permission-aware-rag
+
+configMapGenerator:
+  - name: rag-shared-config
+    behavior: merge
+    literals:
+      - LOG_LEVEL=INFO
+      - AUTHZ_ENABLED=true
+      - CACHE_ENABLED=true

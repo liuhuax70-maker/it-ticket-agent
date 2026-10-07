@@ -1,0 +1,69 @@
+# 默认值仅作为「契约示例」；实际部署请叠加 helm/values/<service>.yaml
+# 用法：
+#   helm template api-gateway helm/rag-service -f helm/values/api-gateway.yaml
+#   helm upgrade --install api-gateway helm/rag-service -f helm/values/api-gateway.yaml -f overlays/dev/values.yaml
+
+nameOverride: ""
+
+image:
+  repository: ghcr.io/liuhuax70-maker/permission-aware-rag
+  tag: "0.1.0"
+  pullPolicy: IfNotPresent
+
+# 服务代码在镜像内的相对目录（apps/api-gateway 或 services/xxx）
+serviceDir: services/query-orchestrator
+
+replicaCount: 1
+
+service:
+  type: ClusterIP
+  port: 8001
+
+# 进程内监听端口（容器内 uvicorn 的 --port）
+containerPort: 8001
+
+probes:
+  path: /health
+  initialDelaySeconds: 10
+  periodSeconds: 15
+
+# 直接注入的环境变量（非敏感）；敏感项请用 existingSecret
+env: {}
+existingSecret: ""
+
+resources:
+  requests:
+    cpu: 200m
+    memory: 512Mi
+  limits:
+    cpu: "1"
+    memory: 1Gi
+
+hpa:
+  enabled: false
+  minReplicas: 2
+  maxReplicas: 6
+  targetCPUUtilizationPercentage: 70
+
+ingress:
+  enabled: false
+  className: nginx
+  host: ""
+  path: /
+  annotations: {}
+
+serviceAccount:
+  create: true
+  name: ""
+  annotations: {}
+
+configMap:
+  enabled: false
+  # 挂载为文件（如 configs/ 下的配置）
+  mountPath: /app/configs
+  files: {}
+
+podAnnotations: {}
+nodeSelector: {}
+tolerations: []
+affinity: {}

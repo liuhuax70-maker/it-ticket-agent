@@ -1,0 +1,22 @@
+# 该 overlay 只用于「集群级共享资源」的环境差异化；
+# 业务服务的工作负载由 Helm chart（infra/k8s/helm/rag-service）渲染，
+# 环境差异通过 overlays/<env>/values.yaml 注入。
+#
+# 职责划分（避免同一资源有两个 owner）：
+#   * Helm        -> Deployment / Service / HPA / Ingress（按服务）
+#   * Kustomize   -> ConfigMap / NetworkPolicy / PDB 等集群级共享资源（按环境）
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: rag-dev
+
+resources:
+  - ../../base
+
+configMapGenerator:
+  - name: rag-shared-config
+    behavior: merge
+    literals:
+      - LOG_LEVEL=DEBUG
+      - AUTHZ_ENABLED=false
+      - CACHE_ENABLED=false

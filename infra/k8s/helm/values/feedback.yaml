@@ -1,0 +1,26 @@
+# feedback：反馈写入与坏例导出
+serviceDir: services/feedback
+containerPort: 8007
+service:
+  type: ClusterIP
+  port: 8007
+replicaCount: 2
+env:
+  DATABASE_URL: "postgresql+asyncpg://rag:rag@rag-postgres-postgresql:5432/rag"
+  USE_KAFKA: "true"
+  KAFKA_BOOTSTRAP: "rag-kafka:9092"
+  KAFKA_TOPIC_FEEDBACK: "feedback-events"
+  KAFKA_CONSUMER_GROUP: "feedback"
+  BAD_CASE_DIR: "/app/eval_data/bad_cases"
+resources:
+  requests:
+    cpu: 200m
+    memory: 256Mi
+  limits:
+    cpu: "1"
+    memory: 512Mi
+hpa:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 4
+  targetCPUUtilizationPercentage: 70

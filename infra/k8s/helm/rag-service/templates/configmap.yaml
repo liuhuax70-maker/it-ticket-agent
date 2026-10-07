@@ -1,0 +1,13 @@
+{{- if .Values.configMap.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "rag-service.fullname" . }}-config
+  labels:
+    {{- include "rag-service.labels" . | nindent 4 }}
+data:
+  {{- range $name, $content := .Values.configMap.files }}
+  {{ $name }}: |-
+    {{- $content | nindent 4 }}
+  {{- end }}
+{{- end }}

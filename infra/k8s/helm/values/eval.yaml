@@ -1,0 +1,30 @@
+# eval：跑批服务，无常驻流量；用 Job/CronJob 触发更合适，
+# 这里保留 Deployment 以便随时手工触发一次评测。
+serviceDir: services/eval
+containerPort: 8006
+service:
+  type: ClusterIP
+  port: 8006
+replicaCount: 1
+env:
+  API_GATEWAY_URL: "http://api-gateway-rag-service:8000"
+  DATASET_PATH: "/app/eval_data/golden.jsonl"
+  REPORTS_DIR: "/app/eval_data/reports"
+  LLM_PROVIDER: "deepseek"
+  METRICS: "faithfulness,context_precision,context_recall"
+existingSecret: rag-api-secrets
+configMap:
+  enabled: true
+  mountPath: /app/eval_data
+  files:
+    golden.jsonl: |
+      {"question": "入职体检费用怎么报销？", "reference": "转正后凭发票报销，上限五百元。", "tags": ["hr"]}
+resources:
+  requests:
+    cpu: 200m
+    memory: 1Gi
+  limits:
+    cpu: "1"
+    memory: 2Gi
+hpa:
+  enabled: false

@@ -1,0 +1,28 @@
+# query-orchestrator：无状态，可水平扩展；图状态全部在请求内，无需共享存储
+serviceDir: services/query-orchestrator
+containerPort: 8001
+service:
+  type: ClusterIP
+  port: 8001
+replicaCount: 2
+env:
+  RETRIEVAL_URL: "http://retrieval-rag-service:8002"
+  MODEL_GATEWAY_URL: "http://model-gateway-rag-service:8003"
+  REDIS_URL: "redis://rag-redis-master:6379/0"
+  CACHE_ENABLED: "true"
+  REWRITE_ENABLED: "false"
+  RERANK_ENABLED: "false"
+  LANGFUSE_HOST: "http://langfuse:3000"
+existingSecret: rag-api-secrets
+resources:
+  requests:
+    cpu: 500m
+    memory: 1Gi
+  limits:
+    cpu: "2"
+    memory: 2Gi
+hpa:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 70

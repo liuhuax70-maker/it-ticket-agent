@@ -59,6 +59,26 @@ test: ## 运行全部测试（按服务分进程）
 test-packages: ## 只跑共享库测试
 	$(PY) -m pytest packages/tests -q
 
+# ---------------------------------------------------------------- 容器与集群
+
+image: ## 构建统一服务镜像
+	docker build -f infra/docker/Dockerfile -t rag:$(shell git rev-parse --short HEAD) .
+
+helm-template: ## 本地渲染 k8s 清单（不连集群）
+	helm template api-gateway infra/k8s/helm/rag-service -f infra/k8s/helm/values/api-gateway.yaml
+
+k8s-base: ## 渲染集群级共享资源
+	kubectl kustomize infra/k8s/base
+
+tf-fmt: ## 格式化 terraform
+	terraform -chdir=infra/terraform fmt -recursive
+
+tf-validate: ## 校验 terraform
+	terraform -chdir=infra/terraform init -backend=false && terraform -chdir=infra/terraform validate
+
+tf-plan-dev: ## dev 环境 plan
+	terraform -chdir=infra/terraform/envs/dev init && terraform -chdir=infra/terraform/envs/dev plan
+
 lint: ## 静态检查
 	ruff check .
 

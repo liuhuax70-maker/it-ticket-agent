@@ -1,0 +1,16 @@
+# prod 环境叠加值：容量与副本以服务自身 values 为准，这里只做环境级开关。
+image:
+  tag: "0.1.0"
+resources:
+  requests:
+    cpu: 500m
+    memory: 1Gi
+  limits:
+    cpu: "2"
+    memory: 2Gi
+env:
+  LOG_LEVEL: "INFO"
+  AUTHZ_ENABLED: "true"
+  CACHE_ENABLED: "true"
+# 生产不允许出现 latest；tag 由 CI 写入不可变版本号
+imagePullPolicy: IfNotPresent

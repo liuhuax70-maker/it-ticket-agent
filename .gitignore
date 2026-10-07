@@ -33,6 +33,7 @@ eval_data/bad_cases/
 volumes/
 logs/
 *.log
+.docker-up.log
 
 # ---------- 模型缓存 ----------
 .cache/

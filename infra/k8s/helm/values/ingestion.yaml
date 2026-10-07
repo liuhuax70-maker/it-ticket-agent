@@ -1,0 +1,37 @@
+# ingestion：解析 + 切分 + 元数据落库；大文件解析吃内存
+serviceDir: services/ingestion
+containerPort: 8004
+service:
+  type: ClusterIP
+  port: 8004
+replicaCount: 2
+env:
+  DATABASE_URL: "postgresql+asyncpg://rag:rag@rag-postgres-postgresql:5432/rag"
+  INDEXING_URL: "http://indexing-rag-service:8005"
+  USE_KAFKA: "true"
+  KAFKA_BOOTSTRAP: "rag-kafka:9092"
+  KAFKA_TOPIC_CHUNK_EVENTS: "chunk-events"
+  KAFKA_CONSUMER_GROUP: "ingestion"
+  CHUNK_SIZE: "500"
+  CHUNK_OVERLAP: "80"
+  MAX_FILE_SIZE_MB: "32"
+existingSecret: rag-api-secrets
+resources:
+  requests:
+    cpu: 500m
+    memory: 1Gi
+  limits:
+    cpu: "2"
+    memory: 3Gi
+ingress:
+  enabled: true
+  className: nginx
+  host: rag.example.com
+  path: /documents
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-body-size: 64m
+hpa:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 6
+  targetCPUUtilizationPercentage: 70

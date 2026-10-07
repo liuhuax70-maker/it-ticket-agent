@@ -1,0 +1,18 @@
+# staging 环境叠加值：与 prod 同构（保留 HPA/Ingress 与鉴权），只降容量。
+# 与 prod 结构一致才具备「变更预演」的意义。
+image:
+  tag: "0.1.0"
+replicaCount: 1
+hpa:
+  enabled: true
+  minReplicas: 1
+  maxReplicas: 3
+  targetCPUUtilizationPercentage: 75
+ingress:
+  enabled: true
+  className: nginx
+  host: rag-staging.example.com
+  path: /
+env:
+  LOG_LEVEL: "INFO"
+  AUTHZ_ENABLED: "true"

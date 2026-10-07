@@ -1,0 +1,14 @@
+apiVersion: v2
+name: rag-service
+description: |
+  permission-aware-rag 的**通用工作负载模板**。
+
+  为什么用一个通用 chart 而不是每个服务一套 chart：9 个服务的 Deployment/Service
+  结构完全一致，差异只在镜像参数、端口、环境变量与副本数——这些全部由
+  helm/values/<service>.yaml 提供。复制 9 份 chart 只会让「改一处探针」变成改 9 个文件。
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+keywords:
+  - rag
+  - fastapi

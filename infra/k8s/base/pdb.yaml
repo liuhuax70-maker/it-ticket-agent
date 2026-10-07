@@ -1,0 +1,22 @@
+# PodDisruptionBudget：节点维护/滚动更新时，保证关键路径仍有可用副本。
+# 只给「入口 + 编排」加 PDB——它们中断会直接导致问答不可用；
+# 无状态写路径（indexing/ingestion）短暂中断只是延迟入库，可以接受。
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: api-gateway-pdb
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/instance: api-gateway
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: query-orchestrator-pdb
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/instance: query-orchestrator

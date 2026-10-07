@@ -1,0 +1,20 @@
+# dev 环境叠加值：单副本、关 HPA/Ingress、放宽资源、打开调试日志
+image:
+  tag: "0.1.0"
+replicaCount: 1
+hpa:
+  enabled: false
+ingress:
+  enabled: false
+resources:
+  requests:
+    cpu: 100m
+    memory: 256Mi
+  limits:
+    cpu: 500m
+    memory: 512Mi
+env:
+  LOG_LEVEL: "DEBUG"
+  AUTHZ_ENABLED: "false"
+  RERANK_ENABLED: "false"
+  CACHE_ENABLED: "false"

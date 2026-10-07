@@ -1,0 +1,28 @@
+# 集群级共享配置：只放**非敏感**的公共默认值。
+# 敏感项（DEEPSEEK_API_KEY、DATABASE_URL 口令、Keycloak secret）走 Secret，
+# 由 CI 从密钥管理系统注入，绝不写入本文件。
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: rag-shared-config
+data:
+  # 依赖组件地址（集群内 DNS；与 terraform outputs.service_endpoints 一致）
+  POSTGRES_HOST: "rag-postgres-postgresql"
+  POSTGRES_PORT: "5432"
+  REDIS_HOST: "rag-redis-master"
+  REDIS_PORT: "6379"
+  MILVUS_URI: "http://rag-milvus:19530"
+  OPENSEARCH_URL: "http://rag-opensearch:9200"
+  KAFKA_BOOTSTRAP: "rag-kafka:9092"
+  OPA_URL: "http://rag-opa:8181"
+  KEYCLOAK_URL: "http://rag-keycloak-keycloakx-http:8080"
+  KEYCLOAK_REALM: "rag"
+  # 检索与切分默认值（与 configs/retrievers 保持一致）
+  RETRIEVE_MODE: "hybrid"
+  TOP_K: "5"
+  RRF_K: "60"
+  CHUNK_SIZE: "500"
+  CHUNK_OVERLAP: "80"
+  # 通道与观测
+  USE_KAFKA: "true"
+  LANGFUSE_HOST: "http://langfuse:3000"

@@ -1,0 +1,15 @@
+# 集群级共享资源（不含业务工作负载——那些由 Helm 管理，见 helm/rag-service）。
+# namespace 由 Terraform 创建（infra/terraform/modules/k8s），此处只声明归属，
+# 保证同一资源只有一个 owner。
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: rag
+
+resources:
+  - configmap.yaml
+  - networkpolicy.yaml
+  - pdb.yaml
+
+commonLabels:
+  app.kubernetes.io/part-of: permission-aware-rag

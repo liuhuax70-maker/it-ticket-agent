@@ -1,0 +1,42 @@
+# api-gateway：唯一对外入口，需要 Ingress 与 HPA
+serviceDir: apps/api-gateway
+containerPort: 8000
+service:
+  type: ClusterIP
+  port: 8000
+replicaCount: 2
+env:
+  AUTHZ_ENABLED: "true"
+  KEYCLOAK_URL: "http://rag-keycloak-keycloakx-http:8080"
+  KEYCLOAK_REALM: "rag"
+  KEYCLOAK_CLIENT_ID: "rag-api"
+  OPA_URL: "http://rag-opa:8181"
+  QUERY_ORCHESTRATOR_URL: "http://api-gateway-query-orchestrator-rag-service:8001"
+  INGESTION_URL: "http://ingestion-rag-service:8004"
+  MODEL_GATEWAY_URL: "http://model-gateway-rag-service:8003"
+  FEEDBACK_URL: "http://feedback-rag-service:8007"
+  REDIS_URL: "redis://rag-redis-master:6379/0"
+  RATE_LIMIT_ENABLED: "true"
+  RATE_LIMIT_PER_MINUTE: "120"
+  LANGFUSE_HOST: "http://langfuse:3000"
+existingSecret: rag-api-secrets
+resources:
+  requests:
+    cpu: 300m
+    memory: 512Mi
+  limits:
+    cpu: "2"
+    memory: 1Gi
+hpa:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 8
+  targetCPUUtilizationPercentage: 65
+ingress:
+  enabled: true
+  className: nginx
+  host: rag.example.com
+  path: /
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-body-size: 32m
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "300"

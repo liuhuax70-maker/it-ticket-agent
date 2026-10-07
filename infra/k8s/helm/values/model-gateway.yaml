@@ -1,0 +1,31 @@
+# model-gateway：模型调用出口；密钥走 Secret，不落 ConfigMap
+serviceDir: services/model-gateway
+containerPort: 8003
+service:
+  type: ClusterIP
+  port: 8003
+replicaCount: 2
+env:
+  LLM_PROVIDER: "deepseek"
+  DEEPSEEK_MODEL: "deepseek-chat"
+  LLM_TEMPERATURE: "0.2"
+  LLM_MAX_TOKENS: "1024"
+  LLM_TIMEOUT: "60"
+  LLM_FALLBACK_MODELS: "local"
+  EMBED_BACKEND: "fastembed"
+  REDIS_URL: "redis://rag-redis-master:6379/0"
+  QUOTA_ENABLED: "true"
+  QUOTA_DAILY_TOKENS: "2000000"
+existingSecret: rag-api-secrets
+resources:
+  requests:
+    cpu: 300m
+    memory: 512Mi
+  limits:
+    cpu: "1"
+    memory: 1Gi
+hpa:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 6
+  targetCPUUtilizationPercentage: 70
