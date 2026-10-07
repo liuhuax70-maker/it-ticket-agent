@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import os
 import sys
 from pathlib import Path
 
@@ -48,6 +49,39 @@ NEGATIVE_QUERIES = [
 ]
 
 ACL = {"tenant_id": "default", "department_id": "default", "visibility": "internal"}
+
+# 鉴权开启（AUTHZ_ENABLED=true）后，/chat 需要真实令牌。
+# 这里默认用 carol（default 租户、rag_writer），它能看到公共语料；
+# 关掉鉴权时取不到令牌也不影响 V1~V3。
+KEYCLOAK_URL = os.getenv("RAG_KEYCLOAK_URL", "http://localhost:8180")
+VERIFY_USER = os.getenv("RAG_VERIFY_USER", "carol")
+VERIFY_PASSWORD = os.getenv("RAG_VERIFY_PASSWORD", "carol")
+_headers: dict[str, str] = {}
+
+
+def auth_headers() -> dict[str, str]:
+    """惰性获取一次令牌；失败则返回空（等价于鉴权未开启）。"""
+    if _headers:
+        return _headers
+    try:
+        resp = httpx.post(
+            f"{KEYCLOAK_URL}/realms/rag/protocol/openid-connect/token",
+            data={
+                "grant_type": "password",
+                "client_id": "rag-api",
+                "client_secret": "rag-api-dev-secret",
+                "username": VERIFY_USER,
+                "password": VERIFY_PASSWORD,
+                "scope": "openid",
+            },
+            timeout=10.0,
+        )
+        resp.raise_for_status()
+        _headers["Authorization"] = f"Bearer {resp.json()['access_token']}"
+        print(f"  [INFO] 已获取 {VERIFY_USER} 的访问令牌（鉴权开启）")
+    except Exception as exc:  # noqa: BLE001
+        print(f"  [INFO] 未获取令牌，按鉴权关闭处理（{exc.__class__.__name__}）")
+    return _headers
 
 _failures: list[str] = []
 _warnings: list[str] = []
@@ -194,7 +228,12 @@ async def check_retrieval_locate(client: httpx.AsyncClient) -> None:
 
 
 async def chat(client: httpx.AsyncClient, query: str) -> dict:
-    resp = await client.post(f"{SERVICES['api-gateway']}/chat", json={"query": query}, timeout=300.0)
+    resp = await client.post(
+        f"{SERVICES['api-gateway']}/chat",
+        json={"query": query},
+        headers=auth_headers(),
+        timeout=300.0,
+    )
     if resp.status_code >= 400:
         raise RuntimeError(f"HTTP {resp.status_code}: {resp.text[:300]}")
     return resp.json()

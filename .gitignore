@@ -28,6 +28,7 @@ htmlcov/
 data/index/
 data/uploads/
 data/manifest.json
+data/*.lock
 eval_data/reports/
 eval_data/bad_cases/
 volumes/

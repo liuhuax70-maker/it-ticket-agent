@@ -153,6 +153,37 @@ python scripts/verify_loop.py --skip-chat   # 只验服务健康、接入幂等�
 | V4 | 正样本返回非空答案 + 非空 `citations`，且引用区间与原文一致 |
 | V5 | 负样本（文档里没有的问题）走拒答，`refused=true` 且 `citations=[]` |
 
+### 2.7 权限闭环验收（S7，本项目的主线）
+
+V1~V5 只证明「链路能跑」，且是在**单租户单部门**下跑的。要证明「权限感知」，必须用
+**真实身份**跑一遍隔离矩阵：
+
+```bash
+docker compose --profile authz up -d            # Keycloak + OPA
+python scripts/verify_permissions.py            # 清理历史产物 -> 上传权限语料 -> 跑矩阵
+python scripts/verify_permissions.py --skip-prepare   # 沿用现有语料，不改动知识库
+```
+
+判据（全部用 doc_id 集合断言，不依赖模型措辞）：
+
+| 判据 | 内容 |
+| --- | --- |
+| P0 | 探针 `/health` 免鉴权可用；无令牌/伪造令牌访问 `/chat` 得 401；令牌声明被正确解析 |
+| P1 | 按真实身份上传的文档，其 `tenant/department/visibility` **落库值与身份一致** |
+| P2 | 4 个查询 × 5 个身份：每次回答的 `citations` 必须**完全落在该身份的可见集合内**；专属文档只有有权身份能命中 |
+| P3 | **存储层过滤硬证据**：以 engineering 身份检索 HR 文档原句 → 结果 0 条 HR；同句以 hr 身份 → 命中（对照组成立） |
+| P4 | OPA 生效：无写角色写入返回 403，有写角色放行；其他租户看不到 default 租户任何文档 |
+
+语料与身份（`data/corpus_permissions/` + realm 内置账号）：
+
+| 账号 | 租户 / 部门 | 角色 | 语料 |
+| --- | --- | --- | --- |
+| alice | default / hr | rag_user | 可见 hr_policy + 公共手册 |
+| carol | default / hr | rag_user + **rag_writer** | 额外可见自己的 private 笔记 |
+| bob | default / engineering | rag_user | 可见 eng_runbook + 公共手册 |
+| erin | default / engineering | rag_user + **rag_writer** | 同 bob |
+| dave | **tenant-b** / hr | rag_user | 租户隔离，一份都看不到 |
+
 ---
 
 ## 3. 目录结构
@@ -187,6 +218,9 @@ data/corpus/    演示语料
 5. **最小闭环先同步直连、Kafka 留接口**：`ChunkSink` 抽象让 ingestion→indexing 在「HTTP 直连 / Kafka 事件」之间切换时不用改业务代码。详见 `docs/adr/0001`。
 6. **可选能力默认关闭且显式可观测**：改写、重排、语义缓存默认关闭；关闭时是**显式的透传**（响应里如实返回 `reranker=rrf`），而不是假装做过。
 7. **幂等优先**：`doc_id` 由 `source` 稳定派生（统一 posix 分隔符），Milvus 用 `chunk_id` 作主键、OpenSearch 用 `chunk_id` 作 `_id`，重跑索引不产生重复。
+8. **权限数据的失败必须大声**：`tenant/department/owner` 只能由网关从身份注入，客户端不得指定；
+   `visibility=private` 缺 `owner` 直接 422，不做默认值兜底——权限字段的错误不会抛异常，
+   只会"悄悄搜不到"或"悄悄越权"，是唯一必须靠端到端验收兜住的类别。详见 `docs/adr/0004`。
 
 ---
 
@@ -222,6 +256,8 @@ terraform -chdir=infra/terraform/envs/dev init && terraform -chdir=infra/terrafo
 | Keycloak / OPA | 代码与策略就绪，默认 `AUTHZ_ENABLED=false` 走固定身份 | 打开开关即启用，无需改代码 |
 | Kafka | 仅占位（拓扑与接口已定），默认同步直连 | `USE_KAFKA=true` 切异步 |
 | Langfuse | 未配置密钥时静默降级为 no-op | 配置 `LANGFUSE_*` 即开始上报 |
+| 鉴权与授权 | 已接入 Keycloak（JWT + JWKS，验签失败自动刷新）与 OPA（默认拒绝白名单），端到端验收通过 | 字段级/文档级授权、令牌静默刷新、生产用 HTTPS + PKCE 回调域名 |
+| 角色白名单可见性 | `allowed_roles` 已入契约但未参与过滤 | 补存储层 schema/expr 与两个入口的字段传递 |
 | 语义缓存 | 当前为精确匹配 | 建立 eval set 后升级为 embedding 相似度匹配 |
 | Reranker | 默认关闭（透传） | 有 eval set 后再开，否则无法归因 |
 | 中文分词 | OpenSearch 用 `standard` 分析器 | 换带 IK 插件的镜像并重建索引 |

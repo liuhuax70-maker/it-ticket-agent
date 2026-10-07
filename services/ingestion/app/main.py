@@ -12,7 +12,7 @@ from app.config import Settings
 from app.consumers import consume_raw_documents
 from app.service import IngestionService
 from packages.common.constants import VERSION
-from packages.common.errors import NotFoundError, install_exception_handlers
+from packages.common.errors import NotFoundError, ValidationError, install_exception_handlers
 from packages.common.logging import get_logger, setup_logging
 from packages.common.settings import load_settings
 from packages.contracts import ACL, HealthResponse, IngestRequest, IngestResponse, Visibility
@@ -66,15 +66,24 @@ async def ingest_upload(
     tenant_id: Annotated[str, Form()] = "",
     department_id: Annotated[str, Form()] = "",
     visibility: Annotated[str, Form()] = "internal",
+    owner: Annotated[str, Form()] = "",
     reindex: Annotated[bool, Form()] = False,
 ) -> IngestResponse:
     data = await file.read()
     if not data:
         raise HTTPException(status_code=422, detail="上传文件为空")
+
+    acl_visibility = Visibility(visibility)
+    # 显式失败而不是静默降级：private 但没有 owner，落库后**任何人都检索不到**，
+    # 这种"看起来成功实际不可用"的状态比直接报错危险得多。
+    if acl_visibility is Visibility.private and not owner:
+        raise ValidationError("visibility=private 时必须提供 owner（由 api-gateway 注入调用方身份）")
+
     acl = ACL(
         tenant_id=tenant_id or settings.default_tenant_id,
         department_id=department_id or settings.default_department_id,
-        visibility=Visibility(visibility),
+        visibility=acl_visibility,
+        owner=owner or None,
     )
     return await _service().ingest_bytes(file.filename or "upload.bin", data, acl=acl, reindex=reindex)
 

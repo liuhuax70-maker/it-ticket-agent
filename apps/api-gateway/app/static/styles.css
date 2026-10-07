@@ -176,6 +176,24 @@ button { font: inherit; color: inherit; cursor: pointer; }
 
 .foot-note { padding: 6px 10px 0; font-size: 11.5px; line-height: 1.5; color: var(--faint); }
 
+.auth-row {
+  display: flex; align-items: center; gap: 8px;
+  padding: 0 2px 4px;
+}
+.auth-user {
+  flex: 1; min-width: 0;
+  font-size: 12.5px; color: var(--muted);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.auth-btn {
+  width: auto;
+  padding: 6px 12px;
+  border: 1px solid var(--border-strong);
+  font-size: 12.5px;
+  flex: 0 0 auto;
+}
+.auth-btn:hover { border-color: var(--accent); color: var(--accent); background: transparent; }
+
 /* ---------------- 顶栏 ---------------- */
 
 .topbar {

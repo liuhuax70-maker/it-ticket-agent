@@ -26,6 +26,8 @@ class IngestionClient:
                 "tenant_id": acl.tenant_id,
                 "department_id": acl.department_id,
                 "visibility": acl.visibility.value,
+                # owner 必须带上：漏了它会让 private 可见性静默退化为「谁都不看不到」
+                "owner": acl.owner or "",
                 "reindex": str(reindex).lower(),
             },
             response_model=IngestResponse,

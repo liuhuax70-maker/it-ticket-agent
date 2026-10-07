@@ -177,6 +177,10 @@ services:
       KC_BOOTSTRAP_ADMIN_PASSWORD: admin
       KC_HEALTH_ENABLED: "true"
       KC_HTTP_PORT: "8180"
+      # 固定规范 issuer：否则 Keycloak 按「请求主机」签发 iss，
+      # 用 127.0.0.1 取令牌、服务端按 localhost 校验就会 Invalid issuer。
+      KC_HOSTNAME: http://localhost:8180
+      KC_HOSTNAME_STRICT: "false"
     volumes:
       - ./infra/docker/keycloak/realm-rag.json:/opt/keycloak/data/import/realm-rag.json:ro
     ports:

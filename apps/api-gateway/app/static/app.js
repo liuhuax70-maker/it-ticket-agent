@@ -20,6 +20,182 @@
     { q: '公司年会在哪家酒店举办？', tip: '文档中不存在，应拒答' }
   ];
 
+  // ---------------- 身份（OIDC 授权码 + PKCE） ----------------
+  //
+  // 走标准浏览器侧流程：不接触 client_secret，令牌只存在 sessionStorage。
+  // 关闭鉴权（AUTHZ_ENABLED=false）时后端不校验令牌，这里静默降级为"未登录也可用"。
+
+  var AUTH = {
+    issuer: 'http://localhost:8180/realms/rag',
+    clientId: 'rag-ui',
+    redirectUri: window.location.origin + '/ui/',
+    tokenKey: 'par.token',
+    verifierKey: 'par.pkce_verifier',
+    stateKey: 'par.oauth_state'
+  };
+
+  function b64url(bytes) {
+    var binary = '';
+    new Uint8Array(bytes).forEach(function (b) { binary += String.fromCharCode(b); });
+    return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  }
+
+  function randomString(length) {
+    var bytes = new Uint8Array(length);
+    crypto.getRandomValues(bytes);
+    return b64url(bytes).slice(0, length);
+  }
+
+  function storedToken() {
+    try {
+      var raw = sessionStorage.getItem(AUTH.tokenKey);
+      if (!raw) return null;
+      var parsed = JSON.parse(raw);
+      if (parsed.expires_at && Date.now() > parsed.expires_at) {
+        sessionStorage.removeItem(AUTH.tokenKey);
+        return null;
+      }
+      return parsed.access_token || null;
+    } catch (err) {
+      return null;
+    }
+  }
+
+  function storeToken(payload) {
+    payload.expires_at = Date.now() + Math.max(0, (payload.expires_in || 300) - 30) * 1000;
+    try {
+      sessionStorage.setItem(AUTH.tokenKey, JSON.stringify(payload));
+    } catch (err) {
+      console.error('[auth] 无法保存令牌', err);
+    }
+  }
+
+  function clearToken() {
+    try { sessionStorage.removeItem(AUTH.tokenKey); } catch (err) { /* 忽略 */ }
+  }
+
+  function claimsOf(accessToken) {
+    try {
+      var part = accessToken.split('.')[1];
+      part += '='.repeat((-part.length % 4 + 4) % 4);
+      return JSON.parse(atob(part.replace(/-/g, '+').replace(/_/g, '/')));
+    } catch (err) {
+      return {};
+    }
+  }
+
+  function signIn() {
+    crypto.subtle.digest('SHA-256', new TextEncoder().encode(randomString(64)))
+      .then(function (digest) {
+        var verifier = randomString(64);
+        return crypto.subtle.digest('SHA-256', new TextEncoder().encode(verifier)).then(function (d) {
+          try {
+            sessionStorage.setItem(AUTH.verifierKey, verifier);
+            sessionStorage.setItem(AUTH.stateKey, randomString(16));
+          } catch (err) { /* 忽略 */ }
+          var params = new URLSearchParams({
+            response_type: 'code',
+            client_id: AUTH.clientId,
+            redirect_uri: AUTH.redirectUri,
+            scope: 'openid profile',
+            code_challenge: b64url(d),
+            code_challenge_method: 'S256',
+            state: sessionStorage.getItem(AUTH.stateKey) || ''
+          });
+          void digest;
+          window.location.href = AUTH.issuer + '/protocol/openid-connect/auth?' + params.toString();
+        });
+      })
+      .catch(function (err) {
+        toast('浏览器不支持 PKCE，无法登录：' + err.message, 'fail');
+      });
+  }
+
+  function signOut() {
+    clearToken();
+    renderAuthState();
+    toast('已退出登录', 'ok');
+    refreshKbCount();
+  }
+
+  function completeSignIn() {
+    var params = new URLSearchParams(window.location.search);
+    var code = params.get('code');
+    if (!code) return Promise.resolve();
+    var state = params.get('state');
+    var expected = sessionStorage.getItem(AUTH.stateKey);
+    if (expected && state !== expected) {
+      toast('登录回调 state 不匹配，已忽略', 'fail');
+      window.history.replaceState({}, '', AUTH.redirectUri);
+      return Promise.resolve();
+    }
+    var verifier = sessionStorage.getItem(AUTH.verifierKey) || '';
+    var body = new URLSearchParams({
+      grant_type: 'authorization_code',
+      client_id: AUTH.clientId,
+      code: code,
+      redirect_uri: AUTH.redirectUri,
+      code_verifier: verifier
+    });
+    return fetch(AUTH.issuer + '/protocol/openid-connect/token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: body.toString()
+    })
+      .then(function (resp) {
+        return resp.json().then(function (data) {
+          if (!resp.ok) {
+            // 令牌交换失败要能在控制台看到原始响应，否则只能靠猜
+            console.error('[auth] token exchange failed', resp.status, data);
+            throw new Error(data.error_description || data.error || ('HTTP ' + resp.status));
+          }
+          storeToken(data);
+        });
+      })
+      .catch(function (err) {
+        console.error('[auth] sign-in failed', err);
+        toast('登录失败：' + ((err && err.message) || err), 'fail');
+      })
+      .then(function () {
+        window.history.replaceState({}, '', AUTH.redirectUri);
+      });
+  }
+
+  function authFetch(url, options) {
+    var opts = options || {};
+    var token = storedToken();
+    if (token) {
+      opts.headers = Object.assign({}, opts.headers, { Authorization: 'Bearer ' + token });
+    }
+    return fetch(url, opts).then(function (resp) {
+      // 只在「这个失败请求用的就是当前令牌」时清空。
+      // 否则会出现：登录回调刚把新令牌写进去，而早于登录发出的请求（如 /admin/models）
+      // 的 401 姗姗来迟，把刚到手的令牌又清掉——表现为"登录成功却立刻变成未登录"。
+      if (resp.status === 401 && token && storedToken() === token) {
+        clearToken();
+        renderAuthState();
+      }
+      return resp;
+    });
+  }
+
+  function renderAuthState() {
+    var token = storedToken();
+    var label = $('authLabel');
+    var button = $('authBtn');
+    if (!token) {
+      label.textContent = '未登录';
+      button.textContent = '登录';
+      button.dataset.action = 'login';
+      return;
+    }
+    var claims = claimsOf(token);
+    var name = claims.preferred_username || claims.name || claims.sub || '已登录';
+    label.textContent = name + ' · ' + (claims.department_id || '-');
+    button.textContent = '退出';
+    button.dataset.action = 'logout';
+  }
+
   // ---------------- 工具 ----------------
 
   function $(id) { return document.getElementById(id); }
@@ -505,7 +681,7 @@
 
     abortController = new AbortController();
 
-    fetch('/chat', {
+    authFetch('/chat', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ query: query }),
@@ -743,7 +919,7 @@
     form.append('file', file, file.name);
     form.append('visibility', opts.visibility);
     form.append('reindex', opts.reindex ? 'true' : 'false');
-    return fetch('/documents/upload', { method: 'POST', body: form }).then(function (resp) {
+    return authFetch('/documents/upload', { method: 'POST', body: form }).then(function (resp) {
       return resp.json().then(function (data) {
         if (!resp.ok) throw new Error(data.message || data.detail || ('HTTP ' + resp.status));
         return data;
@@ -801,7 +977,7 @@
     btn.textContent = '导入中…';
     $('uploadSummary').textContent = '正在解析并入索引，目录较大时需要等待…';
 
-    fetch('/documents/ingest', {
+    authFetch('/documents/ingest', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -839,7 +1015,7 @@
     var keyword = $('kbSearch').value.trim();
     list.innerHTML = '<div class="kb-empty">加载中…</div>';
 
-    return fetch('/documents?limit=100' + (keyword ? '&keyword=' + encodeURIComponent(keyword) : ''))
+    return authFetch('/documents?limit=100' + (keyword ? '&keyword=' + encodeURIComponent(keyword) : ''))
       .then(function (resp) {
         return resp.json().then(function (data) {
           if (!resp.ok) throw new Error(data.message || data.detail || ('HTTP ' + resp.status));
@@ -899,7 +1075,7 @@
     }
     btn.disabled = true;
     btn.textContent = '重建中…';
-    fetch('/documents/ingest', {
+    authFetch('/documents/ingest', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ path: doc.source, reindex: true })
@@ -925,7 +1101,7 @@
 
   function deleteDoc(doc) {
     if (!window.confirm('确定从知识库删除「' + (doc.title || doc.doc_id) + '」？\n将同时清除向量索引、全文索引与元数据。')) return;
-    fetch('/documents/' + encodeURIComponent(doc.doc_id), { method: 'DELETE' })
+    authFetch('/documents/' + encodeURIComponent(doc.doc_id), { method: 'DELETE' })
       .then(function (resp) {
         if (!resp.ok) {
           return resp.json().then(function (data) {
@@ -945,7 +1121,7 @@
   }
 
   function refreshKbCount() {
-    return fetch('/documents?limit=1')
+    return authFetch('/documents?limit=1')
       .then(function (resp) { return resp.ok ? resp.json() : null; })
       .then(function (data) {
         var badge = $('kbCount');
@@ -955,6 +1131,17 @@
         badge.hidden = total === 0;
       })
       .catch(function () { /* 忽略：计数失败不该干扰问答 */ });
+  }
+
+  function loadKbListIfOpen() {
+    if (!$('kbModal').hidden) loadKbList();
+  }
+
+  function wireAuth() {
+    $('authBtn').addEventListener('click', function () {
+      if ($('authBtn').dataset.action === 'logout') signOut();
+      else signIn();
+    });
   }
 
   function wireKnowledge() {
@@ -1032,13 +1219,20 @@
     wireScroll();
     wireModals();
     wireKnowledge();
+    wireAuth();
     renderSidebar();
     renderMessages();
     $('input').focus();
-    refreshKbCount();
+
+    // 先消费 OAuth 回调（如果有），再渲染登录态与知识库计数
+    completeSignIn().then(function () {
+      renderAuthState();
+      refreshKbCount();
+      if (storedToken()) loadKbListIfOpen();
+    });
 
     // 顶栏显示当前生效模型（失败时静默，不影响问答）
-    fetch('/admin/models')
+    authFetch('/admin/models')
       .then(function (r) { return r.ok ? r.json() : null; })
       .then(function (models) {
         if (models && models.length) $('modelChip').textContent = '模型：' + models[0].name;

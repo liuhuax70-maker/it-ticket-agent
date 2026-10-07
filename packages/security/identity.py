@@ -52,12 +52,13 @@ class Unauthorized(RagError):
 # --------------------------------------------------------------------------
 
 _jwks_cache: dict[str, Any] = {"fetched_at": 0.0, "keys": []}
-JWKS_TTL_SECONDS = 3600
+# 短 TTL + 验签失败强制刷新：Keycloak 轮换签名密钥后，长缓存会让所有令牌验签失败
+JWKS_TTL_SECONDS = 300
 
 
-def _fetch_jwks(settings: SecuritySettings) -> list[dict[str, Any]]:
+def _fetch_jwks(settings: SecuritySettings, *, force: bool = False) -> list[dict[str, Any]]:
     now = time.time()
-    if _jwks_cache["keys"] and now - _jwks_cache["fetched_at"] < JWKS_TTL_SECONDS:
+    if not force and _jwks_cache["keys"] and now - _jwks_cache["fetched_at"] < JWKS_TTL_SECONDS:
         return _jwks_cache["keys"]
     import httpx
 
@@ -68,14 +69,11 @@ def _fetch_jwks(settings: SecuritySettings) -> list[dict[str, Any]]:
     return keys
 
 
-def decode_keycloak_token(token: str, settings: SecuritySettings) -> dict[str, Any]:
-    """校验并解析 Keycloak JWT，失败抛 ``Unauthorized``。"""
+def _decode_with_keys(
+    token: str, settings: SecuritySettings, keys: list[dict[str, Any]]
+) -> dict[str, Any]:
     from jose import jwt
     from jose.exceptions import JWTError
-
-    keys = _fetch_jwks(settings)
-    if not keys:
-        raise Unauthorized("Keycloak JWKS 为空，无法校验令牌")
 
     try:
         header = jwt.get_unverified_header(token)
@@ -84,7 +82,9 @@ def decode_keycloak_token(token: str, settings: SecuritySettings) -> dict[str, A
 
     kid = header.get("kid")
     jwk_dict = next((k for k in keys if k.get("kid") == kid), keys[0])
-    kwargs: dict[str, Any] = {"algorithms": ["RS256"], "issuer": settings.issuer()}
+    kwargs: dict[str, Any] = {"algorithms": ["RS256"]}
+    if settings.keycloak_verify_issuer:
+        kwargs["issuer"] = settings.issuer()
     audience = settings.keycloak_audience or settings.keycloak_client_id
     if audience:
         kwargs["audience"] = audience
@@ -93,6 +93,29 @@ def decode_keycloak_token(token: str, settings: SecuritySettings) -> dict[str, A
         return jwt.decode(token, jwk_dict, **kwargs)
     except JWTError as exc:
         raise Unauthorized(f"令牌校验失败: {exc}") from exc
+
+
+def decode_keycloak_token(token: str, settings: SecuritySettings) -> dict[str, Any]:
+    """校验并解析 Keycloak JWT，失败抛 ``Unauthorized``。
+
+    策略：先按缓存校验；失败则**强制刷新一次 JWKS 再试**。
+    没有这一步，Keycloak 轮换签名密钥（重建、升级、多副本）后，
+    在缓存过期前所有令牌都会被误判为非法——表现为"刚登录就 401"。
+    """
+    keys = _fetch_jwks(settings)
+    if not keys:
+        raise Unauthorized("Keycloak JWKS 为空，无法校验令牌")
+    if not settings.keycloak_verify_issuer:
+        logger.warning("KEYCLOAK_VERIFY_ISSUER=false：跳过 issuer 校验，仅限开发环境")
+
+    try:
+        return _decode_with_keys(token, settings, keys)
+    except Unauthorized as first_error:
+        logger.info("令牌校验失败，强制刷新 JWKS 后重试一次: %s", first_error.message)
+        refreshed = _fetch_jwks(settings, force=True)
+        if not refreshed:
+            raise
+        return _decode_with_keys(token, settings, refreshed)
 
 
 def resolve_identity(request: Request, settings: SecuritySettings) -> Identity:

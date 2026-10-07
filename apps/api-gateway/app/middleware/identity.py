@@ -28,12 +28,22 @@ class IdentityMiddleware(BaseHTTPMiddleware):
     def __init__(self, app, settings: Settings) -> None:  # noqa: ANN001
         super().__init__(app)
         self.settings = settings
+        self.exempt = settings.exempt_paths()
+
+    def _is_exempt(self, path: str) -> bool:
+        return any(path == item or path.startswith(item + "/") for item in self.exempt)
 
     async def dispatch(
         self, request: Request, call_next: Callable[[Request], Awaitable[Response]]
     ) -> Response:
         request_id = request.headers.get("x-request-id") or new_id("req_")
         request.state.request_id = request_id
+
+        # 探针与静态资源不需要身份：否则开启鉴权后 /health 会 401，
+        # 直接把 K8s/Compose 的存活检查打挂。
+        if self._is_exempt(request.url.path):
+            return await call_next(request)
+
         try:
             identity = resolve_identity(request, self.settings)
         except RagError as exc:

@@ -11,6 +11,7 @@ from packages.contracts import ACL, Chunk, SearchHit, Visibility
 from packages.prompts import PromptRegistry
 from packages.prompts.registry import get_prompt_registry
 from packages.retrievers import compile_filters, reciprocal_rank_fusion
+from packages.security import Identity
 from packages.security.pii import contains_pii, redact
 
 # ---------------- ID ----------------
@@ -124,6 +125,61 @@ def test_prompt_registry_missing_template_raises(tmp_path) -> None:
     registry = PromptRegistry(tmp_path)
     with pytest.raises(ConfigError):
         registry.get("nope", "v9")
+
+
+# ---------------- 身份校验 ----------------
+
+def test_identity_to_acl_carries_owner_for_private_visibility() -> None:
+    """private 可见性靠 owner 判定：请求方 ACL 必须带上 user_id。"""
+    identity = Identity(user_id="u_1", tenant_id="t1", department_id="hr")
+    acl = identity.to_acl()
+    assert acl.owner == "u_1"
+    assert identity.to_acl(owner=False).owner is None
+
+
+def test_jwks_is_refreshed_once_when_verification_fails(monkeypatch) -> None:
+    """Keycloak 轮换签名密钥后，必须强制刷新 JWKS 再试一次。
+
+    否则在 JWKS 缓存过期前所有令牌都会被判非法，表现为「刚登录就 401」。
+    """
+    from packages.security import identity as identity_module
+    from packages.security.config import SecuritySettings
+
+    fetched: list[bool] = []
+    attempts = {"n": 0}
+
+    def fake_fetch(settings, *, force: bool = False):  # noqa: ANN001, ARG001
+        fetched.append(force)
+        return [{"kid": "k1"}]
+
+    def fake_decode(token, settings, keys):  # noqa: ANN001, ARG001
+        attempts["n"] += 1
+        if attempts["n"] == 1:
+            raise identity_module.Unauthorized("签名校验失败")
+        return {"sub": "u_1"}
+
+    monkeypatch.setattr(identity_module, "_fetch_jwks", fake_fetch)
+    monkeypatch.setattr(identity_module, "_decode_with_keys", fake_decode)
+
+    assert identity_module.decode_keycloak_token("token", SecuritySettings()) == {"sub": "u_1"}
+    assert fetched == [False, True], "第一次用缓存，失败后必须强制刷新"
+
+
+def test_jwks_retry_failure_still_raises(monkeypatch) -> None:
+    from packages.security import identity as identity_module
+    from packages.security.config import SecuritySettings
+
+    def fake_fetch(settings, *, force: bool = False):  # noqa: ANN001, ARG001
+        return [{"kid": "k1"}]
+
+    def always_fail(token, settings, keys):  # noqa: ANN001, ARG001
+        raise identity_module.Unauthorized("令牌校验失败")
+
+    monkeypatch.setattr(identity_module, "_fetch_jwks", fake_fetch)
+    monkeypatch.setattr(identity_module, "_decode_with_keys", always_fail)
+
+    with pytest.raises(identity_module.Unauthorized):
+        identity_module.decode_keycloak_token("token", SecuritySettings())
 
 
 # ---------------- 契约 ----------------

@@ -6,7 +6,8 @@
   "accessTokenLifespan": 1800,
   "roles": {
     "realm": [
-      { "name": "rag_user", "description": "普通问答用户" },
+      { "name": "rag_user", "description": "普通问答用户（只读）" },
+      { "name": "rag_writer", "description": "可写入知识库（上传/删除文档）" },
       { "name": "rag_admin", "description": "知识库管理员" }
     ]
   },
@@ -23,6 +24,16 @@
       "redirectUris": ["http://localhost:8000/*"],
       "webOrigins": ["http://localhost:8000"],
       "protocolMappers": [
+        {
+          "name": "audience-rag-api",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "config": {
+            "included.client.audience": "rag-api",
+            "id.token.claim": "false",
+            "access.token.claim": "true"
+          }
+        },
         {
           "name": "tenant_id",
           "protocol": "openid-connect",
@@ -45,6 +56,53 @@
             "claim.name": "department_id",
             "jsonType.label": "String",
             "id.token.claim": "true",
+            "access.token.claim": "true",
+            "userinfo.token.claim": "true"
+          }
+        }
+      ]
+    },
+    {
+      "clientId": "rag-ui",
+      "name": "permission-aware-rag 前端（浏览器直连）",
+      "enabled": true,
+      "publicClient": true,
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": false,
+      "redirectUris": ["http://localhost:8000/ui/*", "http://localhost:8000/*"],
+      "webOrigins": ["http://localhost:8000"],
+      "attributes": { "pkce.code.challenge.method": "S256" },
+      "protocolMappers": [
+        {
+          "name": "audience-rag-api",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "config": {
+            "included.client.audience": "rag-api",
+            "id.token.claim": "false",
+            "access.token.claim": "true"
+          }
+        },
+        {
+          "name": "tenant_id",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-attribute-mapper",
+          "config": {
+            "user.attribute": "tenant_id",
+            "claim.name": "tenant_id",
+            "jsonType.label": "String",
+            "access.token.claim": "true",
+            "userinfo.token.claim": "true"
+          }
+        },
+        {
+          "name": "department_id",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-attribute-mapper",
+          "config": {
+            "user.attribute": "department_id",
+            "claim.name": "department_id",
+            "jsonType.label": "String",
             "access.token.claim": "true",
             "userinfo.token.claim": "true"
           }
@@ -73,6 +131,39 @@
       "lastName": "Engineering",
       "attributes": { "tenant_id": ["default"], "department_id": ["engineering"] },
       "credentials": [{ "type": "password", "value": "bob", "temporary": false }],
+      "realmRoles": ["rag_user"]
+    },
+    {
+      "username": "carol",
+      "enabled": true,
+      "email": "carol@example.com",
+      "emailVerified": true,
+      "firstName": "Carol",
+      "lastName": "HR-Writer",
+      "attributes": { "tenant_id": ["default"], "department_id": ["hr"] },
+      "credentials": [{ "type": "password", "value": "carol", "temporary": false }],
+      "realmRoles": ["rag_user", "rag_writer"]
+    },
+    {
+      "username": "erin",
+      "enabled": true,
+      "email": "erin@example.com",
+      "emailVerified": true,
+      "firstName": "Erin",
+      "lastName": "Engineering-Writer",
+      "attributes": { "tenant_id": ["default"], "department_id": ["engineering"] },
+      "credentials": [{ "type": "password", "value": "erin", "temporary": false }],
+      "realmRoles": ["rag_user", "rag_writer"]
+    },
+    {
+      "username": "dave",
+      "enabled": true,
+      "email": "dave@example.com",
+      "emailVerified": true,
+      "firstName": "Dave",
+      "lastName": "Other-Tenant",
+      "attributes": { "tenant_id": ["tenant-b"], "department_id": ["hr"] },
+      "credentials": [{ "type": "password", "value": "dave", "temporary": false }],
       "realmRoles": ["rag_user"]
     },
     {
