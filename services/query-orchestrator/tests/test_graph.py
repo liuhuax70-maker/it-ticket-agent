@@ -2,8 +2,12 @@
 
 from __future__ import annotations
 
+from typing import cast
+
 import pytest
 from app.clients.cache import QueryCache
+from app.clients.model_gateway import ModelGatewayClient
+from app.clients.retrieval import RetrievalClient
 from app.config import Settings
 from app.graph import build_graph
 from app.graph.edges import NODE_RETRIEVE, NODE_ROUTE
@@ -13,6 +17,7 @@ from packages.common.constants import REFUSE_TEXT
 from packages.contracts import (
     GenerateResponse,
     RerankResponse,
+    RetrieveMode,
     SearchHit,
     SearchRequest,
     SearchResponse,
@@ -89,7 +94,12 @@ def make_graph():
         gateway = FakeGateway(answer)
         cache = QueryCache(settings.redis_url, 60, enabled=False)
         graph = build_graph(
-            retrieval=retrieval, model_gateway=gateway, cache=cache, settings=settings
+            # fake 只实现被用到的两个方法；用 cast 标明这是刻意的鸭子类型替换，
+            # 而不是把 build_graph 的签名为了测试放宽成 Any。
+            retrieval=cast(RetrievalClient, retrieval),
+            model_gateway=cast(ModelGatewayClient, gateway),
+            cache=cache,
+            settings=settings,
         )
         return graph, retrieval, gateway
 
@@ -104,7 +114,9 @@ def _state(**kw) -> RAGState:
         "user_id": "u_1",
         "roles": ["rag_user"],
         "top_k": 3,
-        "mode": None,
+        # 故意把 mode 置空：验证 route 节点在缺少显式模式时的兜底行为
+        # （真实 HTTP 链路上 service 总会预填 mode，所以这条分支只在直接组图时可达）
+        "mode": cast(RetrieveMode, None),
         "trace_id": "tr_test",
         "timings": {},
         "errors": [],

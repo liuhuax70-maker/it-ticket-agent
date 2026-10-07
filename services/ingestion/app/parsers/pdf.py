@@ -9,6 +9,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 from app.parsers.base import BaseParser, ParsedDocument, register
 from packages.common.errors import ValidationError
@@ -31,7 +32,7 @@ class PdfParser(BaseParser):
 
         title = ""
         try:
-            meta = reader.metadata or {}
+            meta: dict[str, Any] = reader.metadata or {}
             title = (meta.get("/Title") or "").strip()
         except Exception:  # noqa: BLE001 - 元数据缺失不影响解析
             title = ""

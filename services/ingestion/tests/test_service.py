@@ -108,7 +108,7 @@ def wire(monkeypatch):
 
 async def test_ingest_inline_content(wire) -> None:
     state = wire()
-    result = await state["service"].ingest(  # type: ignore[union-attr]
+    result = await state["service"].ingest(
         IngestRequest(
             content=CONTENT, filename="handbook.md", acl=ACL(tenant_id="t1", department_id="hr")
         )
@@ -117,38 +117,38 @@ async def test_ingest_inline_content(wire) -> None:
     assert result.documents == 1
     assert result.chunk_count >= 1
     metadata = state["metadata"]
-    assert metadata.jobs["job-1"]["status"] == "succeeded"  # type: ignore[union-attr]
-    assert list(metadata.documents.values()) == ["indexed"]  # type: ignore[union-attr]
+    assert metadata.jobs["job-1"]["status"] == "succeeded"
+    assert list(metadata.documents.values()) == ["indexed"]
 
 
 async def test_document_status_becomes_failed_when_indexing_fails(wire) -> None:
     state = wire(sink_fail=True)
     with pytest.raises(RuntimeError):
-        await state["service"].ingest(IngestRequest(content=CONTENT, filename="h.md"))  # type: ignore[union-attr]
-    assert list(state["metadata"].documents.values()) == ["failed"]  # type: ignore[union-attr]
-    assert state["metadata"].jobs["job-1"]["status"] == "failed"  # type: ignore[union-attr]
+        await state["service"].ingest(IngestRequest(content=CONTENT, filename="h.md"))
+    assert list(state["metadata"].documents.values()) == ["failed"]
+    assert state["metadata"].jobs["job-1"]["status"] == "failed"
 
 
 async def test_ingest_requires_target(wire) -> None:
     state = wire()
     with pytest.raises(ValidationError):
-        await state["service"].ingest(IngestRequest())  # type: ignore[union-attr]
+        await state["service"].ingest(IngestRequest())
 
 
 async def test_delete_document_clears_index_and_metadata(wire) -> None:
     state = wire()
     metadata = state["metadata"]
-    metadata.documents["d_x"] = "indexed"  # type: ignore[union-attr]
-    metadata.chunks["d_x"] = []  # type: ignore[union-attr]
+    metadata.documents["d_x"] = "indexed"
+    metadata.chunks["d_x"] = []
 
-    result = await state["service"].delete_document("d_x")  # type: ignore[union-attr]
+    result = await state["service"].delete_document("d_x")
     assert result["existed"] is True
     assert result["deleted"] == {"milvus": 1, "opensearch": 1}
-    assert "d_x" not in metadata.documents  # type: ignore[union-attr]
-    assert "d_x" not in metadata.chunks  # type: ignore[union-attr]
+    assert "d_x" not in metadata.documents
+    assert "d_x" not in metadata.chunks
 
 
 async def test_timings_are_reported(wire) -> None:
     state = wire()
-    result = await state["service"].ingest(IngestRequest(content=CONTENT, filename="h.md"))  # type: ignore[union-attr]
+    result = await state["service"].ingest(IngestRequest(content=CONTENT, filename="h.md"))
     assert {"parse", "chunk", "metadata", "index"} <= set(result.timings_ms)

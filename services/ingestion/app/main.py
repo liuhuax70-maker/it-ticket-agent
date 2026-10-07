@@ -101,7 +101,7 @@ async def get_job(job_id: str) -> dict[str, object]:
 
 
 @app.get("/stats")
-async def stats() -> dict[str, object]:
+async def stats() -> dict[str, int]:
     """文档/分块总量，供管理面与验收脚本使用。"""
     return await _service().stats()
 

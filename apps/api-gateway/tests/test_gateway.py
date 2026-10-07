@@ -190,7 +190,7 @@ def client(monkeypatch):
         app.state.ingestion = FakeIngestion()
         app.state.model_gateway = FakeModelGateway()
         app.state.feedback = FakeFeedback()
-        test_client.app = app  # type: ignore[attr-defined]
+        test_client.app = app
         yield test_client
 
 
@@ -208,7 +208,7 @@ def test_chat_returns_answer_with_citations(client) -> None:
 
 def test_identity_is_forwarded_downstream(client) -> None:
     client.post("/chat", json={"query": "x"})
-    app = client.app  # type: ignore[attr-defined]
+    app = client.app
     _, identity = app.state.orchestrator.calls[0]
     assert identity.tenant_id == "default"  # 鉴权关闭时使用默认身份
     assert identity.user_id == "u_demo"
@@ -259,7 +259,7 @@ def test_documents_list_is_scoped_to_identity_tenant(client) -> None:
     assert body["total"] == 1
     assert body["items"][0]["doc_id"] == "d_1"
 
-    query = client.app.state.ingestion.list_query  # type: ignore[attr-defined]
+    query = client.app.state.ingestion.list_query
     # 租户必须来自身份，不接受客户端传参
     assert query["tenant_id"] == "default"
     assert query["keyword"] == "手册"
@@ -280,7 +280,7 @@ def test_ingest_cannot_override_tenant_or_department(client) -> None:
         },
     )
     assert resp.status_code == 200
-    req = client.app.state.ingestion.ingest_requests[-1]  # type: ignore[attr-defined]
+    req = client.app.state.ingestion.ingest_requests[-1]
     assert req.acl is not None
     assert req.acl.tenant_id == "default"
     assert req.acl.department_id == "default"
@@ -297,7 +297,7 @@ def test_feedback_is_forwarded(client) -> None:
     resp = client.post("/feedback", json={"query": "q", "answer": "a", "rating": 1})
     assert resp.status_code == 200
     assert resp.json()["id"] == "f_1"
-    app = client.app  # type: ignore[attr-defined]
+    app = client.app
     assert app.state.feedback.received[0].rating == 1
 
 

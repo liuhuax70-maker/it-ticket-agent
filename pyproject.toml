@@ -78,6 +78,19 @@ asyncio_mode = "auto"
 line-length = 100
 target-version = "py311"
 
+[tool.mypy]
+# 逐模块跑（见 scripts/type_check.py）：每个服务都有顶层 app 包，一次跑会歧义。
+python_version = "3.11"
+files = ["packages", "services", "apps"]
+ignore_missing_imports = true          # 第三方库没有存根时不报错（我们要查的是自己的类型关系）
+warn_unused_configs = true
+warn_redundant_casts = true            # 多余的 cast 说明类型已经推断对了，删掉
+no_implicit_optional = false      # 现存大量 形参: X = None 的历史写法，一次性打开会产生上百条噪音；
+warn_unused_ignores = true# 写了用不上的 type: ignore 会掩盖真实问题
+check_untyped_defs = false          # 同上：等核心模块补齐注解后再收紧
+disallow_untyped_defs = false          # 暂不强制所有函数写全注解（新代码建议写全）
+
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B"]
 ignore = ["E501"]
+

@@ -244,7 +244,16 @@ class MilvusStore:
 
         return " and ".join(parts)
 
-    def _search_sync(self, vector: list[float], top_k: int, expr: str) -> list[dict[str, Any]]:
+    def _search_sync(
+        self, vector: list[float], top_k: int, expr: str
+    ) -> list[list[dict[str, Any]]]:
+        """同步检索。
+
+        返回值是**按查询分组**的嵌套列表：外层第 i 项对应第 i 个查询向量，
+        内层才是命中列表。本项目一次只传一个向量，所以外层长度恒为 1——
+        但类型必须如实标成嵌套，否则调用方按 list[dict] 迭代就会拿到 dict 的**键**
+        （字符串），继而 AttributeError。
+        """
         return self._client.search(
             collection_name=self.collection,
             data=[vector],

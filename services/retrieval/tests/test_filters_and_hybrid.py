@@ -93,7 +93,7 @@ async def test_hybrid_fuses_two_routes_with_rrf() -> None:
 
 async def test_hybrid_degrades_when_one_route_fails() -> None:
     vector = FakeRetriever(RETRIEVER_VECTOR, [_hit("d_1:0")])
-    hybrid = HybridRetriever(vector, FailingRetriever())  # type: ignore[arg-type]
+    hybrid = HybridRetriever(vector, FailingRetriever())
     hits, _ = await hybrid.search(
         "体检报销", RetrieveMode.hybrid, top_k=5, vector_top_k=10, bm25_top_k=10
     )

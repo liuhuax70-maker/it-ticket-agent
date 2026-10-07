@@ -205,7 +205,7 @@ def test_chunk_round_trip_keeps_offsets() -> None:
 
 def test_settings_env_prefix_free_contract() -> None:
     """字段名即环境变量名（大小写不敏感），这是 .env.example 的契约。"""
-    settings = BaseAppSettings(LOG_LEVEL="DEBUG")
+    settings = BaseAppSettings(LOG_LEVEL="DEBUG")  # type: ignore[call-arg]  # 故意用未声明的字段名验证环境变量映射
     assert settings.log_level == "DEBUG"
 
 

@@ -152,14 +152,16 @@ def score(rows: list[dict[str, Any]], settings: Settings) -> dict[str, Any]:
 
     from ragas.run_config import RunConfig
 
-    run_config = RunConfig(timeout=settings.judge_timeout, max_workers=settings.judge_workers)
+    run_config = RunConfig(timeout=int(settings.judge_timeout), max_workers=settings.judge_workers)
     result = evaluate(
         dataset=EvaluationDataset.from_list(ragas_rows),
         metrics=[metric for _, metric in metrics],
         raise_exceptions=False,
         run_config=run_config,
     )
-    frame = result.to_pandas()
+    # evaluate() 返回类型标注是 EvaluationResult | Executor（Executor 是内部执行器），这里只用
+    # 结果表，所以显式收窄——避免内部执行器类型泄漏到业务代码。
+    frame = result.to_pandas() if hasattr(result, "to_pandas") else result
     scores, per_sample = _aggregate(frame, metrics)
 
     return {

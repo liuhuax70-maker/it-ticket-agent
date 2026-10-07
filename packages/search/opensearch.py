@@ -186,7 +186,11 @@ class OpenSearchStore:
         except Exception as exc:  # noqa: BLE001
             raise DependencyUnavailable("OpenSearch", f"批量写入失败: {exc}") from exc
         if errors:
-            logger.warning("OpenSearch 写入存在失败项，成功 %s，失败 %s", success, len(errors))
+            logger.warning(
+                "OpenSearch 写入存在失败项，成功 %s，失败 %s",
+                success,
+                len(errors) if isinstance(errors, list) else errors,
+            )
         return int(success)
 
     async def delete_by_doc(self, doc_id: str) -> int:

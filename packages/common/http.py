@@ -132,6 +132,7 @@ class ServiceClient:
         response_model: type[M] | None = None,
         timeout: float | None = None,
     ) -> Any:
+        body: dict[str, Any] | None
         if isinstance(payload, BaseModel):
             body = payload.model_dump(mode="json")
         else:

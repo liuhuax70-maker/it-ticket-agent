@@ -9,6 +9,7 @@
 from __future__ import annotations
 
 import time
+from typing import Literal
 
 from app.config import Settings
 from app.embedder import EmbeddingPipeline
@@ -32,8 +33,8 @@ class IndexService:
         self._settings = settings
         self._embedder = EmbeddingPipeline(settings)
         # 以 embedder 实际维度建表，避免 EMBED_DIM 配置与实际模型不一致导致写入报错
-        milvus_settings: MilvusSettings = settings  # type: ignore[assignment]
-        search_settings: OpenSearchSettings = settings  # type: ignore[assignment]
+        milvus_settings: MilvusSettings = settings
+        search_settings: OpenSearchSettings = settings
         self._vectors = VectorWriter(milvus_settings, dim=self._embedder.dim)
         self._search = SearchWriter(search_settings)
 
@@ -86,7 +87,9 @@ class IndexService:
         opensearch_n = await self._search.write(req.chunks)
         timings["opensearch"] = _ms(started)
 
-        status = "ok" if milvus_n and opensearch_n else "partial"
+        status: Literal["ok", "partial", "failed"] = (
+            "ok" if milvus_n and opensearch_n else "partial"
+        )
         logger.info(
             "入库完成 doc_id=%s chunks=%s milvus=%s opensearch=%s",
             doc_id,

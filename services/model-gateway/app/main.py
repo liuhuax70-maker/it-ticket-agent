@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
+from typing import Literal
 
 from fastapi import FastAPI, HTTPException
 
@@ -111,7 +112,7 @@ async def models() -> list[ModelInfo]:
 @app.get("/health", response_model=HealthResponse)
 async def health() -> HealthResponse:
     details: dict[str, str] = {}
-    status = "ok"
+    status: Literal["ok", "degraded", "error"] = "ok"
     try:
         router = _router()
         chain = router.targets()

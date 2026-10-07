@@ -24,8 +24,8 @@ try:  # aiokafka 为可选依赖，未安装时不阻塞服务启动
 
     KAFKA_AVAILABLE = True
 except Exception:  # noqa: BLE001
-    AIOKafkaConsumer = None  # type: ignore[assignment]
-    AIOKafkaProducer = None  # type: ignore[assignment]
+    AIOKafkaConsumer = None
+    AIOKafkaProducer = None
     KAFKA_AVAILABLE = False
 
 

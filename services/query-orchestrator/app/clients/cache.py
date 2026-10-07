@@ -35,9 +35,10 @@ class QueryCache:
         self.enabled = enabled
         self._ttl = ttl_seconds
         self._url = redis_url
-        self._redis = None
+        # 延迟建连：构造时不连Redis（服务启动不应依赖 Redis 可用）
+        self._redis: Any = None
 
-    def _client(self):
+    def _client(self) -> Any:
         if self._redis is None:
             import redis.asyncio as aioredis
 

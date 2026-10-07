@@ -3,7 +3,7 @@ PY ?= python
 
 .DEFAULT_GOAL := help
 
-.PHONY: help install infra-up infra-full infra-down infra-ps migrate seed index api gateway orchestrator retrieval ingestion indexing model-gateway run-all verify corpus verify-permissions eval eval-fast eval-preflight test lint fmt
+.PHONY: help install infra-up infra-full infra-down infra-ps migrate seed index api gateway orchestrator retrieval ingestion indexing model-gateway run-all verify corpus verify-permissions eval eval-fast eval-preflight type-check type-check test lint fmt
 
 help: ## 列出所有可用目标
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-16s\033[0m %s\n", $$1, $$2}'
@@ -104,4 +104,10 @@ fmt: ## 统一格式（ruff format，与 lint 一样走 $(PY) -m）
 	$(PY) -m ruff format .
 
 fmt-check: ## 检查格式是否统一（CI 门禁用）
+	$(PY) -m ruff format --check .
+
+type-check: ## 类型检查（逐模块，CI 门禁）
+	
+$
+(PY) scripts/type_check.py
 	$(PY) -m ruff format --check .

@@ -9,8 +9,8 @@
 from __future__ import annotations
 
 from collections.abc import Iterator
-from contextlib import contextmanager
-from typing import Any
+from contextlib import AbstractContextManager, contextmanager
+from typing import Any, Protocol
 
 from packages.common.logging import get_logger
 
@@ -25,6 +25,21 @@ def truncate(text: str, limit: int = MAX_TEXT) -> str:
     return text if len(text) <= limit else text[:limit] + "..."
 
 
+class _SpanHandle(Protocol):
+    """span 句柄的公共接口。
+
+    真实句柄与 noop 句柄结构平行但 __init__ 不同（后者不需要 raw span），
+    因此用 Protocol 统一类型——调用方拿到的无论是哪种实现，
+    都能按同一套接口 update/span/end，不需要先判断是哪一种。
+    """
+
+    def update(self, **kwargs: Any) -> None: ...
+
+    def span(self, name: str, **meta: Any) -> AbstractContextManager[_SpanHandle]: ...
+
+    def end(self) -> None: ...
+
+
 class _NoopHandle:
     """无 Langfuse 时的占位句柄，接口与真实句柄一致。"""
 
@@ -32,7 +47,7 @@ class _NoopHandle:
         return None
 
     @contextmanager
-    def span(self, name: str, **meta: Any) -> Iterator[_NoopHandle]:  # noqa: ARG002
+    def span(self, name: str, **meta: Any) -> Iterator[_SpanHandle]:  # noqa: ARG002
         yield self
 
     def end(self) -> None:
@@ -50,7 +65,7 @@ class _TraceHandle:
             logger.debug("langfuse trace.update 失败（忽略）: %s", exc)
 
     @contextmanager
-    def span(self, name: str, **meta: Any) -> Iterator[_TraceHandle]:
+    def span(self, name: str, **meta: Any) -> Iterator[_SpanHandle]:
         span = None
         try:
             span = self._raw.span(name=name, metadata=meta)
@@ -102,7 +117,7 @@ class Tracer:
             logger.warning("Langfuse 初始化失败，降级为 no-op: %s", exc)
 
     @contextmanager
-    def trace(self, name: str, **metadata: Any) -> Iterator[_TraceHandle | _NoopHandle]:
+    def trace(self, name: str, **metadata: Any) -> Iterator[_SpanHandle]:
         if not self.enabled or self._client is None:
             yield _NoopHandle()
             return

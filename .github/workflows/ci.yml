@@ -27,6 +27,11 @@ jobs:
       - name: ruff 格式统一
         run: ruff format --check .
 
+
+      # 类型检查：mypy 逐模块跑——每个服务都有自己的顶层 app 包，一次跑会报歧义
+      - name: 类型检查
+        run: python scripts/type_check.py
+
   test:
     name: 单元与集成测试（全部离线，不需要外部依赖）
     runs-on: ubuntu-latest

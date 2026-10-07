@@ -11,12 +11,10 @@ from __future__ import annotations
 import asyncio
 import time
 
-from app.opensearch_client import BM25Retriever
-from app.vector_client import VectorRetriever
 from packages.common.errors import DependencyUnavailable
 from packages.common.logging import get_logger
 from packages.contracts import RetrieveMode, SearchHit
-from packages.retrievers import FilterDict, reciprocal_rank_fusion
+from packages.retrievers import FilterDict, Retriever, reciprocal_rank_fusion
 from packages.retrievers.base import RETRIEVER_BM25, RETRIEVER_VECTOR
 
 logger = get_logger("retrieval.hybrid")
@@ -29,8 +27,8 @@ def _ms(started: float) -> float:
 class HybridRetriever:
     def __init__(
         self,
-        vector: VectorRetriever,
-        bm25: BM25Retriever,
+        vector: Retriever,
+        bm25: Retriever,
         *,
         rrf_k: int = 60,
         weight_vector: float = 1.0,
@@ -86,7 +84,7 @@ class HybridRetriever:
         # （属性也没在 __init__ 里初始化，靠下游 getattr 默认值兜底）。
         # 它只用于 /eval 的延迟统计，不影响检索结果，所以维持 best-effort；
         # 若要把延迟做成可信指标，必须把 elapsed 随返回值一起传出去。
-        self._last_elapsed = elapsed  # type: ignore[attr-defined]
+        self._last_elapsed = elapsed
         return ("hybrid", vector_hits, bm25_hits)
 
     async def search(
@@ -114,6 +112,10 @@ class HybridRetriever:
             return self._cut(hits, self._min_score)[:top_k], timings
 
         _, vector_hits, bm25_hits = await self._both(query, vector_top_k, bm25_top_k, filters)
+        # 两个检索器都契约化返回 list，但降级路径可能给出 None —— 统一兜成空列表，
+        # 否则下面的 len() / RRF 会直接 TypeError。
+        vector_hits = vector_hits or []
+        bm25_hits = bm25_hits or []
         timings["retrieve"] = getattr(self, "_last_elapsed", 0.0)
 
         started = time.perf_counter()
