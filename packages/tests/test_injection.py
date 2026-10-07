@@ -51,17 +51,26 @@ def test_clean_text_yields_nothing() -> None:
 # ---------------- 不该认的（真实语料，零容忍） ----------------
 
 
+# 这份文件是**故意投毒**的语料夹具，用于让注入防护进入每次跑批的回归
+# （对应评测集里的 injection-01），因此它必须被检出，不能算误报。
+DELIBERATE_FIXTURE = "injection_probe.md"
+
+
+def _corpus_files() -> list[Path]:
+    root = _repo_root()
+    return sorted((root / "data" / "corpus").glob("*.md")) + sorted(
+        (root / "data" / "corpus_permissions").glob("*.md")
+    )
+
+
 def test_real_corpus_is_not_flagged() -> None:
-    """真实制度语料必须零命中。
+    """真实的制度语料必须零命中。
 
     制度文档里"必须/不得/应当/请"是常态；只要判据稍微放宽（比如匹配裸"忽略"），
     这里立刻就会有命中——那样每次问答都会记一条"疑似注入"，
     指标和告警随即失去意义。
     """
-    root = _repo_root()
-    files = sorted((root / "data" / "corpus").glob("*.md")) + sorted(
-        (root / "data" / "corpus_permissions").glob("*.md")
-    )
+    files = [p for p in _corpus_files() if p.name != DELIBERATE_FIXTURE]
     assert len(files) >= 13, f"语料文件数异常（{len(files)}），测试可能没读到真实数据"
 
     flagged: list[tuple[str, tuple[str, ...]]] = []
@@ -71,6 +80,21 @@ def test_real_corpus_is_not_flagged() -> None:
             flagged.append((path.name, hits))
 
     assert not flagged, f"真实语料被误判为注入（应放宽判据）: {flagged}"
+
+
+def test_deliberate_fixture_is_detected() -> None:
+    """故意投毒的夹具必须被检出。
+
+    这条断言把夹具与检测器绑在一起：夹具若被"顺手清理"（比如觉得它不像制度文档），
+    这里会失败并提醒"注入回归样本没了"；检测器若退化到漏掉这一类，这里也会失败。
+    缺了任何一边，"注入防护进回归"这件事就名存实亡。
+    """
+    path = _repo_root() / "data" / "corpus" / DELIBERATE_FIXTURE
+    assert path.exists(), f"注入回归夹具缺失: {path}"
+
+    hits = scan_text(path.read_text(encoding="utf-8"))
+    assert "forge_section" in hits, "夹具伪造了分节标记，检测器必须能识别"
+    assert "ignore_instructions" in hits
 
 
 # ---------------- 来源归属 ----------------

@@ -21,6 +21,7 @@ PYTHON = sys.executable
 # 顺序无所谓，但固定下来便于对照输出
 TARGETS: list[tuple[str, str]] = [
     ("packages/tests", "共享库"),
+    ("scripts/tests", "脚本（回归门禁等）"),
     ("apps/api-gateway/tests", "api-gateway"),
     ("services/model-gateway/tests", "model-gateway"),
     ("services/ingestion/tests", "ingestion"),

@@ -261,6 +261,7 @@ def _build_row(
         "expected_doc_ids": sorted(expected),
         "expected_snippets": sample.expected_snippets,
         "forbidden_doc_ids": sorted(forbidden),
+        "must_not_contain": list(sample.must_not_contain),
         "answer": body.get("answer", ""),
         # 作答用的模型名。必须落盘：否则"误答率从 44.4% 降到 x%"无法归因到模型切换，
         # 后人会以为那是提示词或检索的功劳。

@@ -45,29 +45,19 @@ jobs:
           fi
           python -m pipelines.eval_dag.run --limit "$EVAL_LIMIT"
 
-      - name: L1 门禁（越权必须为 0）
-        # 越权泄露是**绝对不变量**，不设阈值、不看波动：出现即失败。
-        # hit@k 之类的指标先只打印，等基线稳定后再加"不许下降"的门禁。
+      - name: 评测回归门禁
+        # 两类判定都在脚本里（scripts/check_eval_regression.py）：
+        #   * 零容忍不变量：越权泄露、禁用内容（提示注入得逞）必须为 0；
+        #   * 指标退化：对比 configs/eval/baseline.json，各指标不许变差超过容差。
+        # 基线只有显式 `make eval-baseline` 才会更新，避免门禁自动"接受现状"。
         run: |
-          python - <<'PY'
-          import json, pathlib, sys
-
-          path = pathlib.Path("eval_data/reports/baseline_latest.json")
-          if not path.exists():
-              print("没有找到报告文件，跳过门禁")
-              sys.exit(0)
-
-          summary = json.loads(path.read_text(encoding="utf-8"))["summary"]
-          print("评测摘要:")
-          print(json.dumps(summary, ensure_ascii=False, indent=2))
-
-          if summary.get("leak_count", 0) > 0:
-              print(f"::error::检测到 {summary['leak_count']} 条越权泄露，评测不通过")
-              sys.exit(1)
-          if summary.get("count", 0) == 0:
-              print("::error::零样本，评测没有真正执行")
-              sys.exit(1)
-          PY
+          if [ ! -f eval_data/reports/baseline_latest.json ]; then
+            echo "没有找到报告文件，跳过门禁"
+            exit 0
+          fi
+          python scripts/check_eval_regression.py
+        env:
+          PYTHONIOENCODING: utf-8
 
       - name: 上传评测报告
         if: always()

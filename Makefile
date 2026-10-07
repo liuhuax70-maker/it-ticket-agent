@@ -3,7 +3,7 @@ PY ?= python
 
 .DEFAULT_GOAL := help
 
-.PHONY: help install infra-up infra-full infra-down infra-ps migrate seed index api gateway orchestrator retrieval ingestion indexing model-gateway run-all verify corpus verify-permissions eval eval-fast eval-preflight type-check type-check test lint fmt
+.PHONY: help install infra-up infra-full infra-down infra-ps migrate seed index api gateway orchestrator retrieval ingestion indexing model-gateway run-all verify corpus verify-permissions eval eval-fast eval-preflight eval-rescore eval-gate eval-baseline type-check test lint fmt
 
 help: ## 列出所有可用目标
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-16s\033[0m %s\n", $$1, $$2}'
@@ -49,6 +49,12 @@ eval-preflight: ## 评测前置检查（语料是否入库、鉴权是否可用�
 
 eval-rescore: ## 用上次落盘的采集结果重打分（不重新采集）
 	PYTHONPATH=. $(PY) -m pipelines.eval_dag.run --rescore
+
+eval-gate: ## 评测回归门禁：对比冻结基线，指标不许变差（越权/禁用内容必须为 0）
+	$(PY) scripts/check_eval_regression.py
+
+eval-baseline: ## 把当前报告冻结为新基线（显式接受现状，需 review）
+	$(PY) scripts/check_eval_regression.py --update-baseline
 
 run-all: ## 本地一键启动全部服务（前台，Ctrl+C 退出）
 	$(PY) scripts/dev_services.py

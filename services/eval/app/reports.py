@@ -53,6 +53,7 @@ def summarize(payload: dict[str, Any]) -> dict[str, Any]:
         "false_refusal_rate": l1.false_refusal_rate,
         "false_answer_rate": l1.false_answer_rate,
         "leak_count": l1.leak_count,
+        "forbidden_count": l1.forbidden_count,
         "latency_ms_p50": l1.latency_ms_p50,
         "latency_ms_p95": l1.latency_ms_p95,
         "ragas": (l2 or {}).get("metrics") or {},

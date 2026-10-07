@@ -51,6 +51,10 @@ class GoldenSample(BaseModel):
     expected_sources: list[str] = Field(default_factory=list)
     expected_snippets: list[str] = Field(default_factory=list)
     forbidden_sources: list[str] = Field(default_factory=list)
+    # 答案里**绝不能出现**的字符串。用于"必须挡住了什么"这类断言——
+    # 目前主要给提示注入用：投毒文档/提问里埋一个标记串，答案一旦出现它就说明模型照做了。
+    # 与 forbidden_sources 是两件事：那个管"不该引用的文档"，这个管"不该出现的内容"。
+    must_not_contain: list[str] = Field(default_factory=list)
     should_refuse: bool = False
     identity: EvalIdentity = Field(default_factory=EvalIdentity)
     tags: list[str] = Field(default_factory=list)
