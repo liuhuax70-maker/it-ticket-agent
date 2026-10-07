@@ -121,10 +121,13 @@ class OrchestratorService:
             details["model_gateway"] = "ok" if await self.model_gateway.ping() else "unreachable"
         except Exception as exc:  # noqa: BLE001
             details["model_gateway"] = f"error: {exc}"
-        if "unreachable" in details.get("retrieval", "") or "unreachable" in details.get(
-            "model_gateway", ""
-        ):
-            status = "degraded"
+        # 只认 "ok" 为健康：不可达（unreachable）与探测异常（error: ...）都算故障。
+        # 早先的写法是匹配 "unreachable" 字面量，于是依赖抛异常时状态仍是 ok，
+        # 编排层故障对上游完全不可见——健康检查的价值被静默抵消。
+        for probe in ("retrieval", "model_gateway"):
+            if not details.get(probe, "").startswith("ok"):
+                status = "degraded"
+                break
         details["status"] = status
         return details
 

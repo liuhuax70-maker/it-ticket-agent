@@ -44,9 +44,15 @@ class CompletionResult:
 def build_target(settings: LLMSettings, model_override: str | None = None) -> ModelTarget:
     """把配置解析成 LiteLLM 调用目标。
 
-    model_override 支持两种写法：
+    ``model_override`` 支持两种写法：
         * 逻辑名 ``deepseek`` / ``local``：切到对应 provider 的默认模型
         * 完整 LiteLLM 名 ``deepseek/deepseek-chat``：直接透传
+
+    ⚠️ 已知陷阱：``model_override`` 若是**既非上述逻辑名、也不含 "/"** 的值
+    （例如 ``gpt-4o``、``qwen3.5:4b``），下面三个分支全部落空，函数会**静默**返回
+    当前 provider 的默认模型——不抛异常、不打日志。后果是
+    ``LLM_FALLBACK_MODELS=gpt-4o`` 这种配置看起来生效了，实际兜底成了"对同一模型
+    重试一次"。新增来源的模型名时，要么用完整 LiteLLM 名，要么在下面补显式分支。
     """
     provider = (settings.llm_provider or "deepseek").lower()
 

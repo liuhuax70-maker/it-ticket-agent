@@ -64,7 +64,16 @@ class Document(BaseModel):
 
 
 class Chunk(BaseModel):
-    """切分单元。``chunk_id = f"{doc_id}:{chunk_index}"``，可稳定复现。"""
+    """切分单元。``chunk_id = f"{doc_id}:{chunk_index}"``，可稳定复现。
+
+    ⚠️ ``char_start`` / ``char_end`` 是**字符偏移，不是字节偏移**，且约定为
+    左闭右开切片：``原文[char_start:char_end] == text``（切分器保证，见
+    ``services/ingestion/tests/test_chunker.py`` 的断言）。
+    前端引用高亮直接依赖这个不变量。
+
+    混用口径会出事：向量库侧的 ``VARCHAR`` 长度上限是按**字节**算的
+    （见 ``packages/vectorstores/config.py``），而这里是字符。
+    """
 
     chunk_id: str
     doc_id: str
@@ -224,7 +233,11 @@ class ChatRequest(BaseModel):
     # 评测会显式传 0：作答温度不为 0 时"该不该拒答"这类判断对采样极其敏感，
     # 同一份评测集连跑两次误答率能翻倍，指标就失去了可比性。
     temperature: float | None = None
-    # 评测（RAGAS 的 context 类指标）需要完整上下文；默认不回传，避免正文无谓外泄
+    # 是否回传召回上下文原文。
+    # 默认关闭有两个理由：① 体积——top_k 段正文可能几 KB，绝大多数调用方（聊天前端）
+    #   只需要 answer + citations；② 最小化暴露——上下文是**检索到的原文**，在 ACL
+    #   过滤之前的内容形态，回传范围越大越容易在下游被误记日志。
+    # 需要它的场景：RAGAS 的 context 类指标（评测采集时显式传 True）。
     include_contexts: bool = False
 
 
@@ -254,7 +267,10 @@ class IngestRequest(BaseModel):
     title: str | None = None
     acl: ACL | None = None
     reindex: bool = False
-    sync: bool = True  # True = 同步直连 indexing 并返回最终结果
+    # ⚠️ 保留字段但**当前没有任何读取点**（全仓无 req.sync 的使用）。
+    # 同步/异步由 ingestion 的 sink 实现决定（USE_KAFKA 开关，见 producers.ChunkSink），
+    # 不由请求参数决定。新代码不要依赖它；要控制同步/异步请用环境变量。
+    sync: bool = True
 
 
 class IngestResponse(BaseModel):

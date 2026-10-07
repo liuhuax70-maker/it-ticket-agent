@@ -76,7 +76,18 @@ class Settings(EmbedSettings, MilvusSettings, OpenSearchSettings):
     retriever_config_path: str = "configs/retrievers/default.yaml"
 
     def with_overrides(self) -> Settings:
-        """把调参文件的值叠加到 .env 之上（文件优先，便于不重启环境变量做灰度调参）。"""
+        """把调参文件的值覆盖到 ``.env`` 之上（**文件优先**）。
+
+        两个必须知道的前提：
+            1. **改调参文件必须重启服务**——本方法只在服务构造时调用一次，
+               不是热加载。文件名里的 "default" 是单一全局配置，没有按环境/域选择机制；
+            2. **方向是文件覆盖 env**，不是 env 覆盖文件。所以调参只能改文件，
+               设同名环境变量不会生效。
+
+        这样分工是刻意的：env 表达环境差异（连接串、开关），文件表达策略微调
+        （权重、条数、阈值），两者职责不重叠。
+        白名单外的键（含连接串与口令）一律忽略，见 :func:`load_retriever_overrides`。
+        """
         overrides = load_retriever_overrides(self.retriever_config_path)
         if not overrides:
             return self

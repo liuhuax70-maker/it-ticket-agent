@@ -6,6 +6,11 @@ from packages.common.errors import ConfigError
 from packages.embeddings.base import Embedder
 from packages.embeddings.config import EmbedSettings
 
+# 单例缓存。键必须覆盖**所有影响向量数值或行为的字段**。
+# 当前键只有 (backend, model)：改了 embed_query_instruction / embed_dim /
+# embed_api_base / embed_batch_size 都拿不到新实例——表现为"配置改了但没效果"，
+# 且不报任何错（这是配置类问题里最难查的一种）。补键时请一并更新 reset_embedder_cache
+# 的调用方（测试需要在切换配置后调用它）。
 _instances: dict[tuple[str, str], Embedder] = {}
 
 

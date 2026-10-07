@@ -36,7 +36,11 @@ def reciprocal_rank_fusion(
         for rank, hit in enumerate(hits, start=1):
             scores[hit.chunk_id] = scores.get(hit.chunk_id, 0.0) + weight / (k + rank)
             sources.setdefault(hit.chunk_id, []).append(name)
-            # 保留信息量最全的那条（字段非空的优先）
+            # 同一条 chunk 可能被多路召回：分数累加，展示字段取"有正文的那条"。
+            # 只比较 text——其他字段（section_path / doc_title 等）缺失时不比较，
+            # 因为 BM25 与向量两路对同一 chunk 的元数据填充本来就不一致，
+            # 按"非空优先"挑会让展示结果随命中路数抖动。
+            # 另外 sources 是列表且不去重，同一路重复传入会出现 "bm25+bm25"。
             current = best.get(hit.chunk_id)
             if current is None or (not current.text and hit.text):
                 best[hit.chunk_id] = hit

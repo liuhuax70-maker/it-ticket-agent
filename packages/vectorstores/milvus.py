@@ -1,8 +1,10 @@
 """Milvus 适配：建表（含 ACL 标量字段）、幂等写入、向量检索、按文档删除。
 
-关键设计（沿用旧 P0 结论）：
-    * **ACL 三个标量字段现在就在 schema 里**，P2 只需加 INVERTED 索引 + 过滤表达式，
-      无需重建 collection、无需改写入链路；
+关键设计：
+    * **ACL 以四个标量字段落在 schema 里**（tenant_id / department_id /
+      visibility / owner），并已建 INVERTED 索引、过滤表达式已实现并生效
+      （见 ``SCALAR_INDEX_FIELDS`` 与 :meth:`MilvusStore._compile_expr`）。
+      早期"P2 再补过滤"的计划已完成——新增可见性维度时改 schema + 表达式编译两处；
     * 主键用 ``chunk_id``（VARCHAR）而非自增 INT64 —— 重跑索引天然幂等，不产生重复；
     * 写入后 ``flush``，否则「刚写就查不到」会被误判为向量没写进去；
     * 过滤下沉为 ``expr``，绝不在应用层裁剪 top_k。
@@ -151,7 +153,14 @@ class MilvusStore:
             "doc_id": chunk.doc_id,
             "doc_title": chunk.doc_title,
             "source": chunk.source,
-            # 按字节截断，避免中文超 max_length 直接插入报错
+            # 按字节截断，避免中文超 max_length 直接插入报错。
+            # ⚠️ 口径提示：VARCHAR 的 max_length 是**字节**上限，所以 text 用字节截断；
+            # 而下面 section_path/owner 是按**字符**截断的（[:512] / [:128]）。
+            # 混用不会立刻报错，只会在字段真超长时被 Milvus 拒写。要严格对齐，
+            # 需把这两处也改成字节截断。
+            # 另一处副作用：text 被截断后 char_start/char_end 仍指向**原文**，
+            # 所以 Milvus 里的 text 与"按偏移回查原文"的结果可能不一致——
+            # 引用高亮请以元数据里的原文为准，不要拿向量库里的 text 做高亮。
             "text": chunk.text.encode("utf-8")[: self._settings.milvus_text_max_length].decode(
                 "utf-8", errors="ignore"
             ),
@@ -199,7 +208,16 @@ class MilvusStore:
     # ---------------- 检索 ----------------
     @staticmethod
     def _compile_expr(filters: FilterDict | None) -> str:
-        """把过滤契约编译为 Milvus expr。"""
+        """把过滤契约编译为 Milvus expr（检索侧 ACL 的执行点之一）。
+
+        与 :meth:`packages.search.opensearch.OpenSearchStore._compile_filter` 必须
+        1:1 对应，语义源是 ``packages/retrievers/filters.py`` 的模块 docstring：
+        clause 之间 OR、clause 内部 AND、must 与所有 clause 之间 AND。
+
+        空契约返回空字符串，而**空 expr 在 Milvus 里等于不过滤**（match-all）。
+        调用方不要把"空 expr"当成"没有查询条件所以安全"——
+        它和"没有权限约束"是同一件事，见 filters.compile_filters 的告警。
+        """
         if not filters:
             return ""
         parts: list[str] = []

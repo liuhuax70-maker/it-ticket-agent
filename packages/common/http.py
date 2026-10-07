@@ -1,7 +1,12 @@
 """服务间 HTTP 客户端。
 
-最小闭环采用**同步直连**（服务间同步 HTTP 调用），而非 Kafka 异步：
-本模块是所有跨服务调用的唯一出口，后续切异步只需替换调用点。
+最小闭环采用**同步直连**（服务间同步 HTTP 调用），而非 Kafka 异步。
+
+范围说明：本模块是**绝大多数**跨服务调用的统一出口（超时、错误包装、契约校验），
+但不是唯一出口——``services/eval/app/collector.py``、``services/authz``、
+``services/model-gateway/app/fallback.py``、``pipelines/ingestion_dag/sync.py``
+直接使用 httpx。因此任何"统一超时/统一错误/统一脱敏"的假设都要按调用点核对，
+不能假定全仓都走这里。
 """
 
 from __future__ import annotations
@@ -20,7 +25,18 @@ M = TypeVar("M", bound=BaseModel)
 
 
 class ServiceClient:
-    """面向单个下游服务的异步客户端，自带重试与统一错误包装。"""
+    """面向单个下游服务的异步客户端，统一超时与错误包装。
+
+    关于 ``retries``：它只作用于 httpx 的**连接层**错误（连接被拒、连接中断），
+    **不会**对 5xx / 429 重试，也没有退避。因此：
+
+        * 它对"下游在处理中途断开"有效；
+        * 它对"下游返回 503"无效——那需要业务层显式重试（见 model-gateway 的 fallback）；
+        * 超时后重试要求目标操作幂等。本仓库里 ``/index``（按 chunk_id upsert）、
+          ``/documents/{id}``（先删后建）满足幂等；但 ``/ingest/upload``、
+          ``/feedback`` 这类"追加"语义的操作在超时后重试可能产生重复记录，
+          接入前需自行确认。
+    """
 
     def __init__(
         self,

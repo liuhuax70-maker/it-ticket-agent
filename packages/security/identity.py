@@ -51,12 +51,27 @@ class Unauthorized(RagError):
 # 身份解析
 # --------------------------------------------------------------------------
 
+# 进程级 JWKS 缓存。
+#
+# ⚠️ 两个已知限制，改动前务必知道：
+#   1. **没有按 jwks_url 分键**。多 realm / 多 Keycloak 实例共用一个进程时（例如集成测试
+#      同时指向两个 realm），A realm 的公钥会被用来验 B realm 的令牌。
+#      要支持多 realm 需把 keys 改成 {url: (fetched_at, keys)}。
+#   2. 缓存是**进程内**的，多 worker 各存一份；轮换密钥时不同 worker 的刷新时刻不同，
+#      因此下面 decode 失败还会强制刷新一次（见 decode_keycloak_token）。
 _jwks_cache: dict[str, Any] = {"fetched_at": 0.0, "keys": []}
 # 短 TTL + 验签失败强制刷新：Keycloak 轮换签名密钥后，长缓存会让所有令牌验签失败
 JWKS_TTL_SECONDS = 300
 
 
 def _fetch_jwks(settings: SecuritySettings, *, force: bool = False) -> list[dict[str, Any]]:
+    """取 JWKS 公钥列表，命中 TTL 内的缓存则直接返回。
+
+    注意这里用的是**同步** httpx，而调用链（``resolve_identity``）是 async：
+    缓存未命中时会在事件循环里阻塞最多 5 秒（timeout）。JWKS 每 5 分钟才刷一次，
+    正常情况下影响有限；但 Keycloak 不可达时，每个请求都可能付这 5 秒。
+    要彻底解决需改为 httpx.AsyncClient，并把本函数一并改成 async。
+    """
     now = time.time()
     if not force and _jwks_cache["keys"] and now - _jwks_cache["fetched_at"] < JWKS_TTL_SECONDS:
         return _jwks_cache["keys"]
@@ -72,6 +87,17 @@ def _fetch_jwks(settings: SecuritySettings, *, force: bool = False) -> list[dict
 def _decode_with_keys(
     token: str, settings: SecuritySettings, keys: list[dict[str, Any]]
 ) -> dict[str, Any]:
+    """用给定公钥集合验签并解析声明。
+
+    两处刻意保留的宽松处理，改动前请确认影响：
+
+    * ``kid`` 未命中时回退到 ``keys[0]``：部分 IdP 发的令牌不带 kid，此时只能试第一个。
+      代价是**可能用错误的密钥验签**（多 key 场景）；安全边界靠 issuer/audience 校验兜底
+      （``keycloak_verify_issuer`` 默认开），不是靠 kid 精确匹配。
+    * ``algorithms=["RS256"]`` 硬编码：IdP 换成 ES256/PS256 时会全量 401，
+      报的是"令牌校验失败"，排查方向容易走偏。要支持多算法必须显式加白名单，
+      不要改成"接受所有"（那会引入 alg=none 类风险）。
+    """
     from jose import jwt
     from jose.exceptions import JWTError
 

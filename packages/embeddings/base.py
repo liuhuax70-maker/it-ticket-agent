@@ -29,6 +29,13 @@ class Embedder(ABC):
         """查询侧：按模型要求加指令后向量化。"""
 
     async def embed(self, texts: list[str], kind: str = "document") -> list[list[float]]:
+        """按 ``kind`` 分发到查询侧或文档侧。
+
+        ⚠️ 未知 ``kind`` 会**静默落到文档侧**。这是有意的宽松（避免上游新增枚举值
+        就整条链路报错），但代价必须知道：BGE 中文系列里"查询侧加指令、文档侧不加"，
+        指令加错位置会让召回明显变差且不报任何错。所以新增 kind 时必须同步：
+        上游 ``EmbedRequest.kind`` 的 Literal、以及这里的显式分支。
+        """
         if kind == "query":
             return [await self.embed_query(t) for t in texts]
         return await self.embed_documents(texts)

@@ -1,7 +1,10 @@
 """检索器抽象与共享过滤契约。
 
 过滤契约（``FilterDict``）是 stores 与业务层之间的唯一约定，
-由 ``services/retrieval/app/filters.py`` 从身份编译而来，stores 只做机械翻译：
+stores 只做机械翻译（Milvus ``_compile_expr`` / OpenSearch ``_compile_filter``）。
+**编译发生在编排层的 route 节点**（``services/query-orchestrator`` 里由 Identity
+构造 ACL 后调用 :func:`packages.retrievers.filters.compile_filters`）；
+``services/retrieval/app/filters.py`` 只是它的薄转发，不解析身份。
 
     {
         "must":               {"tenant_id": "default"},          # 必须全等
@@ -13,6 +16,10 @@
         ],
         "doc_ids":            ["d_xxx"],                          # 可选，限定文档
     }
+
+语义（两个 store 必须 1:1 翻译，改一处就要同步另一处）：
+    clause 之间是 **OR**，clause 内部是 **AND**，``must`` 与所有 clause 是 **AND**。
+    注意 ``must.tenant_id`` 对**所有**分支生效——即 ``public`` 也限本租户。
 
 安全铁律：过滤必须**下沉**到 Milvus ``expr`` / OpenSearch ``filter``，
 绝不允许在应用层对 top_k 结果做二次裁剪——那会让越权文档挤占 top_k，
