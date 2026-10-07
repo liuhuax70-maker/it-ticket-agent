@@ -11,6 +11,7 @@ from typing import Any
 from opensearchpy import AsyncOpenSearch
 from opensearchpy.helpers import async_bulk
 
+from packages.common.constants import LIFECYCLE_ACTIVE
 from packages.common.errors import DependencyUnavailable
 from packages.common.logging import get_logger
 from packages.contracts import Chunk, SearchHit
@@ -63,6 +64,10 @@ def build_index_body(analyzer: str) -> dict[str, Any]:
                 "department_id": {"type": "keyword"},
                 "visibility": {"type": "keyword"},
                 "owner": {"type": "keyword"},
+                # 生命周期（失效管理）：已废止文档不参与检索。
+                # 显式声明为 keyword：依赖 dynamic mapping 也能用，但类型一旦被自动推断成
+                # text 就会分词，term 过滤会匹配不上——那是静默失效。
+                "lifecycle": {"type": "keyword"},
             }
         },
     }
@@ -119,15 +124,30 @@ class OpenSearchStore:
         因此创建失败后要**再查一次**，只要索引已存在就算成功。
         """
         try:
-            if await self._index_exists():
-                return
-            await self._client.indices.create(
-                index=self.index, body=build_index_body(self._settings.opensearch_analyzer)
-            )
-            logger.info("已创建 OpenSearch 索引 %s", self.index)
+            if not await self._index_exists():
+                await self._client.indices.create(
+                    index=self.index, body=build_index_body(self._settings.opensearch_analyzer)
+                )
+                logger.info("已创建 OpenSearch 索引 %s", self.index)
+            else:
+                # 已存在时也要**补齐 mapping**：新增字段否则会走 dynamic mapping，
+                # 而它把字符串推断成 text（分词），term 过滤匹配不上——
+                # 那是静默失效（写了字段、查不到），比报错难排查得多。
+                # put_mapping 幂等：补缺失字段可以，改已有字段类型会被拒绝。
+                await self._client.indices.put_mapping(
+                    index=self.index,
+                    body=build_index_body(self._settings.opensearch_analyzer)["mappings"],
+                )
         except Exception as exc:  # noqa: BLE001
             if await self._index_exists():
-                logger.info("OpenSearch 索引 %s 已由其他实例创建", self.index)
+                # 索引在、mapping 没补齐：功能可用但过滤可能退化，必须留下痕迹。
+                # 不直接抛：启动失败的影响面比"过滤字段缺失"更大，且这里多为类型冲突。
+                logger.warning(
+                    "OpenSearch 索引 %s 的 mapping 未能补齐（%s）："
+                    "新增字段的过滤可能失效，请检查字段类型冲突",
+                    self.index,
+                    exc,
+                )
                 return
             raise DependencyUnavailable("OpenSearch", f"索引初始化失败: {exc}") from exc
 
@@ -164,6 +184,7 @@ class OpenSearchStore:
             "department_id": chunk.acl.department_id,
             "visibility": chunk.acl.visibility.value,
             "owner": chunk.acl.owner or "",
+            "lifecycle": chunk.lifecycle or LIFECYCLE_ACTIVE,
         }
 
     async def bulk_index(self, chunks: list[Chunk]) -> int:
@@ -242,6 +263,22 @@ class OpenSearchStore:
         doc_ids = filters.get("doc_ids") or []
         if doc_ids:
             clauses.append({"terms": {"doc_id": doc_ids}})
+
+        # 排除子句（当前用于"已废止文档不参与检索"）。
+        # 每条 clause 内部是 AND，条与条之间也是 AND——它们都是"必须不命中"的条件。
+        # 注意：未写入该字段的文档**不参与 term 匹配**，因此天然通过排除——
+        # 这正是我们要的（存量文档视为有效），不需要任何数据迁移。
+        must_not = filters.get("must_not") or []
+        if must_not:
+            excludes: list[dict[str, Any]] = []
+            for clause in must_not:
+                # 空 clause 跳过：否则会生成空的 must_not 子句，语义上无害但会让人以为
+                # "确实排除了什么"。与 Milvus 侧的处理保持一致。
+                if not clause:
+                    continue
+                excludes.extend({"term": {k: v}} for k, v in clause.items())
+            if excludes:
+                clauses.append({"bool": {"must_not": excludes}})
         return clauses
 
     async def search(

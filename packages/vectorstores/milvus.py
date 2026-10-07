@@ -17,6 +17,7 @@ from typing import Any
 
 from pymilvus import DataType, MilvusClient
 
+from packages.common.constants import LIFECYCLE_ACTIVE
 from packages.common.errors import DependencyUnavailable
 from packages.common.logging import get_logger
 from packages.contracts import Chunk, SearchHit
@@ -42,7 +43,7 @@ OUTPUT_FIELDS = [
 ]
 
 # 需要建 INVERTED 索引的标量字段（过滤走索引而不是暴力扫描）
-SCALAR_INDEX_FIELDS = ["doc_id", "tenant_id", "department_id", "visibility", "owner"]
+SCALAR_INDEX_FIELDS = ["doc_id", "tenant_id", "department_id", "visibility", "owner", "lifecycle"]
 
 
 def _quote(value: str) -> str:
@@ -67,6 +68,10 @@ def build_collection_schema(client: MilvusClient, dim: int, text_max_length: int
     schema.add_field("department_id", DataType.VARCHAR, max_length=64)
     schema.add_field("visibility", DataType.VARCHAR, max_length=32)
     schema.add_field("owner", DataType.VARCHAR, max_length=128)
+    # ---- 生命周期（失效管理）：已废止的文档不参与检索 ----
+    # ⚠️ 加字段意味着**存量集合必须重建**（schema 没有 alter，见 _ensure_collection_sync）。
+    # 重建前先确认数据可从源重新入库；这一步属于迁移，不是自动升级。
+    schema.add_field("lifecycle", DataType.VARCHAR, max_length=16)
     return schema
 
 
@@ -177,6 +182,9 @@ class MilvusStore:
             "department_id": chunk.acl.department_id,
             "visibility": chunk.acl.visibility.value,
             "owner": (chunk.acl.owner or "")[:128],
+            # 生命周期（失效管理）。缺省为 active：未声明的文档保持可检索，
+            # 这样加字段不需要迁移存量数据。
+            "lifecycle": (chunk.lifecycle or LIFECYCLE_ACTIVE)[:16],
         }
 
     def _upsert_sync(self, rows: list[dict[str, Any]]) -> int:
@@ -192,6 +200,10 @@ class MilvusStore:
             raise DependencyUnavailable(
                 "Milvus", f"chunk 数与向量数不一致: {len(chunks)} != {len(vectors)}"
             )
+        # 写入前确保集合存在（幂等，仅一次 has_collection）。
+        # 只在服务启动时 ensure 是不够的：重建索引会 drop 集合，
+        # 而 drop 发生在服务启动之后——不在这里补一次，重建后的第一次入库必然失败。
+        await self.ensure_collection()
         rows = [self._row(c, v) for c, v in zip(chunks, vectors, strict=True)]
         try:
             return await asyncio.to_thread(self._upsert_sync, rows)
@@ -199,6 +211,14 @@ class MilvusStore:
             raise DependencyUnavailable("Milvus", f"写入失败: {exc}") from exc
 
     async def delete_by_doc(self, doc_id: str) -> int:
+        # collection 不存在时按"没有可删的"处理。
+        # 这不是防御性冗余：重建索引（drop 集合后重新入库）会走 reindex=true，
+        # 第一步就是 delete_document——此时集合本来就不存在，
+        # 硬删会抛 collection not found，把整次入库打成 503。
+        # 类比 SQL：DELETE 作用于不存在的表才该报错，作用于"空集合"不该。
+        exists = await asyncio.to_thread(self._client.has_collection, self.collection)
+        if not exists:
+            return 0
         try:
             await asyncio.to_thread(
                 self._client.delete,
@@ -241,6 +261,20 @@ class MilvusStore:
         if doc_ids:
             joined = ", ".join(_quote(d) for d in doc_ids)
             parts.append(f"doc_id in [{joined}]")
+
+        # 排除子句（当前用于"已废止文档不参与检索"），与 OpenSearch 侧 1:1 对应。
+        # 空 clause 要跳过：否则会拼出 `not ()` 这种非法 expr，Milvus 会直接报错，
+        # 而报错发生在检索这一步，现象是"问答全挂"，排查成本远高于在这里判一次空。
+        must_not = filters.get("must_not") or []
+        if must_not:
+            nots: list[str] = []
+            for clause in must_not:
+                if not clause:
+                    continue
+                ands = [f"{k} == {_quote(v)}" for k, v in clause.items()]
+                nots.append("not (" + " and ".join(ands) + ")")
+            if nots:
+                parts.append("(" + " and ".join(nots) + ")")
 
         return " and ".join(parts)
 

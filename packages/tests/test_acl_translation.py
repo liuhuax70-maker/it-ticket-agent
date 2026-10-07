@@ -123,13 +123,59 @@ def test_both_stores_agree_on_tenant_term() -> None:
 
 
 def test_doc_ids_restriction_is_conjunctive_with_acl() -> None:
+    # 断言用"包含"而不是 endswith：契约里还有生命周期排除子句排在 doc_ids 之后，
+    # 用位置断言会让这条用例因**无关的顺序**变化而失败。
     expr = _expr(FULL_ACL, ["d_1", "d_2"])
-    assert expr.endswith('doc_id in ["d_1", "d_2"]')
+    assert 'doc_id in ["d_1", "d_2"]' in expr
     assert " and " in expr, "doc_ids 是 AND 条件，不是替代 ACL"
 
 
 def test_doc_ids_only_still_enforces_tenant() -> None:
     assert 'tenant_id == "t1"' in _expr(ACL(tenant_id="t1"), ["d_1"])
+
+
+# --------------- 生命周期排除（must_not）：已废止文档不参与检索 ---------------
+
+
+def test_compiled_contract_always_excludes_retired_documents() -> None:
+    """编译器必须**无条件**带上"排除已废止"子句。
+
+    放在编译器而不是各调用方，是因为它必须不可能被忘记：
+    漏传一次，废止文档就会重新出现在答案里，而那是不会报错的静默错误。
+    """
+    filters = compile_filters(FULL_ACL)
+    assert filters is not None
+    assert filters["must_not"] == [{"lifecycle": "retired"}]
+
+
+def test_milvus_excludes_retired() -> None:
+    expr = MilvusStore._compile_expr(compile_filters(FULL_ACL))
+    assert 'not (lifecycle == "retired")' in expr
+
+
+def test_opensearch_excludes_retired() -> None:
+    clauses = OpenSearchStore._compile_filter(compile_filters(FULL_ACL))
+    assert {"bool": {"must_not": [{"term": {"lifecycle": "retired"}}]}} in clauses
+
+
+def test_milvus_and_opensearch_agree_on_exclusion_shape() -> None:
+    """两个引擎对同一契约的排除语义必须一致——不一致就等于有一侧放行了废止文档。"""
+    expr = MilvusStore._compile_expr(compile_filters(FULL_ACL))
+    clauses = OpenSearchStore._compile_filter(compile_filters(FULL_ACL))
+    assert ('not (lifecycle == "retired")' in expr) == (
+        any(
+            c.get("bool", {}).get("must_not") == [{"term": {"lifecycle": "retired"}}]
+            for c in clauses
+        )
+    )
+
+
+def test_empty_must_not_clause_is_ignored() -> None:
+    """空 clause 必须被跳过：Milvus 侧会拼出非法的 `not ()`，直接报错。"""
+    filters: FilterDict = {"must": {"tenant_id": "t1"}, "must_not": [{}]}
+    assert "not ()" not in MilvusStore._compile_expr(filters)
+    assert MilvusStore._compile_expr(filters) == 'tenant_id == "t1"'
+    assert OpenSearchStore._compile_filter(filters) == [{"term": {"tenant_id": "t1"}}]
 
 
 # ---------------- 空契约 = match-all（危险行为，必须钉住） ----------------

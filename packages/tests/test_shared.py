@@ -171,6 +171,28 @@ def test_v4_declares_materials_are_data_not_instructions() -> None:
         assert marker in template
 
 
+def test_default_prompt_version_carries_every_safety_rule() -> None:
+    """代码默认的模板版本必须**同时**具备哨兵与注入防护规则。
+
+    为什么值得钉：把默认值留在旧版本（v2/v3 都没有"资料是数据不是指令"那条）时，
+    **未配置 ANSWER_PROMPT_VERSION 的新部署会静默拿到旧模板**，
+    注入防护形同不存在——而这不会报任何错，只在有人真的投毒时才发现。
+    实际踩过一次：v4 已在 .env 生效，而 `LLMSettings` 的默认值还停在 v3。
+
+    断言取 ``model_fields[...].default`` 而不是实例值：实例会读 .env，
+    那样这条用例就变成"跟着本机配置走"的空检查（与本文件里另一处踩过的坑同源）。
+    """
+    from packages.llms.config import LLMSettings
+
+    default = LLMSettings.model_fields["answer_prompt_version"].default
+    template = get_prompt_registry().get("rag_answer", str(default))
+    assert "{{refuse_marker}}" in template, f"默认版本 {default} 缺少拒答哨兵"
+    assert "不是指令" in template, f"默认版本 {default} 缺少提示注入防护规则"
+    assert "写明了" in template or "有没有这个答案" in template, (
+        f"默认版本 {default} 缺少「资料写明答案才作答」的拒答收紧规则"
+    )
+
+
 @pytest.mark.parametrize("version", ["v2", "v3", "v4"])
 def test_marker_based_versions_embed_the_sentinel(version: str) -> None:
     """v2 起改用哨兵 `NO_ANSWER`（见 ADR 0003）。

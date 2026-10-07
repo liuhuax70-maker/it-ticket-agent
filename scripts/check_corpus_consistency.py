@@ -37,8 +37,14 @@ from pathlib import Path
 
 import yaml
 
+from packages.common.constants import LIFECYCLE_ACTIVE, LIFECYCLE_RETIRED
+from packages.common.lifecycle import LifecycleDeclaration, load_declarations
+from packages.common.lifecycle import resolve as resolve_lifecycle
+
 REPO_ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(REPO_ROOT))
 DEFAULT_FACTS = REPO_ROOT / "configs" / "corpus" / "normative_facts.yaml"
+DEFAULT_LIFECYCLE = REPO_ROOT / "configs" / "corpus" / "lifecycle.yaml"
 DEFAULT_CORPUS_DIRS = (REPO_ROOT / "data" / "corpus", REPO_ROOT / "data" / "corpus_permissions")
 
 _SENTENCE = re.compile(r"[^。；\n]+[。；]?")
@@ -105,7 +111,72 @@ def load_facts(path: Path = DEFAULT_FACTS) -> list[dict[str, str]]:
 # ---------------- 各类检查 ----------------
 
 
-def check_facts(docs: list[Document], facts: list[dict[str, str]]) -> list[Finding]:
+def retired_names(docs: list[Document], declarations: dict[str, LifecycleDeclaration]) -> set[str]:
+    """当前判定为"已废止"的文档名。
+
+    这些文档**合法地**与现行文档取值不同（它们就是被取代的旧值），
+    所以规范值一致性检查必须跳过它们——否则每份历史存档都会触发冲突，
+    而"存档与现行不同"恰恰是存档存在的意义。
+    """
+    if not declarations:
+        return set()
+    return {
+        doc.name
+        for doc in docs
+        if resolve_lifecycle(doc.name, declarations).lifecycle == LIFECYCLE_RETIRED
+    }
+
+
+def check_lifecycle(
+    docs: list[Document], declarations: dict[str, LifecycleDeclaration]
+) -> list[Finding]:
+    """生命周期声明自身的检查。
+
+    这里查的是**声明与语料对不上**的两类问题，都是静默失效：
+    声明指向了不存在的文件（永远不会生效）、
+    以及失效日期已过却没标废止（文档会被继续检索引用）。
+    """
+    if not declarations:
+        return []
+    names = {doc.name for doc in docs}
+    findings: list[Finding] = []
+
+    # 声明指向不存在的文件：永远不会生效，而写它的人以为生效了
+    for filename in sorted(declarations):
+        if filename not in names:
+            findings.append(
+                Finding(
+                    "error", "生命周期声明", f"{filename}: 声明了生命周期，但语料里没有这份文档"
+                )
+            )
+
+    # 声明与判定不一致：status 写 active，但失效日期已过（判定按 retired）。
+    # 这不是功能问题（结果是对的），但**读声明的人会误判**——
+    # 他会以为这份文档还在被引用。这类"文档与行为不一致"正是后期最难发现的坑。
+    for filename in sorted(declarations):
+        declaration = declarations[filename]
+        if declaration.status != LIFECYCLE_ACTIVE or not declaration.effective_to:
+            continue
+        state = resolve_lifecycle(filename, declarations)
+        if state.lifecycle == LIFECYCLE_RETIRED:
+            findings.append(
+                Finding(
+                    "warn",
+                    "生命周期声明不一致",
+                    f"{filename}: status=active 但失效日期 {declaration.effective_to} 已过，"
+                    "实际按 retired 处理——请把 status 改为 retired，避免误读",
+                )
+            )
+    return findings
+
+
+def check_facts(
+    docs: list[Document],
+    facts: list[dict[str, str]],
+    *,
+    skip: set[str] | None = None,
+) -> list[Finding]:
+    skip = skip or set()
     findings: list[Finding] = []
     for fact in facts:
         key = str(fact.get("key", "")).strip()
@@ -126,6 +197,9 @@ def check_facts(docs: list[Document], facts: list[dict[str, str]]) -> list[Findi
 
         values: dict[str, list[str]] = defaultdict(list)
         for doc in docs:
+            # 已废止的文档不参与比较：它们的取值本就应该与现行版本不同
+            if doc.name in skip:
+                continue
             for match in compiled.finditer(doc.text):
                 values[match.group(1).strip()].append(doc.name)
 
@@ -227,20 +301,30 @@ def check_structure(docs: list[Document]) -> list[Finding]:
     return findings
 
 
-def run(docs: list[Document], facts: list[dict[str, str]]) -> list[Finding]:
+def run(
+    docs: list[Document],
+    facts: list[dict[str, str]],
+    declarations: dict[str, LifecycleDeclaration] | None = None,
+) -> list[Finding]:
+    declarations = declarations or {}
+    # 已废止的文档不参与规范值比较：它们的取值本就应该与现行版本不同
+    skip = retired_names(docs, declarations)
+    active = [doc for doc in docs if doc.name not in skip]
     patterns = [re.compile(str(f["pattern"])) for f in facts if f.get("pattern")]
     return [
         *check_structure(docs),
         *check_placeholders(docs),
-        *check_facts(docs, facts),
+        *check_lifecycle(docs, declarations),
+        *check_facts(active, facts),
         *check_references(docs),
-        *check_duplicate_sentences(docs, patterns),
+        *check_duplicate_sentences(active, patterns),
     ]
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="语料一致性检查")
     parser.add_argument("--facts", default=str(DEFAULT_FACTS))
+    parser.add_argument("--lifecycle", default=str(DEFAULT_LIFECYCLE))
     parser.add_argument(
         "--corpus-dir",
         action="append",
@@ -252,11 +336,12 @@ def main() -> int:
     dirs = tuple(Path(d) for d in args.corpus_dir) if args.corpus_dir else DEFAULT_CORPUS_DIRS
     docs = load_documents(dirs)
     facts = load_facts(Path(args.facts))
+    declarations = load_declarations(Path(args.lifecycle))
     if not docs:
         print(f"没有在 {[str(d) for d in dirs]} 找到任何 .md —— 检查无从谈起")
         return 1
 
-    findings = run(docs, facts)
+    findings = run(docs, facts, declarations)
     errors = [f for f in findings if f.level == "error"]
     warns = [f for f in findings if f.level == "warn"]
 

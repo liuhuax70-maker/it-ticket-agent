@@ -27,8 +27,10 @@ from app.config import Settings
 from app.metadata import MetadataStore
 from app.parsers import all_extensions, get_parser
 from app.producers import KafkaChunkSink, build_sink
+from packages.common.constants import LIFECYCLE_ACTIVE, LIFECYCLE_RETIRED
 from packages.common.errors import DependencyUnavailable, NotFoundError, ValidationError
 from packages.common.ids import content_hash, stable_doc_id
+from packages.common.lifecycle import load_declarations, resolve
 from packages.common.logging import get_logger
 from packages.contracts import ACL, Document, IngestRequest, IngestResponse, Visibility
 
@@ -57,6 +59,9 @@ class IngestionService:
             bootstrap=settings.kafka_bootstrap,
             topic=settings.kafka_topic_chunk_events,
         )
+        # 生命周期声明在启动时读一次：入库期间改文件不会自动生效，
+        # 这与"改调参文件必须重启服务"是同一条约束（见 configs/retrievers 的说明）。
+        self._lifecycle = load_declarations(settings.lifecycle_config_path)
 
     # ---------------- 生命周期 ----------------
     async def startup(self) -> None:
@@ -98,6 +103,20 @@ class IngestionService:
                 if stripped:
                     resolved_title = stripped[:120]
                     break
+        # 生命周期按**文件名**匹配声明：上传入库的文件其 source 会被改写成
+        # data/uploads/<原名>，按完整路径匹配必然对不上。
+        state = resolve(Path(source).name, self._lifecycle)
+        metadata: dict[str, object] = {
+            "size_bytes": len(text.encode("utf-8")),
+            "lifecycle": state.lifecycle,
+            "lifecycle_reason": state.reason,
+        }
+        if state.details:
+            # 生效/失效日期与被谁取代——供台账与人工查看，不参与过滤
+            metadata["lifecycle_details"] = dict(state.details)
+        if state.lifecycle == LIFECYCLE_RETIRED:
+            logger.info("文档已废止，入库后不参与检索: %s（%s）", source, state.reason)
+
         return Document(
             doc_id=stable_doc_id(source),
             source=source,
@@ -105,7 +124,7 @@ class IngestionService:
             content=text,
             content_hash=content_hash(text),
             acl=acl,
-            metadata={"size_bytes": len(text.encode("utf-8"))},
+            metadata=metadata,
         )
 
     def _documents_from_request(self, req: IngestRequest, acl: ACL) -> list[Document]:
@@ -167,6 +186,11 @@ class IngestionService:
                 if not chunks:
                     logger.warning("文档切分结果为空，跳过: %s", doc.source)
                     continue
+                # 生命周期落到**每个分块**上：检索过滤下推到存储层，
+                # 而存储层看到的是分块，不是文档——漏了这一步，废止状态就只是元数据。
+                lifecycle = str(doc.metadata.get("lifecycle") or LIFECYCLE_ACTIVE)
+                for chunk in chunks:
+                    chunk.lifecycle = lifecycle
                 timings["chunk"] = timings.get("chunk", 0.0) + _ms(started)
 
                 started = time.perf_counter()

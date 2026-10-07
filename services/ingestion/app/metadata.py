@@ -10,6 +10,7 @@ import uuid
 
 from sqlalchemy import delete, func, or_, select
 
+from packages.common.constants import LIFECYCLE_ACTIVE
 from packages.common.db import session_scope
 from packages.common.logging import get_logger
 from packages.common.models import Chunk as ChunkRow
@@ -18,6 +19,20 @@ from packages.common.models import IngestionJob, Tenant
 from packages.contracts import Chunk, Document
 
 logger = get_logger("ingestion.metadata")
+
+
+def _lifecycle_fields(meta: dict | None) -> dict[str, object]:
+    """把文档元数据里的生命周期字段摊平到台账响应里。
+
+    缺省值是 ``active``：没写过生命周期的文档（存量数据）就是现行有效，
+    这与检索侧"排除用 must_not"的口径一致——两处都不要求数据迁移。
+    """
+    meta = meta or {}
+    return {
+        "lifecycle": meta.get("lifecycle") or LIFECYCLE_ACTIVE,
+        "lifecycle_reason": meta.get("lifecycle_reason"),
+        "lifecycle_details": meta.get("lifecycle_details"),
+    }
 
 
 class MetadataStore:
@@ -105,6 +120,7 @@ class MetadataStore:
                 "tenant_id": row.tenant_id,
                 "department_id": row.department_id,
                 "visibility": row.visibility,
+                **_lifecycle_fields(row.meta),
             }
 
     async def list_documents(
@@ -157,6 +173,9 @@ class MetadataStore:
                     "tenant_id": row.tenant_id,
                     "department_id": row.department_id,
                     "visibility": row.visibility,
+                    # 生命周期对外可见：台账是"哪些文档已废止、为什么"的唯一查询入口。
+                    # 只存不显示等于没有——运维无法确认废止是否生效，也无法发现漏标。
+                    **_lifecycle_fields(row.meta),
                     "created_at": row.created_at.isoformat() if row.created_at else None,
                     "updated_at": row.updated_at.isoformat() if row.updated_at else None,
                 }

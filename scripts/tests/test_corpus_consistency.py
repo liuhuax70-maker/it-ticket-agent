@@ -18,13 +18,17 @@ from check_corpus_consistency import (  # noqa: E402
     Document,
     check_duplicate_sentences,
     check_facts,
+    check_lifecycle,
     check_placeholders,
     check_references,
     check_structure,
     load_documents,
     load_facts,
+    retired_names,
     run,
 )
+
+from packages.common.lifecycle import LifecycleDeclaration  # noqa: E402
 
 FACTS = [{"key": "核心工作时间", "pattern": r"核心工作时间为([^，。；\n]+)"}]
 
@@ -168,6 +172,62 @@ def test_duplicate_covered_by_a_fact_rule_does_not_warn() -> None:
 
     patterns = [re.compile(FACTS[0]["pattern"])]
     assert check_duplicate_sentences(docs, patterns) == []
+
+
+# ---------------- 生命周期（失效管理）----------------
+
+
+def test_retired_documents_are_skipped_in_fact_comparison() -> None:
+    """已废止的文档合法地与现行文档取值不同——它们就是被取代的旧值。
+
+    不跳过的话，每份历史存档都会触发"规范值冲突"，
+    而"存档与现行不同"恰恰是存档存在的意义。
+    """
+    declarations = {"old.md": LifecycleDeclaration(status="retired", effective_to="2025-12-31")}
+    docs = [
+        _doc("new.md", "# 新\n\n核心工作时间为每日 10:00 至 16:00。"),
+        _doc("old.md", "# 旧\n\n核心工作时间为每日九点三十分至十八点三十分。"),
+    ]
+    skip = retired_names(docs, declarations)
+    assert skip == {"old.md"}
+    assert check_facts(docs, FACTS, skip=skip) == []
+    # 对照：不跳过就会报冲突——证明这条跳过确实在起作用，而不是规则没匹配上
+    assert check_facts(docs, FACTS) and "冲突" in check_facts(docs, FACTS)[0].check
+
+
+def test_declaration_pointing_to_missing_file_is_an_error() -> None:
+    findings = check_lifecycle(
+        [_doc("a.md", "# A\n\n正文。")],
+        {"gone.md": LifecycleDeclaration(status="retired")},
+    )
+    assert len(findings) == 1
+    assert findings[0].level == "error"
+    assert "gone.md" in findings[0].message
+
+
+def test_active_declaration_with_past_effective_to_warns() -> None:
+    """status=active 但失效日期已过：判定结果正确，可是**读声明的人会误判**。
+
+    这类"配置与实际行为不一致"是后期最难发现的坑，所以要显式提醒。
+    """
+    findings = check_lifecycle(
+        [_doc("old.md", "# 旧\n\n正文。")],
+        {"old.md": LifecycleDeclaration(status="active", effective_to="2025-12-31")},
+    )
+    assert len(findings) == 1
+    assert findings[0].level == "warn"
+    assert "不一致" in findings[0].check
+
+
+def test_retired_declaration_needs_no_warning() -> None:
+    """声明与判定一致时不应有任何输出——告警必须保持干净。"""
+    assert (
+        check_lifecycle(
+            [_doc("old.md", "# 旧\n\n正文。")],
+            {"old.md": LifecycleDeclaration(status="retired", effective_to="2025-12-31")},
+        )
+        == []
+    )
 
 
 # ---------------- 真实语料 ----------------

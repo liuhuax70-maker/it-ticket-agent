@@ -14,6 +14,8 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
+from packages.common.constants import LIFECYCLE_ACTIVE
+
 # --------------------------------------------------------------------------
 # 权限 / 元数据
 # --------------------------------------------------------------------------
@@ -85,6 +87,10 @@ class Chunk(BaseModel):
     doc_title: str = ""
     source: str = ""
     token_count: int = 0
+    # 生命周期（失效管理）：已废止的文档不参与检索，见 packages/retrievers/filters.py。
+    # **默认 active** 是刻意的：存量/未声明的文档保持可见，
+    # 这样新字段上线不需要数据迁移，也不会出现"上线即全库搜不到"。
+    lifecycle: str = LIFECYCLE_ACTIVE
     acl: ACL = Field(default_factory=ACL)
 
 

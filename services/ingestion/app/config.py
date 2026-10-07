@@ -22,6 +22,11 @@ class Settings(BaseAppSettings):
     min_chunk_size: int = 40
     max_file_size_mb: int = 32
 
+    # ---- 生命周期（失效管理）----
+    # 声明式语料生命周期：哪些文档已废止、各自的生效/失效日期。
+    # 文件不存在时全部按现行有效处理——不加声明不应改变任何既有行为。
+    lifecycle_config_path: str = "configs/corpus/lifecycle.yaml"
+
     # ---- 下游 indexing ----
     indexing_url: str = "http://localhost:8005"
     indexing_timeout: float = 300.0

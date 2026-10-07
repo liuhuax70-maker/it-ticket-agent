@@ -14,6 +14,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from packages.common.constants import EXCLUDE_LIFECYCLE
 from packages.contracts import ACL
 from packages.retrievers.base import FilterDict
 
@@ -51,6 +52,17 @@ def compile_filters(acl: ACL | None, doc_ids: list[str] | None = None) -> Filter
     filters: FilterDict = {
         "must": {"tenant_id": acl.tenant_id},
         "visibility_clauses": clauses,
+        # 已废止（被取代/已失效）的文档**不参与检索**——与租户隔离同级的系统不变量。
+        #
+        # 放在编译器而不是调用方，是因为它必须**不可能被忘记**：
+        # 若由每个检索入口各自传，只要有一个入口漏传，废止文档就会重新出现在答案里，
+        # 而"引用了一份已废止制度"这类错误不会报错，只会安静地误导用户。
+        #
+        # 用 must_not（排除）而不是 must（要求 lifecycle == active）：
+        # 存量文档没有这个字段，Milvus 未赋值是 ""、OpenSearch 不参与 term 匹配，
+        # 两种都天然通过排除，因此**不需要任何数据迁移**；
+        # 反过来写 must 会让上线那一刻全库搜不到东西。
+        "must_not": EXCLUDE_LIFECYCLE,
     }
     if doc_ids:
         filters["doc_ids"] = list(doc_ids)
