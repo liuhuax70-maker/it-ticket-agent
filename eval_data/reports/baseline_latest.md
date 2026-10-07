@@ -1,7 +1,7 @@
-# 评测基线（20261007T151145Z）
+# 评测基线（20261007T154229Z）
 
 - 样本总数：54（正样本 34 / 负样本 20）
-- 延迟：P50 1362.5 ms，P95 2841.8 ms
+- 延迟：P50 1721.2 ms，P95 2093.5 ms
 
 ## L1 确定性指标
 
@@ -23,11 +23,6 @@
 | 指标 | 数值 |
 | --- | --- |
 | 作答模型 | deepseek-flash |
-| faithfulness | 0.9306 |
-| context_precision | 0.9583 |
-| context_recall | 1.0000 |
-| 裁判模型 | deepseek/deepseek-chat |
-| 裁判实际服务模型 | deepseek-flash |
 
 ## 分组（总量会掩盖小分组塌方）
 

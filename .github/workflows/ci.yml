@@ -32,6 +32,13 @@ jobs:
       - name: 类型检查
         run: python scripts/type_check.py
 
+      # 语料一致性：规范值冲突、引用断链、重复句、占位符。
+      # 放这里而不是评测 workflow：它**不依赖模型与知识库**，纯读文件，秒级，
+      # 因此每次 PR 都能跑——而"同一事实在两篇文档里写了不同值"这类问题，
+      # 恰恰是在改文档的 PR 里引入的。
+      - name: 语料一致性检查
+        run: python scripts/check_corpus_consistency.py
+
   test:
     name: 单元与集成测试（全部离线，不需要外部依赖）
     runs-on: ubuntu-latest

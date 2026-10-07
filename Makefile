@@ -3,7 +3,7 @@ PY ?= python
 
 .DEFAULT_GOAL := help
 
-.PHONY: help install infra-up infra-full infra-down infra-ps migrate seed index api gateway orchestrator retrieval ingestion indexing model-gateway run-all verify corpus verify-permissions eval eval-fast eval-preflight eval-rescore eval-gate eval-baseline type-check test lint fmt
+.PHONY: help install infra-up infra-full infra-down infra-ps migrate seed index api gateway orchestrator retrieval ingestion indexing model-gateway run-all verify corpus corpus-check verify-permissions eval eval-fast eval-preflight eval-rescore eval-gate eval-baseline type-check test lint fmt
 
 help: ## 列出所有可用目标
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-16s\033[0m %s\n", $$1, $$2}'
@@ -31,6 +31,9 @@ seed: ## 导入语料并建立索引（调用 ingestion -> indexing）
 
 verify: ## 端到端闭环验收
 	$(PY) scripts/verify_loop.py
+
+corpus-check: ## 语料一致性检查（规范值冲突、引用断链、重复句、占位符）
+	$(PY) scripts/check_corpus_consistency.py
 
 corpus: ## 准备评测/权限语料（通用 + 权限）
 	$(PY) scripts/prepare_corpus.py
