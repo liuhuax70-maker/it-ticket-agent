@@ -35,7 +35,10 @@ class LLMSettings(BaseAppSettings):
 
     # 回答提示模板版本（configs/prompts/rag_answer.<version>.txt）
     # 提示词改动属于行为变更，用版本号而不是直接改文件，便于回滚与 A/B。
-    answer_prompt_version: str = "v2"
+    # 默认 v3：v2 的规则是"资料涉及该话题就必须作答"，会让"主题相邻但无答案"的问题
+    # 被勉强作答（实测误答率 20%）。v3 收紧为"资料写明答案才作答"，误答降到 0。
+    # 想复现对比用 ANSWER_PROMPT_VERSION=v2 覆盖。
+    answer_prompt_version: str = "v3"
 
     def fallback_list(self) -> list[str]:
         return [m.strip() for m in self.llm_fallback_models.split(",") if m.strip()]

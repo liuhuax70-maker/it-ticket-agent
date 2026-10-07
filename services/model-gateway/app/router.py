@@ -25,7 +25,7 @@ from packages.prompts import get_prompt_registry
 logger = get_logger("model_gateway.router")
 
 # 默认提示版本；实际取值由 Settings.answer_prompt_version 传入
-DEFAULT_PROMPT_VERSION = "v2"
+DEFAULT_PROMPT_VERSION = "v3"
 
 
 def format_context(req: GenerateRequest) -> str:

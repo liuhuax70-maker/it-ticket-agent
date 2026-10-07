@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import pytest
 
+from packages.common.constants import REFUSE_MARKER
 from packages.common.errors import ConfigError
 from packages.common.ids import content_hash, stable_chunk_id, stable_doc_id
 from packages.common.settings import BaseAppSettings
@@ -106,6 +107,42 @@ def test_prompt_registry_reads_versioned_template() -> None:
     template = registry.get("rag_answer", "v1")
     assert "{{context}}" in template
     assert {"refuse_text", "context", "query"} <= registry.variables("rag_answer", "v1")
+
+
+@pytest.mark.parametrize("version", ["v1", "v2", "v3"])
+def test_every_declared_prompt_version_renders(version: str) -> None:
+    """模板是契约：`ANSWER_PROMPT_VERSION` 指向哪个版本，那个版本就必须存在且可渲染。
+
+    这条测试的价值在于**版本切换前的快速失败**——配置指向一个不存在的模板时，
+    若没有它，故障要等到线上请求才暴露（而且是每个请求都失败）。
+    """
+    registry = get_prompt_registry()
+    variables = registry.variables("rag_answer", version)
+    assert {"context", "query"} <= variables
+    rendered = registry.render(
+        "rag_answer",
+        version,
+        context="[1] 上下文",
+        query="问题",
+        refuse_marker=REFUSE_MARKER,
+        refuse_text="不知道",
+    )
+    assert "{{" not in rendered, "渲染后不能残留占位符"
+
+
+@pytest.mark.parametrize("version", ["v2", "v3"])
+def test_marker_based_versions_embed_the_sentinel(version: str) -> None:
+    """v2 起改用哨兵 `NO_ANSWER`（见 ADR 0003）。
+
+    断言分两段：模板里是**占位符**，渲染后才是**哨兵字面量**。
+    少了哨兵，模型的拒答就只能靠自然语言匹配——那正是 ADR 0003 要摆脱的不可靠路径。
+    """
+    registry = get_prompt_registry()
+    assert "{{refuse_marker}}" in registry.get("rag_answer", version), "模板里缺少哨兵占位符"
+    rendered = registry.render(
+        "rag_answer", version, context="c", query="q", refuse_marker=REFUSE_MARKER
+    )
+    assert REFUSE_MARKER in rendered, "渲染后必须把哨兵替换进去"
 
 
 def test_prompt_render_rejects_missing_variable() -> None:
