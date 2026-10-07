@@ -1,0 +1,55 @@
+name: eval-regression
+
+# 为什么把评测单独放一个 workflow：
+#   它需要**真实可用的模型与知识库**（有成本、有外网依赖），
+#   因此不放在每次 PR 上跑，而是 nightly + 手工触发。
+#   改动提示词、切分参数、检索权重后，手工触发一次即可得到回归对比。
+on:
+  schedule:
+    - cron: "0 2 * * *" # 每天 02:00 UTC
+  workflow_dispatch:
+    inputs:
+      limit:
+        description: "评测样本数上限"
+        required: false
+        default: "20"
+
+jobs:
+  ragas:
+    name: RAGAS 回归评测
+    runs-on: ubuntu-latest
+    # 需要预先在仓库 Secrets 里配置：
+    #   RAG_GATEWAY_URL  —— 可达的 api-gateway 地址（如 https://rag-staging.example.com）
+    #   RAG_EVAL_TOKEN   —— 调用 /chat 所需的访问令牌（开启鉴权时必需）
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: 安装评测依赖
+        run: pip install -e ".[eval]"
+
+      - name: 运行评测跑批
+        env:
+          # 评测跑批默认指向 localhost；CI 里通过 RAG_* 环境变量指向预发环境
+          RAG_GATEWAY_URL: ${{ secrets.RAG_GATEWAY_URL }}
+          RAG_EVAL_URL: ${{ secrets.RAG_EVAL_URL }}
+          RAG_EVAL_TOKEN: ${{ secrets.RAG_EVAL_TOKEN }}
+          EVAL_LIMIT: ${{ github.event.inputs.limit || '20' }}
+        run: |
+          if [ -z "$RAG_EVAL_URL" ]; then
+            echo "未配置 RAG_EVAL_URL，跳过评测"
+            exit 0
+          fi
+          python -m pipelines.eval_dag.run --limit "$EVAL_LIMIT"
+
+      - name: 上传评测报告
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ragas-report
+          path: eval_data/reports/
+          if-no-files-found: ignore
+          retention-days: 30

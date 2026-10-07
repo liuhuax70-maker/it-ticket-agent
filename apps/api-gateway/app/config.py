@@ -32,6 +32,9 @@ class Settings(SecuritySettings):
     # ---- 审计 ----
     audit_enabled: bool = True
 
+    # ---- 上传 ----
+    max_upload_mb: int = 32
+
     # ---- 前端 ----
     serve_ui: bool = True
     cors_origins: str = "http://localhost:3000,http://localhost:8000"

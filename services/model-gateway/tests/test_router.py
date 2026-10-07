@@ -3,13 +3,12 @@
 from __future__ import annotations
 
 import pytest
+from app.fallback import FallbackPolicy
+from app.router import build_messages, format_context
 
 from packages.contracts import ContextItem, GenerateRequest
 from packages.llms import build_target
 from packages.llms.config import LLMSettings
-
-from app.fallback import FallbackPolicy
-from app.router import build_messages, format_context
 
 
 def _req() -> GenerateRequest:

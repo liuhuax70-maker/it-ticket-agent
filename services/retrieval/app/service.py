@@ -2,6 +2,12 @@
 
 from __future__ import annotations
 
+from app.config import Settings
+from app.filters import build_filters, extract_doc_ids
+from app.hybrid import HybridRetriever
+from app.opensearch_client import BM25Retriever
+from app.rerank import Reranker
+from app.vector_client import VectorRetriever
 from packages.common.logging import get_logger
 from packages.contracts import (
     RerankRequest,
@@ -11,18 +17,13 @@ from packages.contracts import (
 )
 from packages.retrievers import FilterDict
 
-from app.config import Settings
-from app.filters import build_filters, extract_doc_ids
-from app.hybrid import HybridRetriever
-from app.opensearch_client import BM25Retriever
-from app.rerank import Reranker
-from app.vector_client import VectorRetriever
-
 logger = get_logger("retrieval.service")
 
 
 class RetrievalService:
     def __init__(self, settings: Settings) -> None:
+        # 调参文件（configs/retrievers/*.yaml）优先于 .env，便于按环境/域微调召回策略
+        settings = settings.with_overrides()
         self._settings = settings
         self._vector = VectorRetriever(settings, settings)
         self._bm25 = BM25Retriever(settings)

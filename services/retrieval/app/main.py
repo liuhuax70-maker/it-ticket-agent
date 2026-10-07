@@ -6,7 +6,9 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException
 
-from packages.common.constants import SERVICE_RETRIEVAL, VERSION
+from app.config import Settings
+from app.service import RetrievalService
+from packages.common.constants import VERSION
 from packages.common.errors import install_exception_handlers
 from packages.common.logging import get_logger, setup_logging
 from packages.common.settings import load_settings
@@ -18,9 +20,6 @@ from packages.contracts import (
     SearchResponse,
 )
 from packages.observability import init_otel
-
-from app.config import Settings
-from app.service import RetrievalService
 
 settings: Settings = load_settings(Settings)
 

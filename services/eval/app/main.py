@@ -8,17 +8,16 @@ from typing import Any
 from fastapi import FastAPI, Request
 from pydantic import BaseModel
 
+from app.config import Settings
+from app.datasets import ensure_dataset, load_samples
+from app.ragas_runner import run
+from app.reports import summarize, write_report
 from packages.common.constants import SERVICE_EVAL, VERSION
 from packages.common.errors import install_exception_handlers
 from packages.common.logging import get_logger, setup_logging
 from packages.common.settings import load_settings
 from packages.contracts import HealthResponse
 from packages.observability import init_otel
-
-from app.config import Settings
-from app.datasets import ensure_dataset, load_samples
-from app.ragas_runner import run
-from app.reports import summarize, write_report
 
 settings: Settings = load_settings(Settings)
 

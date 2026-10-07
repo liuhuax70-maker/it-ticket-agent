@@ -12,16 +12,15 @@ from __future__ import annotations
 import time
 from pathlib import Path
 
-from packages.common.errors import DependencyUnavailable, NotFoundError, ValidationError
-from packages.common.ids import content_hash, stable_doc_id
-from packages.common.logging import get_logger
-from packages.contracts import ACL, Document, IngestRequest, IngestResponse, Visibility
-
 from app.chunkers import ChunkingConfig, RecursiveChunker
 from app.config import Settings
 from app.metadata import MetadataStore
 from app.parsers import all_extensions, get_parser
 from app.producers import KafkaChunkSink, build_sink
+from packages.common.errors import DependencyUnavailable, NotFoundError, ValidationError
+from packages.common.ids import content_hash, stable_doc_id
+from packages.common.logging import get_logger
+from packages.contracts import ACL, Document, IngestRequest, IngestResponse, Visibility
 
 logger = get_logger("ingestion.service")
 

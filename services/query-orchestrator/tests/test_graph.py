@@ -3,6 +3,11 @@
 from __future__ import annotations
 
 import pytest
+from app.clients.cache import QueryCache
+from app.config import Settings
+from app.graph import build_graph
+from app.graph.edges import NODE_RETRIEVE, NODE_ROUTE
+from app.graph.state import RAGState
 
 from packages.common.constants import REFUSE_TEXT
 from packages.contracts import (
@@ -12,12 +17,6 @@ from packages.contracts import (
     SearchRequest,
     SearchResponse,
 )
-
-from app.clients.cache import QueryCache
-from app.config import Settings
-from app.graph import build_graph
-from app.graph.edges import NODE_RETRIEVE, NODE_ROUTE
-from app.graph.state import RAGState
 
 ANSWER_WITH_CITATION = "转正后凭发票报销，上限五百元[1]。"
 ANSWER_WITHOUT_CITATION = "转正后凭发票报销，上限五百元。"

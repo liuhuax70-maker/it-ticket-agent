@@ -15,12 +15,6 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
-from packages.common.constants import SERVICE_API_GATEWAY, VERSION
-from packages.common.errors import install_exception_handlers
-from packages.common.logging import get_logger, setup_logging
-from packages.common.settings import load_settings
-from packages.observability import init_otel
-
 from app.clients import (
     FeedbackClient,
     IngestionClient,
@@ -33,6 +27,11 @@ from app.clients import (
 from app.config import Settings
 from app.middleware import AuditMiddleware, IdentityMiddleware, RateLimitMiddleware
 from app.routers import admin, chat, documents, feedback, health
+from packages.common.constants import SERVICE_API_GATEWAY, VERSION
+from packages.common.errors import install_exception_handlers
+from packages.common.logging import get_logger, setup_logging
+from packages.common.settings import load_settings
+from packages.observability import init_otel
 
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 

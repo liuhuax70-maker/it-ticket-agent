@@ -8,13 +8,12 @@ from __future__ import annotations
 
 import time
 
-from packages.common.logging import get_logger
-from packages.contracts import GenerateRequest
-
 from app.clients.model_gateway import ModelGatewayClient
 from app.config import Settings
 from app.graph.nodes.base import ms
 from app.graph.state import RAGState
+from packages.common.logging import get_logger
+from packages.contracts import GenerateRequest
 
 logger = get_logger("orchestrator.node.generate")
 

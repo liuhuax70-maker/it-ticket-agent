@@ -9,7 +9,7 @@
 
 from __future__ import annotations
 
-from enum import Enum
+from enum import StrEnum
 from typing import Any, Literal
 
 from pydantic import BaseModel, Field
@@ -19,7 +19,7 @@ from pydantic import BaseModel, Field
 # --------------------------------------------------------------------------
 
 
-class Visibility(str, Enum):
+class Visibility(StrEnum):
     """文档可见级别，供 ACL 过滤使用。"""
 
     public = "public"          # 全员可见
@@ -104,7 +104,7 @@ class Citation(BaseModel):
 # --------------------------------------------------------------------------
 
 
-class RetrieveMode(str, Enum):
+class RetrieveMode(StrEnum):
     vector = "vector"
     keyword = "keyword"
     hybrid = "hybrid"

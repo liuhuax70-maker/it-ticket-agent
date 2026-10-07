@@ -11,14 +11,13 @@ from __future__ import annotations
 import asyncio
 import time
 
+from app.opensearch_client import BM25Retriever
+from app.vector_client import VectorRetriever
 from packages.common.errors import DependencyUnavailable
 from packages.common.logging import get_logger
 from packages.contracts import RetrieveMode, SearchHit
 from packages.retrievers import FilterDict, reciprocal_rank_fusion
 from packages.retrievers.base import RETRIEVER_BM25, RETRIEVER_VECTOR
-
-from app.opensearch_client import BM25Retriever
-from app.vector_client import VectorRetriever
 
 logger = get_logger("retrieval.hybrid")
 

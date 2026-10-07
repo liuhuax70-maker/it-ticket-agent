@@ -5,6 +5,9 @@ from __future__ import annotations
 import asyncio
 import time
 
+from app.config import Settings
+from app.fallback import FallbackPolicy
+from app.quota import QuotaGuard
 from packages.common.constants import REFUSE_TEXT
 from packages.common.errors import UpstreamError
 from packages.common.logging import get_logger
@@ -18,10 +21,6 @@ from packages.contracts import (
 from packages.embeddings import get_embedder
 from packages.llms import LLMClient, ModelTarget, build_target
 from packages.prompts import get_prompt_registry
-
-from app.config import Settings
-from app.fallback import FallbackPolicy
-from app.quota import QuotaGuard
 
 logger = get_logger("model_gateway.router")
 
@@ -104,7 +103,6 @@ class ModelRouter:
 
         for idx, target in enumerate(attempts):
             try:
-                started = time.perf_counter()
                 result = await self._client.complete_target(
                     target, messages, temperature=temperature, max_tokens=max_tokens
                 )

@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
-import hashlib
+import os
 import sys
 from pathlib import Path
 
@@ -23,7 +23,7 @@ sys.path.insert(0, str(ROOT))
 
 from packages.common.ids import content_hash, stable_doc_id  # noqa: E402
 
-INGESTION_URL = "http://localhost:8004"
+INGESTION_URL = os.getenv("RAG_INGESTION_URL", "http://localhost:8004")
 _SUPPORTED = {".md", ".markdown", ".txt", ".pdf"}
 
 

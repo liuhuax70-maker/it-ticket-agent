@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from packages.contracts import SearchHit
-
 from app.graph.nodes.guard import build_citations, extract_citation_indexes
+
+from packages.contracts import SearchHit
 
 
 def _hits(count: int) -> list[SearchHit]:

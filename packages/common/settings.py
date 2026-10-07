@@ -8,7 +8,7 @@
 
 from __future__ import annotations
 
-from functools import lru_cache
+from functools import cache
 from typing import TypeVar
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -38,7 +38,7 @@ class BaseAppSettings(BaseSettings):
     otel_endpoint: str = ""
 
 
-@lru_cache(maxsize=None)
+@cache
 def _cached(cls: type) -> BaseAppSettings:
     return cls()
 

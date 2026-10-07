@@ -8,14 +8,13 @@ from __future__ import annotations
 
 import time
 
-from packages.common.errors import UpstreamError
-from packages.common.logging import get_logger
-from packages.contracts import SearchRequest
-
 from app.clients.retrieval import RetrievalClient
 from app.config import Settings
 from app.graph.nodes.base import add_error, merge_timing
 from app.graph.state import RAGState
+from packages.common.errors import UpstreamError
+from packages.common.logging import get_logger
+from packages.contracts import SearchRequest
 
 logger = get_logger("orchestrator.node.retrieve")
 

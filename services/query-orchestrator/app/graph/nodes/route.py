@@ -9,13 +9,12 @@ from __future__ import annotations
 import re
 import time
 
-from packages.common.logging import get_logger
-from packages.contracts import RetrieveMode
-from packages.security import Identity
-
 from app.config import Settings
 from app.graph.nodes.base import merge_timing
 from app.graph.state import RAGState
+from packages.common.logging import get_logger
+from packages.contracts import RetrieveMode
+from packages.security import Identity
 
 logger = get_logger("orchestrator.node.route")
 

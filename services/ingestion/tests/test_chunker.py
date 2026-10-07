@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
+from app.chunkers import ChunkingConfig, RecursiveChunker
+
 from packages.common.ids import content_hash, stable_doc_id
 from packages.contracts import ACL, Document
-
-from app.chunkers import ChunkingConfig, RecursiveChunker
 
 SAMPLE = """# 员工手册
 

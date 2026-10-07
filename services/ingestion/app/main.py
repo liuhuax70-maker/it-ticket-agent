@@ -4,19 +4,19 @@ from __future__ import annotations
 
 import asyncio
 from contextlib import asynccontextmanager
+from typing import Annotated
 
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 
-from packages.common.constants import SERVICE_INGESTION, VERSION
+from app.config import Settings
+from app.consumers import consume_raw_documents
+from app.service import IngestionService
+from packages.common.constants import VERSION
 from packages.common.errors import NotFoundError, install_exception_handlers
 from packages.common.logging import get_logger, setup_logging
 from packages.common.settings import load_settings
 from packages.contracts import ACL, HealthResponse, IngestRequest, IngestResponse, Visibility
 from packages.observability import init_otel
-
-from app.config import Settings
-from app.consumers import consume_raw_documents
-from app.service import IngestionService
 
 settings: Settings = load_settings(Settings)
 
@@ -62,11 +62,11 @@ async def ingest(req: IngestRequest) -> IngestResponse:
 
 @app.post("/ingest/upload", response_model=IngestResponse)
 async def ingest_upload(
-    file: UploadFile = File(...),
-    tenant_id: str = Form(default=""),
-    department_id: str = Form(default=""),
-    visibility: str = Form(default="internal"),
-    reindex: bool = Form(default=False),
+    file: Annotated[UploadFile, File()],
+    tenant_id: Annotated[str, Form()] = "",
+    department_id: Annotated[str, Form()] = "",
+    visibility: Annotated[str, Form()] = "internal",
+    reindex: Annotated[bool, Form()] = False,
 ) -> IngestResponse:
     data = await file.read()
     if not data:

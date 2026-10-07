@@ -1,0 +1,38 @@
+# 检索调参（由 services/retrieval 在启动时加载，优先级高于 .env）
+#
+# 为什么单独放文件而不是全塞 .env：检索参数是**需要反复试的**（召回条数、RRF 权重、
+# 重排开关），放在版本库里可以被 review，也能按环境/域拆多份文件；
+# .env 更适合放「连接信息」这类不常变的东西。
+#
+# 键名必须与 services/retrieval/app/config.py::TUNABLE_KEYS 一致（白名单外的键会被忽略并告警）。
+# 修改后需重启 retrieval 服务生效（启动时读取一次）。
+#
+# 支持的键：
+#   retrieve_mode / top_k / vector_top_k / bm25_top_k / rrf_k /
+#   rrf_weight_vector / rrf_weight_bm25 / min_score / rerank_enabled / rerank_model
+
+retrieval:
+  # vector | keyword | hybrid
+  retrieve_mode: hybrid
+
+  # 最终返回条数
+  top_k: 5
+
+  # 各路召回条数：先多召回，再由重排/截断收敛到 top_k
+  vector_top_k: 20
+  bm25_top_k: 20
+
+  # RRF 平滑常数（经验值 60，越小越偏向头部结果）
+  rrf_k: 60
+
+  # 各路权重：BM25 在精确术语/编号上更稳，向量在语义改写上更强。
+  # 调权重前请先有 eval 结果，否则只是凭感觉挪动。
+  rrf_weight_vector: 1.0
+  rrf_weight_bm25: 1.0
+
+  # 单路检索的最低分阈值（0 = 不过滤）；注意融合分数是 RRF 值，阈值语义不同
+  min_score: 0.0
+
+  # 重排默认关闭：没有 eval set 无法判断重排是好是坏
+  rerank_enabled: false
+  rerank_model: Xenova/ms-marco-MiniLM-L-6-v2

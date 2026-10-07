@@ -14,13 +14,12 @@ from fastapi import Request
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import JSONResponse, Response
 
+from app.config import Settings
 from packages.common.errors import Forbidden, RagError
 from packages.common.ids import new_id
 from packages.common.logging import get_logger
 from packages.security import Identity, resolve_identity
 from packages.security.identity import Unauthorized
-
-from app.config import Settings
 
 logger = get_logger("gateway.identity")
 

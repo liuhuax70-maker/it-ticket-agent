@@ -10,9 +10,8 @@ import json
 from pathlib import Path
 from typing import Any
 
-from packages.common.logging import get_logger
-
 from app.store import FeedbackStore
+from packages.common.logging import get_logger
 
 logger = get_logger("feedback.bad_cases")
 

@@ -15,9 +15,8 @@ from fastapi import Request
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import Response
 
-from packages.common.logging import get_logger
-
 from app.config import Settings
+from packages.common.logging import get_logger
 
 logger = get_logger("gateway.audit")
 

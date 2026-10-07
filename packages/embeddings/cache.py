@@ -15,7 +15,7 @@ logger = get_logger("embeddings.cache")
 
 
 def _key(model: str, kind: str, text: str) -> str:
-    digest = hashlib.sha256(f"{model}|{kind}|{text}".encode("utf-8")).hexdigest()
+    digest = hashlib.sha256(f"{model}|{kind}|{text}".encode()).hexdigest()
     return f"embed:{digest}"
 
 

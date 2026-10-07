@@ -8,14 +8,13 @@ from __future__ import annotations
 
 import time
 
-from packages.common.logging import get_logger
-from packages.contracts import RerankRequest
-
 from app.clients.retrieval import RetrievalClient
 from app.config import Settings
 from app.graph.nodes.base import merge_timing
 from app.graph.state import RAGState
 from app.prompts import build_context_items
+from packages.common.logging import get_logger
+from packages.contracts import RerankRequest
 
 logger = get_logger("orchestrator.node.rerank")
 

@@ -8,6 +8,10 @@ from typing import Any
 
 from fastapi import APIRouter, FastAPI, HTTPException, Request
 
+from app.bad_cases import BadCaseCollector
+from app.config import Settings
+from app.consumers import consume_feedback_events
+from app.store import FeedbackStore
 from packages.common.constants import SERVICE_FEEDBACK, VERSION
 from packages.common.errors import install_exception_handlers
 from packages.common.logging import get_logger, setup_logging
@@ -18,11 +22,6 @@ from packages.contracts import (
     HealthResponse,
 )
 from packages.observability import init_otel
-
-from app.bad_cases import BadCaseCollector
-from app.config import Settings
-from app.consumers import consume_feedback_events
-from app.store import FeedbackStore
 
 settings: Settings = load_settings(Settings)
 

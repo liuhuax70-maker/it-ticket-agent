@@ -10,9 +10,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from packages.common.errors import ValidationError
-
 from app.parsers.base import BaseParser, ParsedDocument, register
+from packages.common.errors import ValidationError
 
 
 class PdfParser(BaseParser):

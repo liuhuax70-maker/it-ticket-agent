@@ -14,8 +14,6 @@ from __future__ import annotations
 
 from langgraph.graph import END, START, StateGraph
 
-from packages.common.logging import get_logger
-
 from app.clients.cache import QueryCache
 from app.clients.model_gateway import ModelGatewayClient
 from app.clients.retrieval import RetrievalClient
@@ -46,6 +44,7 @@ from app.graph.nodes import (
     make_route_node,
 )
 from app.graph.state import RAGState
+from packages.common.logging import get_logger
 
 logger = get_logger("orchestrator.builder")
 

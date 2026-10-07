@@ -10,6 +10,8 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException, Request
 
+from app.config import Settings
+from app.service import OrchestratorService
 from packages.common.constants import SERVICE_QUERY_ORCHESTRATOR, VERSION
 from packages.common.errors import install_exception_handlers
 from packages.common.logging import get_logger, setup_logging
@@ -17,9 +19,6 @@ from packages.common.settings import load_settings
 from packages.contracts import ChatRequest, ChatResponse, HealthResponse
 from packages.observability import init_otel
 from packages.security import Identity
-
-from app.config import Settings
-from app.service import OrchestratorService
 
 settings: Settings = load_settings(Settings)
 

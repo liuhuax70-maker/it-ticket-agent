@@ -2,9 +2,8 @@
 
 from __future__ import annotations
 
-from fastapi.testclient import TestClient
-
 import app.main as main_module
+from fastapi.testclient import TestClient
 
 
 def test_policy_bundle_is_discoverable() -> None:

@@ -7,16 +7,15 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException
 
-from packages.common.constants import SERVICE_INDEXING, VERSION
+from app.config import Settings
+from app.consumers import consume_chunk_events
+from app.service import IndexService
+from packages.common.constants import VERSION
 from packages.common.errors import install_exception_handlers
 from packages.common.logging import get_logger, setup_logging
 from packages.common.settings import load_settings
 from packages.contracts import HealthResponse, IndexRequest, IndexResponse
 from packages.observability import init_otel
-
-from app.config import Settings
-from app.consumers import consume_chunk_events
-from app.service import IndexService
 
 settings: Settings = load_settings(Settings)
 

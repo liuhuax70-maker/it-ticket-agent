@@ -18,13 +18,12 @@ import time
 
 import httpx
 
+from app.config import Settings
+from app.datasets import GoldenSample
 from packages.common.errors import ConfigError, UpstreamError
 from packages.common.logging import get_logger
 from packages.contracts import ChatRequest
 from packages.llms import build_target
-
-from app.config import Settings
-from app.datasets import GoldenSample
 
 logger = get_logger("eval.ragas")
 

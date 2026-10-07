@@ -14,10 +14,9 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 
+from app.chunkers.base import BaseChunker, ChunkingConfig, estimate_tokens
 from packages.common.ids import stable_chunk_id
 from packages.contracts import Chunk, Document
-
-from app.chunkers.base import BaseChunker, ChunkingConfig, estimate_tokens
 
 # 标题：最多 6 级，标题后至少一个空格
 _HEADING = re.compile(r"^(#{1,6})[ \t]+(.+?)[ \t]*$", re.MULTILINE)

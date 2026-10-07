@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-from packages.contracts import ACL, RetrieveMode, SearchHit
-from packages.retrievers.base import RETRIEVER_BM25, RETRIEVER_VECTOR
-
 from app.filters import build_filters, extract_doc_ids
 from app.hybrid import HybridRetriever
 from app.rerank import Reranker
+
+from packages.contracts import ACL, RetrieveMode, SearchHit
+from packages.retrievers.base import RETRIEVER_BM25, RETRIEVER_VECTOR
 
 
 def _hit(chunk_id: str, text: str = "内容", score: float = 1.0, retriever: str = "") -> SearchHit:

@@ -9,14 +9,13 @@ from __future__ import annotations
 
 import time
 
-from packages.common.logging import get_logger
-from packages.contracts import ChatMessage, CompletionRequest
-from packages.prompts import get_prompt_registry
-
 from app.clients.model_gateway import ModelGatewayClient
 from app.config import Settings
 from app.graph.nodes.base import add_error, merge_timing
 from app.graph.state import RAGState
+from packages.common.logging import get_logger
+from packages.contracts import ChatMessage, CompletionRequest
+from packages.prompts import get_prompt_registry
 
 logger = get_logger("orchestrator.node.rewrite")
 

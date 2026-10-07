@@ -14,18 +14,16 @@ from pathlib import Path
 from typing import Any
 
 import httpx
-from fastapi import FastAPI
-from fastapi import Request
+from fastapi import FastAPI, Request
 from pydantic import BaseModel, Field
 
+from app.config import Settings
 from packages.common.constants import SERVICE_AUTHZ, VERSION
 from packages.common.errors import install_exception_handlers
 from packages.common.logging import get_logger, setup_logging
 from packages.common.settings import load_settings
 from packages.contracts import HealthResponse
 from packages.observability import init_otel
-
-from app.config import Settings
 
 settings: Settings = load_settings(Settings)
 

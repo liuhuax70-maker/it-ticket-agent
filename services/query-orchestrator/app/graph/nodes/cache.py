@@ -4,13 +4,12 @@ from __future__ import annotations
 
 import time
 
-from packages.common.logging import get_logger
-from packages.contracts import Citation
-
 from app.clients.cache import QueryCache
 from app.config import Settings
 from app.graph.nodes.base import merge_timing, ms
 from app.graph.state import RAGState
+from packages.common.logging import get_logger
+from packages.contracts import Citation
 
 logger = get_logger("orchestrator.node.cache")
 

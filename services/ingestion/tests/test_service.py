@@ -3,11 +3,10 @@
 from __future__ import annotations
 
 import pytest
+from app import service as service_module
 
 from packages.common.errors import ValidationError
 from packages.contracts import ACL, Chunk, IndexResponse, IngestRequest
-
-from app import service as service_module
 
 CONTENT = """# 员工手册
 

@@ -5,11 +5,10 @@ from __future__ import annotations
 import json
 
 import pytest
-
-from packages.common.errors import ConfigError
-
 from app.datasets import SEED_SAMPLES, GoldenSample, ensure_dataset, load_samples
 from app.reports import summarize, write_report
+
+from packages.common.errors import ConfigError
 
 
 def test_ensure_dataset_writes_seed(tmp_path) -> None:

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import pytest
 
+from packages.common.errors import ConfigError
 from packages.common.ids import content_hash, stable_chunk_id, stable_doc_id
 from packages.common.settings import BaseAppSettings
 from packages.contracts import ACL, Chunk, SearchHit, Visibility
@@ -108,7 +109,7 @@ def test_prompt_registry_reads_versioned_template() -> None:
 
 def test_prompt_render_rejects_missing_variable() -> None:
     registry = get_prompt_registry()
-    with pytest.raises(Exception):  # ConfigError
+    with pytest.raises(ConfigError):
         registry.render("rag_answer", "v1", context="c", query="q")
 
 
@@ -121,7 +122,7 @@ def test_prompt_render_substitutes_all_placeholders() -> None:
 
 def test_prompt_registry_missing_template_raises(tmp_path) -> None:
     registry = PromptRegistry(tmp_path)
-    with pytest.raises(Exception):
+    with pytest.raises(ConfigError):
         registry.get("nope", "v9")
 
 

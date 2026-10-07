@@ -17,6 +17,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import datetime as dt
+import os
 import sys
 from pathlib import Path
 
@@ -25,7 +26,7 @@ import httpx
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 
-INGESTION_URL = "http://localhost:8004"
+INGESTION_URL = os.getenv("RAG_INGESTION_URL", "http://localhost:8004")
 
 
 async def _list_documents(client: httpx.AsyncClient, tenant_id: str | None, limit: int) -> list[dict]:

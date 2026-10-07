@@ -6,11 +6,10 @@
 
 from __future__ import annotations
 
-from packages.common.logging import get_logger
-from packages.contracts import ACL, IngestRequest
-
 from app.config import Settings
 from app.service import IngestionService
+from packages.common.logging import get_logger
+from packages.contracts import ACL, IngestRequest
 
 logger = get_logger("ingestion.consumers")
 

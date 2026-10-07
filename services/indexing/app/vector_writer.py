@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from packages.common.logging import get_logger
 from packages.contracts import Chunk
-from packages.vectorstores import MilvusStore, MilvusSettings
+from packages.vectorstores import MilvusSettings, MilvusStore
 
 logger = get_logger("indexing.vector_writer")
 

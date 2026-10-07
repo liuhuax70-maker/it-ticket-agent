@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import app.main as main_module
 import pytest
+from app.config import Settings
 from fastapi.testclient import TestClient
 
 from packages.contracts import (
@@ -15,9 +17,6 @@ from packages.contracts import (
     IngestResponse,
     ModelInfo,
 )
-
-import app.main as main_module
-from app.config import Settings
 
 
 class FakeCounter:

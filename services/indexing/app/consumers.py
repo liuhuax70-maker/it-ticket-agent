@@ -7,11 +7,10 @@
 
 from __future__ import annotations
 
-from packages.common.logging import get_logger
-from packages.contracts import Chunk, IndexRequest
-
 from app.config import Settings
 from app.service import IndexService
+from packages.common.logging import get_logger
+from packages.contracts import Chunk, IndexRequest
 
 logger = get_logger("indexing.consumers")
 

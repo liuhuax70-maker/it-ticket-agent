@@ -4,18 +4,17 @@ from __future__ import annotations
 
 import time
 
-from packages.common.errors import ConfigError
-from packages.common.ids import new_id
-from packages.common.logging import get_logger
-from packages.contracts import ChatRequest, ChatResponse, RetrieveMode
-from packages.security import Identity
-
 from app.clients.cache import QueryCache
 from app.clients.langfuse import build_tracer, record_stage, trace_chat
 from app.clients.model_gateway import ModelGatewayClient
 from app.clients.retrieval import RetrievalClient
 from app.config import Settings
 from app.graph import build_graph
+from packages.common.errors import ConfigError
+from packages.common.ids import new_id
+from packages.common.logging import get_logger
+from packages.contracts import ChatRequest, ChatResponse, RetrieveMode
+from packages.security import Identity
 
 logger = get_logger("orchestrator.service")
 

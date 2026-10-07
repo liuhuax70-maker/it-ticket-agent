@@ -10,16 +10,15 @@ from __future__ import annotations
 
 import time
 
+from app.config import Settings
+from app.embedder import EmbeddingPipeline
+from app.search_writer import SearchWriter
+from app.vector_writer import VectorWriter
 from packages.common.errors import ValidationError
 from packages.common.logging import get_logger
 from packages.contracts import IndexRequest, IndexResponse
 from packages.search.config import OpenSearchSettings
 from packages.vectorstores.config import MilvusSettings
-
-from app.config import Settings
-from app.embedder import EmbeddingPipeline
-from app.search_writer import SearchWriter
-from app.vector_writer import VectorWriter
 
 logger = get_logger("indexing.service")
 

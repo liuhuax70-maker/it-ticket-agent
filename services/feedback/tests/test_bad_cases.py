@@ -4,11 +4,9 @@ from __future__ import annotations
 
 import json
 
-from fastapi.testclient import TestClient
-
-from app.bad_cases import BadCaseCollector
-
 import app.main as main_module
+from app.bad_cases import BadCaseCollector
+from fastapi.testclient import TestClient
 
 
 class FakeStore:

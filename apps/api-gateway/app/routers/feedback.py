@@ -6,22 +6,21 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, Request
+from typing import Annotated
 
-from packages.contracts import FeedbackRequest, FeedbackResponse
-from packages.security import Identity
+from fastapi import APIRouter, Depends, Request
 
 from app.clients.feedback import FeedbackClient
 from app.middleware.identity import require_action
+from packages.contracts import FeedbackRequest, FeedbackResponse
+from packages.security import Identity
 
 router = APIRouter(prefix="/feedback", tags=["feedback"])
 
+FeedbackWriter = Annotated[Identity, Depends(require_action("feedback:write"))]
+
 
 @router.post("", response_model=FeedbackResponse, summary="提交问答反馈")
-async def submit(
-    req: FeedbackRequest,
-    request: Request,
-    identity: Identity = Depends(require_action("feedback:write")),
-) -> FeedbackResponse:
+async def submit(req: FeedbackRequest, request: Request, identity: FeedbackWriter) -> FeedbackResponse:  # noqa: ARG001
     client: FeedbackClient = request.app.state.feedback
     return await client.submit(req)

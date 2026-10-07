@@ -6,10 +6,9 @@
 
 from __future__ import annotations
 
-from packages.common.logging import get_logger
-
 from app.config import Settings
 from app.store import FeedbackStore
+from packages.common.logging import get_logger
 
 logger = get_logger("feedback.consumers")
 

@@ -44,7 +44,7 @@ class QueryCache:
     @staticmethod
     def _key(tenant_id: str, mode: str, top_k: int, query: str) -> str:
         digest = hashlib.sha256(
-            f"{tenant_id}|{mode}|{top_k}|{normalize(query)}".encode("utf-8")
+            f"{tenant_id}|{mode}|{top_k}|{normalize(query)}".encode()
         ).hexdigest()
         return f"rag:cache:{digest}"
 

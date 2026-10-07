@@ -6,16 +6,21 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
+from typing import Annotated
 
-from packages.contracts import ACL, IngestRequest, IngestResponse, Visibility
-from packages.security import Identity
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
 
 from app.clients.ingestion import IngestionClient
 from app.config import Settings
 from app.middleware.identity import require_action
+from packages.contracts import ACL, IngestRequest, IngestResponse, Visibility
+from packages.security import Identity
 
 router = APIRouter(prefix="/documents", tags=["documents"])
+
+DocumentWriter = Annotated[Identity, Depends(require_action("documents:write"))]
+DocumentReader = Annotated[Identity, Depends(require_action("documents:read"))]
+DocumentDeleter = Annotated[Identity, Depends(require_action("documents:delete"))]
 
 
 def _client(request: Request) -> IngestionClient:
@@ -28,9 +33,7 @@ def _settings(request: Request) -> Settings:
 
 @router.post("/ingest", response_model=IngestResponse, summary="按路径或文本接入")
 async def ingest(
-    req: IngestRequest,
-    request: Request,
-    identity: Identity = Depends(require_action("documents:write")),
+    req: IngestRequest, request: Request, identity: DocumentWriter
 ) -> IngestResponse:
     # 未显式指定 ACL 时，默认归属调用方租户/部门
     if req.acl is None:
@@ -43,19 +46,20 @@ async def ingest(
 @router.post("/upload", response_model=IngestResponse, summary="上传文件接入")
 async def upload(
     request: Request,
-    file: UploadFile = File(...),
-    visibility: str = Form(default="internal"),
-    reindex: bool = Form(default=False),
-    identity: Identity = Depends(require_action("documents:write")),
+    identity: DocumentWriter,
+    file: Annotated[UploadFile, File()],
+    visibility: Annotated[str, Form()] = "internal",
+    reindex: Annotated[bool, Form()] = False,
 ) -> IngestResponse:
     data = await file.read()
     if not data:
         raise HTTPException(status_code=422, detail="上传文件为空")
 
-    settings = _settings(request)
-    limit_bytes = 32 * 1024 * 1024
+    limit_bytes = _settings(request).max_upload_mb * 1024 * 1024
     if len(data) > limit_bytes:
-        raise HTTPException(status_code=413, detail=f"文件超过 {limit_bytes // 1024 // 1024}MB 上限")
+        raise HTTPException(
+            status_code=413, detail=f"文件超过 {_settings(request).max_upload_mb}MB 上限"
+        )
 
     acl = ACL(
         tenant_id=identity.tenant_id,
@@ -63,31 +67,21 @@ async def upload(
         visibility=Visibility(visibility),
         owner=identity.user_id,
     )
-    return await _client(request).upload(file.filename or "upload.bin", data, acl=acl, reindex=reindex)
+    return await _client(request).upload(
+        file.filename or "upload.bin", data, acl=acl, reindex=reindex
+    )
 
 
 @router.get("/jobs/{job_id}", summary="查询接入任务")
-async def get_job(
-    job_id: str,
-    request: Request,
-    identity: Identity = Depends(require_action("documents:read")),  # noqa: ARG001
-) -> dict:
+async def get_job(job_id: str, request: Request, identity: DocumentReader) -> dict:  # noqa: ARG001
     return await _client(request).get_job(job_id)
 
 
 @router.get("/{doc_id}", summary="查询文档元数据")
-async def get_document(
-    doc_id: str,
-    request: Request,
-    identity: Identity = Depends(require_action("documents:read")),  # noqa: ARG001
-) -> dict:
+async def get_document(doc_id: str, request: Request, identity: DocumentReader) -> dict:  # noqa: ARG001
     return await _client(request).get_document(doc_id)
 
 
 @router.delete("/{doc_id}", summary="合规删除文档")
-async def delete_document(
-    doc_id: str,
-    request: Request,
-    identity: Identity = Depends(require_action("documents:delete")),  # noqa: ARG001
-) -> dict:
+async def delete_document(doc_id: str, request: Request, identity: DocumentDeleter) -> dict:  # noqa: ARG001
     return await _client(request).delete_document(doc_id)

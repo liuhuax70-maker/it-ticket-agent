@@ -14,6 +14,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -22,7 +23,8 @@ import httpx
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 
-EVAL_URL = "http://localhost:8006"
+# 默认指向本机；CI / 定时任务用环境变量指向预发或生产
+EVAL_URL = os.getenv("RAG_EVAL_URL", "http://localhost:8006")
 
 
 async def run(dataset: str | None, limit: int | None) -> int:
