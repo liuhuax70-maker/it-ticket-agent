@@ -119,7 +119,17 @@ python scripts/dev_services.py     # 一键前台启动 6 个在线服务（Ctrl
 python -m uvicorn app.main:app --app-dir services/retrieval --port 8002 --reload
 ```
 
-打开 <http://localhost:8000/ui/> 即为最小问答页。
+打开 <http://localhost:8000/ui/> 即为问答界面（零构建、离线可用的单页应用）：
+
+- 左侧会话历史（localStorage 持久化，可新建/切换/删除），右侧对话区；
+- 助手答案按 Markdown 渲染，`[n]` 会变成可点击角标，点击高亮并滚动到对应来源卡片；
+- 来源卡片展示文档名、章节路径、原文片段与「分块号 · 字符区间 · 相关度」；
+- 拒答会渲染成中性提示而非报错（拒答不是故障，是正确行为）；
+- 支持浅色/深色模式、复制、重新生成、停止等待、Enter 发送 / Shift+Enter 换行；
+- 输入框在等待期间禁用，避免重复提交；超时可点「停止」中断等待。
+
+> 说明：当前为**服务端一次性返回 + 思考中提示**，不是逐 token 流式输出——
+> 真流式需要 model-gateway 与 query-orchestrator 增加 SSE 透传，属于后续阶段。
 
 ### 2.6 导入语料并验收
 
@@ -212,7 +222,8 @@ terraform -chdir=infra/terraform/envs/dev init && terraform -chdir=infra/terrafo
 | Reranker | 默认关闭（透传） | 有 eval set 后再开，否则无法归因 |
 | 中文分词 | OpenSearch 用 `standard` 分析器 | 换带 IK 插件的镜像并重建索引 |
 | PDF / Word / HTML | 已支持 Markdown / Txt / PDF（pypdf，无 OCR） | 补 docx / html / OCR |
-| 前端 | 仅 `api-gateway` 内置静态问答页 | `apps/chat-ui`、`apps/admin-console`（Next.js） |
+| 前端 | `api-gateway` 内置单页问答界面（会话历史 / 引用定位 / 深色模式） | `apps/chat-ui`、`apps/admin-console`（Next.js，含文档管理、评测看板） |
+| 流式输出 | 一次性返回 + 思考中提示 | model-gateway → orchestrator → gateway 三级 SSE 透传（LangGraph `astream` 已可提供节点级进度） |
 | 拒答的兜底判定 | 哨兵 + 固定话术 + 短句启发式（阈值 80 字） | 用评测集标定「相关性阈值」，让不可回答的问题在检索阶段就返回空 |
 | 入库吞吐 | 单文档 `/index` 因 Milvus `flush` + OpenSearch `refresh` 约 20s（本机实测） | 大文档改批量写入 + 关闭同步 refresh，用 bulk 参数控制可见性 |
 

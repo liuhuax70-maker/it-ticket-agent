@@ -1,99 +1,73 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="zh-CN" data-theme="light">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>企业知识库问答</title>
-  <style>
-    :root { color-scheme: light dark; --fg:#1f2328; --bg:#f6f8fa; --card:#fff; --line:#d0d7de; --accent:#0969da; }
-    @media (prefers-color-scheme: dark) {
-      :root { --fg:#e6edf3; --bg:#0d1117; --card:#161b22; --line:#30363d; --accent:#58a6ff; }
-    }
-    * { box-sizing: border-box; }
-    body { margin:0; font: 15px/1.6 -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif;
-           background: var(--bg); color: var(--fg); display:flex; justify-content:center; padding:24px; }
-    main { width: min(760px, 100%); background: var(--card); border:1px solid var(--line);
-           border-radius:12px; padding:20px; }
-    h1 { font-size:18px; margin:0 0 4px; }
-    p.hint { margin:0 0 16px; font-size:13px; opacity:.7; }
-    form { display:flex; gap:8px; }
-    input[type=text] { flex:1; padding:10px 12px; border:1px solid var(--line); border-radius:8px;
-           background: transparent; color: inherit; font-size:15px; }
-    button { padding:10px 18px; border:0; border-radius:8px; background: var(--accent); color:#fff;
-           font-size:15px; cursor:pointer; }
-    button:disabled { opacity:.5; cursor:progress; }
-    #answer { margin-top:18px; white-space:pre-wrap; }
-    .citations { margin-top:14px; border-top:1px dashed var(--line); padding-top:12px; font-size:13px; }
-    .citations li { margin-bottom:8px; }
-    .meta { margin-top:10px; font-size:12px; opacity:.65; }
-    .refused { color:#d1242f; }
-  </style>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>企业知识库 · 智能问答</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%234d6bfe'/%3E%3Cpath d='M9 21V11h5.6c1.9 0 3.1 1 3.1 2.6 0 1.2-.7 2-1.7 2.3 1.3.3 2.2 1.2 2.2 2.6 0 1.9-1.4 2.9-3.6 2.9H9Zm2.3-6h2.8c.8 0 1.3-.4 1.3-1.1s-.5-1.1-1.3-1.1h-2.8v2.2Zm0 4.2h3c.9 0 1.5-.5 1.5-1.2 0-.8-.6-1.2-1.5-1.2h-3v2.4Z' fill='%23fff'/%3E%3C/svg%3E" />
+<link rel="stylesheet" href="styles.css?v=2" />
 </head>
 <body>
-<main>
-  <h1>企业知识库问答</h1>
-  <p class="hint">答案只依据知识库原文生成，并附带可回查的引用。</p>
+<div class="app">
+  <aside class="sidebar" id="sidebar" aria-label="对话历史">
+    <div class="sidebar-top">
+      <div class="brand">
+        <span class="brand-mark" aria-hidden="true">KB</span>
+        <span class="brand-name">企业知识库</span>
+      </div>
+      <button class="icon-btn only-mobile" id="sidebarClose" type="button" aria-label="收起侧栏">✕</button>
+    </div>
 
-  <form id="form">
-    <input id="q" type="text" placeholder="例如：入职体检费用怎么报销？" autocomplete="off" required />
-    <button id="send" type="submit">提问</button>
-  </form>
+    <button class="new-chat" id="newChat" type="button">
+      <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M12 5v14M5 12h14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+      <span>开启新对话</span>
+    </button>
 
-  <div id="answer"></div>
-  <ul class="citations" id="citations"></ul>
-  <div class="meta" id="meta"></div>
-</main>
+    <div class="conv-scroll">
+      <div class="conv-label">最近的对话</div>
+      <nav class="conv-list" id="convList"></nav>
+      <p class="conv-empty" id="convEmpty">还没有对话记录</p>
+    </div>
 
-<script>
-  const form = document.getElementById('form');
-  const input = document.getElementById('q');
-  const send = document.getElementById('send');
-  const answerEl = document.getElementById('answer');
-  const citationsEl = document.getElementById('citations');
-  const metaEl = document.getElementById('meta');
+    <div class="sidebar-foot">
+      <button class="foot-btn" id="themeToggle" type="button">
+        <span id="themeIcon" aria-hidden="true">🌙</span><span id="themeText">深色模式</span>
+      </button>
+      <div class="foot-note" id="envNote">混合检索 · 引用强制 · 无资料即拒答</div>
+    </div>
+  </aside>
+  <div class="scrim" id="scrim"></div>
 
-  form.addEventListener('submit', async (event) => {
-    event.preventDefault();
-    const query = input.value.trim();
-    if (!query) return;
+  <main class="main">
+    <header class="topbar">
+      <button class="icon-btn only-mobile" id="sidebarOpen" type="button" aria-label="展开侧栏">
+        <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+      </button>
+      <div class="topbar-title" id="topTitle">新对话</div>
+      <span class="chip" id="modelChip" title="当前生效模型">模型：—</span>
+    </header>
 
-    send.disabled = true;
-    answerEl.className = '';
-    answerEl.textContent = '检索中…';
-    citationsEl.innerHTML = '';
-    metaEl.textContent = '';
+    <div class="messages" id="messages" role="log" aria-live="polite"></div>
 
-    try {
-      const resp = await fetch('/chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ query })
-      });
-      const data = await resp.json();
-      if (!resp.ok) throw new Error(data.message || data.detail || `HTTP ${resp.status}`);
+    <button class="scroll-bottom" id="scrollBottom" type="button" aria-label="回到底部">
+      <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M12 5v14m0 0-6-6m6 6 6-6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </button>
 
-      answerEl.textContent = data.answer;
-      if (data.refused) answerEl.className = 'refused';
-
-      (data.citations || []).forEach((c) => {
-        const li = document.createElement('li');
-        li.innerHTML = `<strong>[${c.index}] ${c.doc_title || c.doc_id}</strong>
-          <div>${c.section_path || ''}</div>
-          <div style="opacity:.75">${(c.snippet || '').replace(/</g, '&lt;')}</div>
-          <div style="opacity:.55">chunk ${c.chunk_index} · 字符 ${c.char_start}-${c.char_end}</div>`;
-        citationsEl.appendChild(li);
-      });
-
-      const t = data.timings_ms || {};
-      metaEl.textContent = `model=${data.model || '-'} cached=${data.cached} `
-        + `retrieve=${t.retrieve ?? '-'}ms generate=${t.generate ?? '-'}ms total=${t.total ?? '-'}ms`;
-    } catch (err) {
-      answerEl.className = 'refused';
-      answerEl.textContent = `请求失败：${err.message}`;
-    } finally {
-      send.disabled = false;
-    }
-  });
-</script>
+    <div class="composer-area">
+      <div class="composer" id="composer">
+        <textarea id="input" rows="1" placeholder="给知识库发送消息，例如：入职体检费用怎么报销？" aria-label="输入问题"></textarea>
+        <button class="send" id="send" type="button" aria-label="发送">
+          <svg class="i-send" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M12 19V5m0 0-6 6m6-6 6 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <svg class="i-stop" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><rect x="7" y="7" width="10" height="10" rx="2" fill="currentColor"/></svg>
+        </button>
+      </div>
+      <div class="composer-hint">
+        <span>Enter 发送 · Shift + Enter 换行</span>
+        <span id="statusHint"></span>
+      </div>
+    </div>
+  </main>
+</div>
+<script src="app.js?v=2"></script>
 </body>
 </html>
