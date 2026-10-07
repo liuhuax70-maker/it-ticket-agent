@@ -64,10 +64,14 @@ class RetrievalService:
             # 若真出现，说明身份注入链路断了（网关没注入 / 上游漏传 header）。
             logger.warning("检索未携带 ACL，本次不做权限过滤（仅限内部调试场景）")
 
+        # 重排开启时多取候选：融合结果先截断到 top_k 会让重排失去意义（见 config 说明）。
+        candidate_k = (
+            max(top_k, self._settings.rerank_candidates) if self._settings.rerank_enabled else top_k
+        )
         hits, timings = await self._hybrid.search(
             req.query,
             mode,
-            top_k=top_k,
+            top_k=candidate_k,
             vector_top_k=self._settings.vector_top_k,
             bm25_top_k=self._settings.bm25_top_k,
             filters=filters,

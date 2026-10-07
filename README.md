@@ -310,7 +310,7 @@ terraform -chdir=infra/terraform/envs/dev init && terraform -chdir=infra/terrafo
 | 鉴权与授权 | 已接入 Keycloak（JWT + JWKS，验签失败自动刷新）与 OPA（默认拒绝白名单），端到端验收通过 | 字段级/文档级授权、令牌静默刷新、生产用 HTTPS + PKCE 回调域名 |
 | 角色白名单可见性 | `allowed_roles` 已入契约但未参与过滤 | 补存储层 schema/expr 与两个入口的字段传递 |
 | 语义缓存 | 当前为精确匹配 | 已有 eval set，可升级为 embedding 相似度匹配（须同时保证身份隔离） |
-| Reranker | 默认关闭（透传） | 已有 eval set（hit@k / MRR 可归因），可开 cross-encoder 并对比 |
+| Reranker | 已实现并接线（含中文可用的 bge-reranker-base）；**默认关闭** | 实测：开启后 hit@k/MRR/片段召回与关闭时完全相同（评测集已贴顶 100%），误答率变化在噪声带内，而 P50/P95 上升 34%/36%。先把评测集做难，再谈开启 |
 | 中文分词 | OpenSearch 用 `standard` 分析器 | 换带 IK 插件的镜像并重建索引 |
 | PDF / Word / HTML | 已支持 Markdown / Txt / PDF（pypdf，无 OCR） | 补 docx / html / OCR |
 | 前端 | `api-gateway` 内置单页应用（问答 + 上传 + 知识库台账 + 深色模式） | `apps/chat-ui`、`apps/admin-console`（Next.js，含评测看板、批量导入、权限配置） |

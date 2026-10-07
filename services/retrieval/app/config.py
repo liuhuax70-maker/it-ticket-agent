@@ -70,7 +70,15 @@ class Settings(EmbedSettings, MilvusSettings, OpenSearchSettings):
 
     # ---- 重排 ----
     rerank_enabled: bool = False
-    rerank_model: str = "Xenova/ms-marco-MiniLM-L-6-v2"
+    # 必须是**中文可用**的交叉编码器：默认曾用 Xenova/ms-marco-MiniLM-L-6-v2，那是英文
+    # MS MARCO 训练出来的，对中文语料的排序能力不可用（同类错误：BGE 指令只能加在查询侧）。
+    # bge-reranker-base 与嵌入模型（bge-small-zh-v1.5）同族，约 1GB，首次使用会下载。
+    rerank_model: str = "BAAI/bge-reranker-base"
+    # 开启重排时，/search 返回的候选条数（>top_k）。
+    # 为什么需要它：融合结果若先截断到 top_k，重排就只能对这几条**改顺序**，
+    # 无法把第 6~20 名里真正相关的文档捞回 top_k —— 那样重排等于白开。
+    # 调用方（编排层 rerank 节点）负责重排后再截断到 top_k。
+    rerank_candidates: int = 20
 
     # ---- 调参文件（可选）----
     retriever_config_path: str = "configs/retrievers/default.yaml"
