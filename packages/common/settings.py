@@ -37,6 +37,13 @@ class BaseAppSettings(BaseSettings):
     otel_enabled: bool = False
     otel_endpoint: str = ""
 
+    # ---- 指标（Prometheus 文本格式，实现见 packages/observability/metrics.py）----
+    metrics_enabled: bool = True
+    # 非空时 /metrics 要求 `Authorization: Bearer <token>`。
+    # 指标会暴露内部路由与流量形态，在没有网络隔离的环境下不应裸奔；
+    # 默认空 = 不校验（本地开发方便，生产应设置或只让 Prometheus 网段可达）。
+    metrics_token: str = ""
+
 
 @cache
 def _cached(cls: type) -> BaseAppSettings:

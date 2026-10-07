@@ -32,6 +32,7 @@ from packages.common.errors import install_exception_handlers
 from packages.common.logging import get_logger, setup_logging
 from packages.common.settings import load_settings
 from packages.observability import init_otel
+from packages.observability.metrics import install_metrics
 
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 
@@ -88,6 +89,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.add_middleware(RateLimitMiddleware, settings=settings, counter=counter)
     app.add_middleware(IdentityMiddleware, settings=settings)
     app.add_middleware(AuditMiddleware, settings=settings)
+    # 指标中间件放在最后（=最外层）：401/429 这类被拒请求也必须计入可用性与错误率，
+    # 否则监控会漏掉最该告警的那部分流量。
+    install_metrics(app, SERVICE_API_GATEWAY, settings=settings)
 
     for module in (health, chat, documents, admin, feedback):
         app.include_router(module.router)

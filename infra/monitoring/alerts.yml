@@ -1,0 +1,118 @@
+# 告警规则。
+#
+# 组织原则：**把验收清单里的不变量直接写成告警**，而不是先想"有哪些指标可告"。
+# 这样"越权必须为 0""P95 达标"这类要求不会只活在文档里——它们在这里变成每 15 秒
+# 被求值一次的表达式。
+#
+# 严重度只用两档，避免"到处是 critical"：
+#   critical：违反安全不变量或服务不可用，需要立即人工介入；
+#   warning ：质量或容量退化，可在工作时间内处理。
+
+groups:
+  - name: rag-permission-invariants
+    rules:
+      # 权限下推链路断裂：**绝对不变量**。
+      # 正常情况下这个计数器恒为 0；非零说明有请求没带 ACL 就被拒了
+      # （网关漏注入身份 / 反向代理丢 header / 有人直连检索服务）。
+      # for: 0m —— 不等，出现一次就报。
+      - alert: RagAclMissing
+        expr: increase(rag_acl_missing_total[5m]) > 0
+        for: 0m
+        labels:
+          severity: critical
+        annotations:
+          summary: "检索服务收到未携带 ACL 的请求（权限下推链路断裂）"
+          description: >-
+            5 分钟内出现 {{ $value }} 次无 ACL 请求。检索已按 fail-closed 拒绝，
+            但这意味着身份注入链路有问题，需立刻排查网关与反向代理的 header 透传。
+            对应验收项：「检索层 ACL 与租户隔离 100% 生效」为绝对不变量。
+
+      # 权限拒绝激增：可能是攻击探测，也可能是一次部署把权限配错了。
+      # 两者都需要人看一眼，所以用 warning 而不是 critical。
+      - alert: RagPermissionDeniedSpike
+        expr: sum by (service) (rate(http_requests_total{status="403"}[10m])) > 1
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "{{ $labels.service }} 的 403 拒绝率持续偏高"
+          description: >-
+            {{ $value | printf "%.2f" }} req/s 的请求被拒。请确认是正常越权尝试（安全事件留痕）
+            还是策略/配置错误（可用性问题）。
+
+  - name: rag-availability
+    rules:
+      - alert: RagServiceDown
+        expr: up{job=~"rag-.*"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "{{ $labels.instance }} 抓取失败（服务不可用）"
+          description: "已连续 2 分钟无法抓取指标，服务可能已崩溃或无响应。"
+
+      # 错误率 = 5xx 占比。用比例而不是绝对值：流量涨了不该触发告警。
+      - alert: RagHighErrorRate
+        expr: |
+          sum by (service) (rate(http_requests_total{status=~"5.."}[5m]))
+          /
+          sum by (service) (rate(http_requests_total[5m])) > 0.01
+        for: 10m
+        labels:
+          severity: critical
+        annotations:
+          summary: "{{ $labels.service }} 5xx 错误率超过 1%"
+          description: >-
+            当前 {{ $value | printf "%.2%%" }}。注意本项目把"抛异常的请求"也计入了 5xx，
+            所以这个数字不会因为异常没被捕获而偏低。
+
+      # P95 延迟。阈值 5s 的来源：本地 4B 作答时 P95 约 4.7s，DeepSeek 约 2.3s——
+      # 5s 能容纳模型侧的合理波动，又能在依赖变慢时先于用户抱怨触发。
+      - alert: RagHighP95Latency
+        expr: |
+          histogram_quantile(
+            0.95,
+            sum by (le, service) (rate(http_request_duration_seconds_bucket[5m]))
+          ) > 5
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "{{ $labels.service }} P95 延迟超过 5s"
+          description: >-
+            当前 P95 约 {{ $value | printf "%.2f" }}s。优先检查下游依赖
+            （向量库/检索/模型网关），不要先怀疑应用本身。
+
+  - name: rag-quality
+    rules:
+      # 拒答率异常升高：多半不是"变得谨慎"，而是检索或语料出了问题
+      # （召回变差 / 文档被误删 / 切分参数改动导致片段对不上）。
+      - alert: RagRefusalRateHigh
+        expr: |
+          sum(rate(rag_answer_total{outcome="refused"}[30m]))
+          /
+          sum(rate(rag_answer_total[30m])) > 0.3
+        for: 30m
+        labels:
+          severity: warning
+        annotations:
+          summary: "拒答率超过 30%（可能检索或语料异常）"
+          description: >-
+            当前拒答率 {{ $value | printf "%.2%%" }}。低于 30% 的波动属正常
+            （语料外问题的比例会随提问分布变化），持续超标请先抽查召回结果。
+
+      # 缓存命中率长期偏低：要么查询分布变了，要么缓存键的版本号被频繁调整
+      # （每次 CACHE_VERSION 变化都会让全部旧条目失效）。
+      - alert: RagCacheHitRateLow
+        expr: |
+          sum(rate(rag_cache_lookups_total{result="hit"}[30m]))
+          /
+          sum(rate(rag_cache_lookups_total{result=~"hit|miss"}[30m])) < 0.05
+        for: 1h
+        labels:
+          severity: warning
+        annotations:
+          summary: "查询缓存命中率低于 5%"
+          description: >-
+            当前命中率 {{ $value | printf "%.2%%" }}。注意 result="skip"（缓存未启用）
+            已被排除在分母之外，否则这条告警在缓存关闭时会永久误报。

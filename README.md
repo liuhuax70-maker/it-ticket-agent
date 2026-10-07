@@ -320,7 +320,52 @@ terraform -chdir=infra/terraform/envs/dev init && terraform -chdir=infra/terrafo
 
 ---
 
-## 7. 当前边界（明确未完成）
+## 7. 监控与告警
+
+9 个服务全部暴露 `GET /metrics`（Prometheus 文本格式）。实现见
+`packages/observability/metrics.py`——**没有引 prometheus_client**：需要的只是计数器/仪表/直方图
+三种原语和一段曝露格式，自己写约 150 行且完全可控（取舍同"自写 RAGAS 裁判适配器"）。
+
+| 指标 | 类型 | 标签 | 用途 |
+| --- | --- | --- | --- |
+| `http_requests_total` | counter | service / method / route / status | 可用性、错误率（含被拒请求） |
+| `http_request_duration_seconds` | histogram | service / method / route | P95 / P99 |
+| `http_requests_in_progress` | gauge | service | 拥塞判断 |
+| `rag_answer_total` | counter | outcome=answered/refused/error | **拒答率与错误率** |
+| `rag_cache_lookups_total` | counter | result=hit/miss/skip | 缓存命中率 |
+| `rag_acl_missing_total` | counter | — | **权限下推链路断裂次数，生产必须恒为 0** |
+
+两条设计约定：
+
+- **标签取路由模板而非实际 URL**（`/documents/{doc_id}` 而不是 `/documents/d_830daea6`）。
+  否则每个文档都会生成一条时间序列，几次爬取就能把 Prometheus 打爆。匹配不到路由的一律归到
+  `<unmatched>`；`/metrics` 自身不计入，避免抓取污染延迟分布。
+- **指标中间件放在最外层**（starlette 越晚添加越靠外层）。401/429 这类被拒请求必须计入可用性与
+  错误率——漏掉它们会让错误率偏低，而"错误率偏低"正是监控造假最常见的形式。抛异常的请求同样
+  计为 500。
+
+网关是公网入口，因此它的 `/metrics` **只在配置了 `METRICS_TOKEN` 时才免用户鉴权**
+（Prometheus 没有 Keycloak 令牌）；不配 token 则返回 401，这是刻意的安全默认。
+内部服务没有鉴权中间件，`/metrics` 直接可达。
+
+抓取配置与告警规则在 `infra/monitoring/`：
+
+```bash
+# 告警规则的组织原则：把验收清单里的不变量直接写成表达式，而不是先看有哪些指标可告
+infra/monitoring/alerts.yml      # RagAclMissing / RagServiceDown / RagHighErrorRate /
+                                 # RagHighP95Latency / RagRefusalRateHigh / RagCacheHitRateLow
+infra/monitoring/prometheus.yml  # 内部服务一组 + 网关一组（带 token）
+```
+
+其中 `RagAclMissing`（`increase(rag_acl_missing_total[5m]) > 0`，`for: 0m`）对应验收里的
+**绝对不变量**：越权/权限下推断裂出现一次就立刻告警，不等趋势。
+
+> 仓库**不**附带 docker-compose 的 Prometheus 服务：本地开发时应用服务由 `scripts/dev_services.py`
+> 启动并绑定 `127.0.0.1`，容器内既看不到宿主 loopback、也用不通 `host.docker.internal`。
+> 与其塞一个跑不通的块，不如把配置写清楚，由部署形态决定怎么跑（k8s 换成服务 DNS 或
+> 用 helm 预留的 `podAnnotations` 钩子走注解发现）。
+
+## 8. 当前边界（明确未完成）
 
 | 项 | 现状 | 后续 |
 | --- | --- | --- |
@@ -339,6 +384,11 @@ terraform -chdir=infra/terraform/envs/dev init && terraform -chdir=infra/terrafo
 | 流式输出 | 一次性返回 + 思考中提示 | model-gateway → orchestrator → gateway 三级 SSE 透传（LangGraph `astream` 已可提供节点级进度） |
 | 拒答的兜底判定 | 哨兵 + 固定话术 + 短句启发式（阈值 80 字） | 用评测集标定「相关性阈值」，让不可回答的问题在检索阶段就返回空 |
 | 入库吞吐 | 单文档 `/index` 因 Milvus `flush` + OpenSearch `refresh` 约 20s（本机实测） | 大文档改批量写入 + 关闭同步 refresh，用 bulk 参数控制可见性 |
+| 告警通道 | 规则已给出（`infra/monitoring/alerts.yml`），未接 Alertmanager 与通知渠道 | 接 Alertmanager，按 `severity` 路由（critical 到电话/IM，warning 到工单） |
+| 监控看板 | 无 Grafana 看板 | 按第 7 节的指标表建四块面板：P95 / 错误率 / 拒答率 / 缓存命中率 |
+| 服务间身份信任 | 编排与检索从**明文 header** 取身份（网关是唯一鉴权点）——已 fail-closed：缺头即 403，不再静默用默认租户 | mTLS 或服务网格；当前不可达（应用服务不发布端口 + NetworkPolicy），属纵深防御加固 |
+| 数据失效管理 | 无生效日期 / 无 supersede / 无 TTL：被取代的旧文档仍会被检索并引用 | 文档加生效与失效字段，检索时按有效期过滤 |
+| 成本核算 | token 用量按租户记 Redis（48h），**不折算金额、不落库** | 加价格表折算金额并落库，用于配额与账单 |
 
 > 实测记录（本机 Docker + CPU 推理）：`/chat` 端到端约 2–14s，其中检索 ~0.3s、生成 2.3–12.6s；
 > `/index` 单文档（10 分块）约 20s，瓶颈在 Milvus flush 与 OpenSearch refresh，不在向量化。

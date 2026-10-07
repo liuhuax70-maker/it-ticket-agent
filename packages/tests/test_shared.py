@@ -99,6 +99,32 @@ def test_rrf_top_k_truncation() -> None:
     assert len(fused) == 3
 
 
+# ---------------- 指标端点的鉴权豁免 ----------------
+
+
+def test_metrics_path_is_exempt_only_when_token_configured() -> None:
+    """/metrics 只有在配了 METRICS_TOKEN 时才免用户鉴权。
+
+    网关是公网入口：若无条件放行 /metrics，任何人可读到内部路由与流量形态。
+    Prometheus 又没有 Keycloak 令牌，所以「要求用户鉴权」和「可直接抓取」二者只能选一，
+    这里的选择是——不配 token 就不放行（安全默认），配了 token 就由 token 自己保护。
+    """
+    from packages.security.config import SecuritySettings
+
+    # 全部显式传参：本用例必须**与环境解耦**。
+    # 第一版第一句写成 SecuritySettings()，在本地 .env 设了 METRICS_TOKEN 之后立刻失败——
+    # 被测代码的行为是对的（配了 token 就该豁免），错的是测试依赖了开发者环境。
+    assert "/metrics" not in SecuritySettings(metrics_token="").authz_exempt()
+    assert "/metrics" in SecuritySettings(metrics_token="s3cret").authz_exempt()
+    # 关掉指标后，这个豁免也不该存在（否则配置与实际行为对不上）
+    assert (
+        "/metrics"
+        not in SecuritySettings(metrics_enabled=False, metrics_token="s3cret").authz_exempt()
+    )
+    # 原有豁免名单不受影响
+    assert "/health" in SecuritySettings(metrics_token="s3cret").authz_exempt()
+
+
 # ---------------- 提示注册表 ----------------
 
 

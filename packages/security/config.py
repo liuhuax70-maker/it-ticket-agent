@@ -37,7 +37,16 @@ class SecuritySettings(BaseAppSettings):
         历史上两边都叫 ``exempt_paths()``，子类（网关）覆盖了父类实现，
         导致 ``AUTHZ_EXEMPT_PATHS`` 这个安全配置**完全不生效且不报错**。
         """
-        return tuple(p.strip() for p in self.authz_exempt_paths.split(",") if p.strip())
+        paths = [p.strip() for p in self.authz_exempt_paths.split(",") if p.strip()]
+
+        # /metrics 只在**已配置 METRICS_TOKEN** 时才免用户鉴权：
+        #   * Prometheus 没有 Keycloak 令牌，若要求用户鉴权就没法抓取指标；
+        #   * 但网关是公网入口，「免鉴权 + 无 token」等于任何人可读内部路由与流量形态，
+        #     所以默认不放行——想抓网关指标，就配上 METRICS_TOKEN，这是一次显式决定。
+        # 内部服务没有这道鉴权中间件，/metrics 本来就可达，不受这里影响。
+        if self.metrics_enabled and self.metrics_token and "/metrics" not in paths:
+            paths.append("/metrics")
+        return tuple(paths)
 
     # 固定身份占位（AUTHZ_ENABLED=false 时生效）
     default_user_id: str = "u_demo"

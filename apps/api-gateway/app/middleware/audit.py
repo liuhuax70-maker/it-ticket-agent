@@ -20,8 +20,9 @@ from packages.common.logging import get_logger
 
 logger = get_logger("gateway.audit")
 
-# 这些路径量大且无审计价值
-_QUIET_PATHS = {"/health", "/openapi.json", "/docs", "/redoc"}
+# 这些路径量大且无审计价值。
+# /metrics 按 Prometheus 的抓取间隔每 15 秒来一次，写进审计只会把真正的访问记录淹没。
+_QUIET_PATHS = {"/health", "/metrics", "/openapi.json", "/docs", "/redoc"}
 
 
 class AuditMiddleware(BaseHTTPMiddleware):

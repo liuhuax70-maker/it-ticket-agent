@@ -80,6 +80,12 @@ class Settings(EmbedSettings, MilvusSettings, OpenSearchSettings):
     # 调用方（编排层 rerank 节点）负责重排后再截断到 top_k。
     rerank_candidates: int = 20
 
+    # ---- 权限（安全开关，刻意不放进 yaml 白名单：安全开关应由 .env 显式表达）----
+    # 允许**不带 ACL** 的全库检索。默认关闭即 fail-closed：
+    # 请求缺 ACL 时直接拒绝，而不是把全部租户的文档当检索结果返回。
+    # 只应在本机调试检索服务时临时打开，生产必须保持 false。
+    allow_unfiltered_search: bool = False
+
     # ---- 调参文件（可选）----
     retriever_config_path: str = "configs/retrievers/default.yaml"
 

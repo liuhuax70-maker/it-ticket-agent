@@ -8,7 +8,7 @@ from fastapi import FastAPI, HTTPException
 
 from app.config import Settings
 from app.service import RetrievalService
-from packages.common.constants import VERSION
+from packages.common.constants import SERVICE_RETRIEVAL, VERSION
 from packages.common.errors import install_exception_handlers
 from packages.common.logging import get_logger, setup_logging
 from packages.common.settings import load_settings
@@ -20,6 +20,7 @@ from packages.contracts import (
     SearchResponse,
 )
 from packages.observability import init_otel
+from packages.observability.metrics import install_metrics
 
 settings: Settings = load_settings(Settings)
 
@@ -42,6 +43,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="retrieval", version=VERSION, lifespan=lifespan)
 install_exception_handlers(app)
+install_metrics(app, SERVICE_RETRIEVAL, settings=settings)
 
 
 def _service() -> RetrievalService:

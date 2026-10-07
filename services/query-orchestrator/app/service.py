@@ -14,6 +14,7 @@ from packages.common.errors import ConfigError
 from packages.common.ids import new_id
 from packages.common.logging import get_logger
 from packages.contracts import ChatRequest, ChatResponse, RetrieveMode
+from packages.observability.metrics import ANSWER_COUNTER
 from packages.security import Identity
 
 logger = get_logger("orchestrator.service")
@@ -57,21 +58,28 @@ class OrchestratorService:
             top_k=top_k,
             trace_id=trace_id,
         ) as handle:
-            final = await self.graph.ainvoke(
-                {
-                    "query": req.query,
-                    "tenant_id": identity.tenant_id,
-                    "department_id": identity.department_id,
-                    "user_id": identity.user_id,
-                    "roles": list(identity.roles),
-                    "top_k": top_k,
-                    "mode": mode,
-                    "temperature": req.temperature,
-                    "trace_id": trace_id,
-                    "timings": {},
-                    "errors": [],
-                }
-            )
+            try:
+                final = await self.graph.ainvoke(
+                    {
+                        "query": req.query,
+                        "tenant_id": identity.tenant_id,
+                        "department_id": identity.department_id,
+                        "user_id": identity.user_id,
+                        "roles": list(identity.roles),
+                        "top_k": top_k,
+                        "mode": mode,
+                        "temperature": req.temperature,
+                        "trace_id": trace_id,
+                        "timings": {},
+                        "errors": [],
+                    }
+                )
+            except Exception:
+                # 失败也必须计数：只统计成功请求会让错误率凭空消失（假达标）
+                ANSWER_COUNTER.inc({"outcome": "error"})
+                raise
+
+            ANSWER_COUNTER.inc({"outcome": "refused" if final.get("refused") else "answered"})
             timings = dict(final.get("timings") or {})
             handle.update(
                 output=dict(

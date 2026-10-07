@@ -22,6 +22,7 @@ from packages.contracts import (
     HealthResponse,
 )
 from packages.observability import init_otel
+from packages.observability.metrics import install_metrics
 
 settings: Settings = load_settings(Settings)
 
@@ -51,6 +52,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="feedback", version=VERSION, lifespan=lifespan)
 install_exception_handlers(app)
+install_metrics(app, SERVICE_FEEDBACK, settings=settings)
 
 
 def _store(request: Request) -> FeedbackStore:

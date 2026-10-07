@@ -8,6 +8,7 @@ from app.hybrid import HybridRetriever
 from app.opensearch_client import BM25Retriever
 from app.rerank import Reranker
 from app.vector_client import VectorRetriever
+from packages.common.errors import Forbidden
 from packages.common.logging import get_logger
 from packages.contracts import (
     RerankRequest,
@@ -15,6 +16,7 @@ from packages.contracts import (
     SearchRequest,
     SearchResponse,
 )
+from packages.observability.metrics import ACL_MISSING_COUNTER
 from packages.retrievers import FilterDict
 
 logger = get_logger("retrieval.service")
@@ -57,12 +59,24 @@ class RetrievalService:
         top_k = req.top_k or self._settings.top_k
         filters = self.compile_filters(req)
         if filters is None:
-            # 这是**未受控降级**：filters=None 会被两个 store 翻译成 match-all，
-            # 即不分租户、不分部门的全库召回，且不会报错。检索端口可被直连，
-            # 所以这条 warning 是唯一的告警信号——不要在重构里把它删掉或降级为 debug。
-            # 正常链路上 ACL 由编排层 route 节点从网关身份构造，不应出现 None；
-            # 若真出现，说明身份注入链路断了（网关没注入 / 上游漏传 header）。
-            logger.warning("检索未携带 ACL，本次不做权限过滤（仅限内部调试场景）")
+            # filters=None 会被两个 store 翻译成 match-all，即不分租户、不分部门的
+            # **全库召回**。这是权限系统的最终防线，必须 fail-closed：
+            #
+            # 早期实现只打一条 warning 然后照常全库检索——方向是错的。正常链路上
+            # ACL 由编排层 route 节点从网关身份构造，不该出现 None；真出现就说明
+            # 身份注入链路断了（网关没注入 / 反向代理丢了 header / 有人直连本服务）。
+            # 这种情况下返回**全部租户**的文档，比报错危险得多：它不会抛异常，
+            # 只会安静地把别人的资料当成检索结果送进生成阶段。
+            if not self._settings.allow_unfiltered_search:
+                ACL_MISSING_COUNTER.inc()
+                logger.error(
+                    "检索请求未携带 ACL，已拒绝（权限下推链路断裂）query=%r", req.query[:60]
+                )
+                raise Forbidden(
+                    "检索请求必须携带 ACL：本服务不做无权限过滤的全库检索。"
+                    "确需内部调试请显式设置 ALLOW_UNFILTERED_SEARCH=true"
+                )
+            logger.warning("检索未携带 ACL，按 allow_unfiltered_search 放行（仅限内部调试）")
 
         # 重排开启时多取候选：融合结果先截断到 top_k 会让重排失去意义（见 config 说明）。
         candidate_k = (

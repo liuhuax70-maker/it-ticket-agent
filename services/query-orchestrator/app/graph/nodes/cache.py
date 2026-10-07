@@ -10,6 +10,7 @@ from app.graph.nodes.base import merge_timing, ms
 from app.graph.state import RAGState
 from packages.common.logging import get_logger
 from packages.contracts import Citation
+from packages.observability.metrics import CACHE_LOOKUP_COUNTER
 
 logger = get_logger("orchestrator.node.cache")
 
@@ -35,6 +36,8 @@ def make_cache_lookup_node(cache: QueryCache, settings: Settings):
     async def cache_lookup(state: RAGState) -> dict:
         started = time.perf_counter()
         if not cache.enabled:
+            # skip 与 miss 必须分开：把"缓存没开"算成未命中会让命中率看起来永远很低
+            CACHE_LOOKUP_COUNTER.inc({"result": "skip"})
             return merge_timing(state, "cache_lookup", started, cached=False)
 
         tenant_id, department_id, user_id, mode, top_k, query, temperature = _cache_key(
@@ -51,8 +54,10 @@ def make_cache_lookup_node(cache: QueryCache, settings: Settings):
             settings.cache_version,
         )
         if payload is None:
+            CACHE_LOOKUP_COUNTER.inc({"result": "miss"})
             return merge_timing(state, "cache_lookup", started, cached=False)
 
+        CACHE_LOOKUP_COUNTER.inc({"result": "hit"})
         logger.info("命中查询缓存 tenant=%s mode=%s", tenant_id, mode)
         return merge_timing(
             state,

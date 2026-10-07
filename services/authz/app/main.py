@@ -24,6 +24,7 @@ from packages.common.logging import get_logger, setup_logging
 from packages.common.settings import load_settings
 from packages.contracts import HealthResponse
 from packages.observability import init_otel
+from packages.observability.metrics import install_metrics
 
 settings: Settings = load_settings(Settings)
 
@@ -89,6 +90,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="authz", version=VERSION, lifespan=lifespan)
 install_exception_handlers(app)
+install_metrics(app, SERVICE_AUTHZ, settings=settings)
 
 
 @app.get("/policies")

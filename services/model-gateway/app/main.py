@@ -10,7 +10,7 @@ from fastapi import FastAPI, HTTPException
 from app.config import Settings
 from app.litellm_config import declared_models
 from app.router import ModelRouter
-from packages.common.constants import VERSION
+from packages.common.constants import SERVICE_MODEL_GATEWAY, VERSION
 from packages.common.errors import ConfigError, install_exception_handlers
 from packages.common.logging import get_logger, setup_logging
 from packages.common.settings import load_settings
@@ -24,6 +24,7 @@ from packages.contracts import (
     ModelInfo,
 )
 from packages.observability import Tracer, init_otel
+from packages.observability.metrics import install_metrics
 
 settings: Settings = load_settings(Settings)
 
@@ -59,6 +60,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="model-gateway", version=VERSION, lifespan=lifespan)
 install_exception_handlers(app)
+install_metrics(app, SERVICE_MODEL_GATEWAY, settings=settings)
 
 
 def _router() -> ModelRouter:

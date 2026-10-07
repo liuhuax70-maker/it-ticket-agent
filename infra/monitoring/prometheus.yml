@@ -1,0 +1,51 @@
+# Prometheus 抓取配置。
+#
+# 为什么没有随仓库提供一个 docker-compose 的 prometheus 服务：
+# 本地开发时应用服务由 scripts/dev_services.py 启动并绑定在 **127.0.0.1**，
+# 容器内既看不到宿主 loopback，也没法用 host.docker.internal 打通（端口只绑了回环）。
+# 与其塞一个跑不通的 compose 块，不如把配置写清楚，由部署形态决定怎么跑：
+#   * k8s：用下面的 targets 换成服务 DNS（<service>.<ns>.svc.cluster.local:<port>），
+#     或者给 Deployment 加 podAnnotations（helm 模板已预留该钩子）走注解发现；
+#   * 本机：以宿主进程方式启动 prometheus，targets 用 127.0.0.1:<port>。
+
+global:
+  # 15s 是延迟类指标与抓取开销之间的常规折中：再密只会增加开销，
+  # 再疏会让 P95 告警的判定窗口失去意义。
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+rule_files:
+  - /etc/prometheus/alerts.yml
+
+scrape_configs:
+  # 内部服务：没有鉴权中间件，/metrics 直接可达。
+  # 生产上这些服务不应发布端口，抓取走集群网络即可。
+  - job_name: rag-internal
+    metrics_path: /metrics
+    static_configs:
+      # 本机形态；k8s 请替换为服务 DNS
+      - targets:
+          - "127.0.0.1:8001" # query-orchestrator
+          - "127.0.0.1:8002" # retrieval
+          - "127.0.0.1:8003" # model-gateway
+          - "127.0.0.1:8004" # ingestion
+          - "127.0.0.1:8005" # indexing
+          - "127.0.0.1:8006" # eval
+          - "127.0.0.1:8007" # feedback
+          - "127.0.0.1:8008" # authz
+        labels:
+          tier: internal
+
+  # api-gateway 单独一组：它是公网入口，/metrics 只在配置了 METRICS_TOKEN 时
+  # 才免用户鉴权（见 packages/security/config.py::authz_exempt），
+  # 所以抓取必须带上同一个 token。
+  # token 放文件而不是写在这里：这个文件会进版本库。
+  - job_name: rag-api-gateway
+    metrics_path: /metrics
+    authorization:
+      type: Bearer
+      credentials_file: /etc/prometheus/metrics_token
+    static_configs:
+      - targets: ["127.0.0.1:8000"]
+        labels:
+          tier: edge

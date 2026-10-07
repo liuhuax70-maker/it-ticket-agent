@@ -11,12 +11,13 @@ from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from app.config import Settings
 from app.consumers import consume_raw_documents
 from app.service import IngestionService
-from packages.common.constants import VERSION
+from packages.common.constants import SERVICE_INGESTION, VERSION
 from packages.common.errors import NotFoundError, ValidationError, install_exception_handlers
 from packages.common.logging import get_logger, setup_logging
 from packages.common.settings import load_settings
 from packages.contracts import ACL, HealthResponse, IngestRequest, IngestResponse, Visibility
 from packages.observability import init_otel
+from packages.observability.metrics import install_metrics
 
 settings: Settings = load_settings(Settings)
 
@@ -45,6 +46,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="ingestion", version=VERSION, lifespan=lifespan)
 install_exception_handlers(app)
+install_metrics(app, SERVICE_INGESTION, settings=settings)
 
 
 def _service() -> IngestionService:
