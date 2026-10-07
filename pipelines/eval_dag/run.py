@@ -9,6 +9,7 @@
     python -m pipelines.eval_dag.run --limit 20       # 只跑前 20 条
     python -m pipelines.eval_dag.run --dataset configs/eval/golden.jsonl
     python -m pipelines.eval_dag.run --preflight      # 只做前置检查，不调用模型
+    python -m pipelines.eval_dag.run --rescore        # 不重新采集，用上次结果重打分
 
 退出码：0 通过；1 请求/评测失败；2 出现越权泄露（绝对不变量，不设阈值）。
 """
@@ -81,10 +82,19 @@ async def run(args: argparse.Namespace) -> int:
                 return 1
             return 0
 
-        payload["run_ragas"] = None if args.ragas else False
-        code, body = await _post(client, "/eval/run", payload)
-        if code:
-            return code
+        if args.rescore:
+            # 复用上次落盘的采集结果：调裁判/指标/超时策略时不必重打一遍真实链路
+            code, body = await _post(
+                client, "/eval/score", {"report_path": args.report, "write_report": True}
+            )
+            if code:
+                return code
+            print(f"[eval] 已用 {body.get('source')} 的采集结果重打分")
+        else:
+            payload["run_ragas"] = None if args.ragas else False
+            code, body = await _post(client, "/eval/run", payload)
+            if code:
+                return code
 
     summary = body.get("summary", {}) or {}
     preflight = body.get("preflight", {}) or {}
@@ -112,6 +122,10 @@ def main() -> int:
     parser.add_argument("--limit", type=int, default=None, help="样本数上限")
     parser.add_argument("--no-ragas", dest="ragas", action="store_false", help="只跑 L1，跳过 RAGAS")
     parser.add_argument("--preflight", action="store_true", help="只做前置检查")
+    parser.add_argument(
+        "--rescore", action="store_true", help="不重新采集，用上次落盘的采集结果重打分"
+    )
+    parser.add_argument("--report", default=None, help="--rescore 时指定采集结果 JSON")
     parser.set_defaults(ragas=True)
     args = parser.parse_args()
     return asyncio.run(run(args))

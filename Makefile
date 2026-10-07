@@ -47,6 +47,9 @@ eval-fast: ## 只跑 L1 确定性指标（不调用裁判模型）
 eval-preflight: ## 评测前置检查（语料是否入库、鉴权是否可用）
 	PYTHONPATH=. $(PY) -m pipelines.eval_dag.run --preflight
 
+eval-rescore: ## 用上次落盘的采集结果重打分（不重新采集）
+	PYTHONPATH=. $(PY) -m pipelines.eval_dag.run --rescore
+
 run-all: ## 本地一键启动全部服务（前台，Ctrl+C 退出）
 	$(PY) scripts/dev_services.py
 
