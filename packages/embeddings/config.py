@@ -6,7 +6,14 @@ from packages.common.settings import BaseAppSettings
 
 
 class EmbedSettings(BaseAppSettings):
-    """embed_dim 必须与向量库 collection 的 dim 一致，否则写入即报错。"""
+    """向量化配置。
+
+    ``embed_dim`` 的真实语义（与早期注释相反）：它是**期望值**，不是硬校验。
+    后端启动时会探测模型实际维度，与 ``embed_dim`` 不一致只打 warning 并按模型维度运行
+    （见 ``fastembed_backend``）；indexing 又改成"以 embedder 实际维度建 collection"。
+    所以真正会报错的场景只有一个：**collection 已存在且 dim 与当前模型不同**——
+    此时写入被 Milvus 拒绝。改模型维度后必须重建 collection（或换 collection 名）。
+    """
 
     service_name: str = "indexing"
 

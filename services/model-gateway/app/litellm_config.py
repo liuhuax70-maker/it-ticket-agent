@@ -22,6 +22,12 @@ logger = get_logger("model_gateway.litellm_config")
 
 @lru_cache(maxsize=4)
 def load_model_config(path: str) -> dict[str, Any]:
+    """读并缓存模型台账（进程级，改文件需重启）。
+
+    ``lru_cache`` 是**进程内**缓存且没有失效接口，所以改了 ``litellm.yaml`` 之后
+    ``/models`` 会一直返回旧内容，直到重启服务。``maxsize=4`` 是为了容纳"偶尔换个
+    路径试一下"的用法，正常运行只用 1 个条目。
+    """
     file = Path(path)
     if not file.exists():
         logger.warning("LiteLLM 配置不存在: %s（/models 将只返回当前生效模型）", file)

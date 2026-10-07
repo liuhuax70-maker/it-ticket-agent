@@ -85,6 +85,9 @@ class OpenSearchStore:
             hosts=[settings.opensearch_url],
             http_auth=http_auth,
             use_ssl=settings.opensearch_url.startswith("https"),
+            # ⚠️ 关闭证书校验：本地/自签证书集群能直连，代价是 https 链路完全不做
+            # 证书验证（可被中间人）。生产集群必须改成可配置项（CA 路径 + 校验开关），
+            # 不要沿用这里的默认值。
             verify_certs=False,
             timeout=settings.opensearch_timeout,
             max_retries=2,
@@ -96,6 +99,13 @@ class OpenSearchStore:
 
     # ---------------- 索引管理 ----------------
     async def _index_exists(self) -> bool:
+        """索引是否存在。
+
+        ⚠️ 异常一律返回 ``False``（把"鉴权失败 / 超时"当成"索引不存在"）：
+        好处是 ensure_index 会继续尝试 create，从而把真实错误抛出来；
+        代价是调用方**无法区分**"索引真的不存在"与"探测失败"。
+        要区分需返回三态或抛专用异常。
+        """
         try:
             return bool(await self._client.indices.exists(index=self.index))
         except Exception:  # noqa: BLE001

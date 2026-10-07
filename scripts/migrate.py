@@ -20,9 +20,17 @@ DEFAULT_URL = "postgresql+asyncpg://rag:rag@localhost:5432/rag"
 
 
 def build_config(sql_only: bool = False) -> Config:
+    """组装 alembic 配置。
+
+    ⚠️ ``DATABASE_URL`` 的默认来源是**代码里的 DEFAULT_URL**（含开发口令 rag:rag），
+    仅当环境变量未设置时使用。所以准确的说法是"优先读环境变量，兜底用本地开发口令"，
+    而不是"不携带口令"——生产环境必须显式提供 ``DATABASE_URL``。
+
+    ``sql_only`` 参数目前**无效**：两个分支返回同一个对象（历史遗留）。
+    调用方按需自行处理，无需依赖它。
+    """
     config = Config(str(ROOT / "alembic.ini"))
     config.set_main_option("script_location", str(ROOT / "migrations" / "postgres"))
-    # 连接串只从环境变量读，迁移脚本不携带口令
     os.environ.setdefault("DATABASE_URL", DEFAULT_URL)
     if sql_only:
         return config

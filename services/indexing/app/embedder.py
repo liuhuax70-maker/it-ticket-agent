@@ -49,7 +49,12 @@ class EmbeddingPipeline:
         computed = await self._embedder.embed_documents([texts[i] for i in missing_idx])
         for i, vec in zip(missing_idx, computed, strict=True):
             cached[i] = vec
-        await self._cache.set_many(self.model_name, "document", texts, [c for c in cached if c])
+        # ⚠️ 写回缓存的 value 列表必须与 texts **严格同长同序**：
+        # 缓存按文本哈希存键，调用方按位置对齐，任何"过滤掉 None"之类的写法都会让
+        # 某个 chunk 的文本配到另一个 chunk 的向量上——召回结果错配且不报任何错。
+        await self._cache.set_many(
+            self.model_name, "document", texts, [c for c in cached if c is not None]
+        )
         logger.info("embedding 计算 %s 条，命中缓存 %s 条", len(missing_idx), len(texts) - len(missing_idx))
         return [vec for vec in cached if vec is not None]
 

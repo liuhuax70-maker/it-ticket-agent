@@ -21,8 +21,10 @@ class SecuritySettings(BaseAppSettings):
     keycloak_verify_issuer: bool = True
 
     opa_url: str = "http://localhost:8181"
-    # 查整个 package 而不是单查 /allow：单查 allow 只返回布尔，
-    # 拒绝原因（reason）会丢失，审计时无法回答"为什么被拦"。
+    # 决策入口：查整个 package（``v1/data/rag``）而不是单查 ``/allow``，
+    # 因为单查 allow 只返回布尔，拒绝原因（reason）会丢失，审计时无法回答"为什么被拦"。
+    # 注意：真正调用时仍按 ``decision_path`` / ``reason_path`` 两次取字段
+    # （见 ``services/authz``），``v1/data/rag`` 只是它们的前缀。
     opa_decision_path: str = "v1/data/rag"
     opa_timeout: float = 3.0
 
@@ -30,7 +32,11 @@ class SecuritySettings(BaseAppSettings):
     # 注意：这些路径不会注入身份，因此也不能访问需要身份的接口。
     authz_exempt_paths: str = "/health,/openapi.json,/docs,/redoc,/ui"
 
-    def exempt_paths(self) -> tuple[str, ...]:
+    def authz_exempt(self) -> tuple[str, ...]:
+        """免鉴权路径。命名带 ``authz_`` 前缀是为了避免与限流豁免名单同名覆盖——
+        历史上两边都叫 ``exempt_paths()``，子类（网关）覆盖了父类实现，
+        导致 ``AUTHZ_EXEMPT_PATHS`` 这个安全配置**完全不生效且不报错**。
+        """
         return tuple(p.strip() for p in self.authz_exempt_paths.split(",") if p.strip())
 
     # 固定身份占位（AUTHZ_ENABLED=false 时生效）

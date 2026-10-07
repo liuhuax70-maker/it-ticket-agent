@@ -31,6 +31,9 @@ settings: Settings = load_settings(Settings)
 async def lifespan(app: FastAPI):
     setup_logging(settings.service_name, settings.log_level)
     logger = get_logger(settings.service_name)
+    # ⚠️ 只传了 service_name：init_otel 的 endpoint/enabled 有默认值（enabled=False），
+    # 所以本服务的 OTel 实际是关闭的，其他 5 个服务都传了完整三参。
+    # 要开启请改成 init_otel(settings.service_name, settings.otel_endpoint, settings.otel_enabled)。
     init_otel(settings.service_name)
     app.state.tracer = Tracer(
         host=settings.langfuse_host,

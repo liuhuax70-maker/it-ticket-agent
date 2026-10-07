@@ -57,6 +57,18 @@ class TokenProvider:
         return None
 
     async def token(self, username: str, password: str | None = None) -> str | None:
+        """取 Keycloak 访问令牌；不可用时返回 ``None``。
+
+        ⚠️ 这里有一个**进程级一次性熔断**：首次取令牌失败后 ``_unavailable`` 置 True，
+        之后整个进程生命周期**不再尝试**（连重试探测都没有）。
+        降级后的行为：调用方回退为固定身份请求头（``x-tenant-id`` 等）。
+        在开启鉴权的环境里，这等于**整轮评测/验收的权限类样本全部失去验证意义**
+        （报告里会体现为 ``authz_mode: fixed-identity``）。
+
+        为什么不做重试探测：Keycloak 不可达时每条样本都重试会把整轮拖死。
+        代价是 Keycloak 恢复后不重启进程就一直是降级状态——所以调用方
+        （eval 的 preflight、脚本）必须把 ``authz_mode`` 一起看，不能只看分数。
+        """
         if self._unavailable:
             return None
         cached = self.cached(username)

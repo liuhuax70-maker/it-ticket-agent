@@ -27,6 +27,9 @@ class RAGState(TypedDict, total=False):
 
     # ---- 中间态 ----
     rewritten_query: str
+    # ⚠️ ACL 必须由 route 节点产出（它从网关下传的身份构造），初始 state 里刻意不给。
+    # 检索节点用 ``state.get("acl")``：一旦有人把 route 从图里摘掉，ACL 会静默变成
+    # None，而 None 在 filters.compile_filters 里表示"放弃全部过滤" = 全库召回。
     acl: ACL | None
     hits: list[SearchHit]
     contexts: list[ContextItem]

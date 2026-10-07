@@ -28,7 +28,7 @@ class IdentityMiddleware(BaseHTTPMiddleware):
     def __init__(self, app, settings: Settings) -> None:  # noqa: ANN001
         super().__init__(app)
         self.settings = settings
-        self.exempt = settings.exempt_paths()
+        self.exempt = settings.authz_exempt()
 
     def _is_exempt(self, path: str) -> bool:
         return any(path == item or path.startswith(item + "/") for item in self.exempt)

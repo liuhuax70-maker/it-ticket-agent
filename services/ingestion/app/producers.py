@@ -73,6 +73,10 @@ class KafkaChunkSink:
             "reindex": reindex,
             "chunks": [c.model_dump(mode="json") for c in chunks],
         }
+        # key=doc_id 是**正确性前提**，不是分区均衡的优化：
+        # 同一文档的所有事件进同一分区，从而保证 purge（reindex）→ write 的先后顺序。
+        # 若改成随机 key 或按 chunk_id 分区，同一文档的删除与写入可能乱序到达消费端，
+        # 结果是"先写后删"——文档刚建好就被删掉，且没有任何报错。
         await self._publisher.publish(payload, key=chunks[0].doc_id if chunks else None)
         logger.info("已投递 chunk-events: doc_id=%s chunks=%s", chunks[0].doc_id if chunks else "-", len(chunks))
         return IndexResponse(

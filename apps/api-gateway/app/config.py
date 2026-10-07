@@ -39,7 +39,14 @@ class Settings(SecuritySettings):
     serve_ui: bool = True
     cors_origins: str = "http://localhost:3000,http://localhost:8000"
 
-    def exempt_paths(self) -> set[str]:
+    def rate_limit_exempt(self) -> set[str]:
+        """限流豁免名单。
+
+        ⚠️ 这里**不要**再叫 ``exempt_paths()``：父类（SecuritySettings）有一个同名方法
+        表示"免鉴权名单"，子类一旦覆盖它，``AUTHZ_EXEMPT_PATHS`` 就会静默失效
+        （两个中间件都只会拿到限流名单）。两个名单的默认值恰好相同，所以这种覆盖
+        长期无症状，直到有人去改那个安全配置。
+        """
         return {p.strip() for p in self.rate_limit_exempt_paths.split(",") if p.strip()}
 
     def cors_list(self) -> list[str]:

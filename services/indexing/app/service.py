@@ -64,6 +64,11 @@ class IndexService:
         timings: dict[str, float] = {}
 
         if req.reindex:
+            # purge 必须排在 embed **之前**：否则改切分参数后 chunk_id 整体错位，
+            # 新旧 chunk 会同时留在索引里（见 packages.common.ids.stable_chunk_id）。
+            # 代价是有一个**失败窗口**：purge 成功而后续 embed/写入失败时，
+            # 该文档会立即变成完全检索不到，且没有回滚（无临时索引、无补偿）。
+            # 恢复方式是重跑一次 reindex——这也是 reindex 必须幂等的原因。
             started = time.perf_counter()
             await self._vectors.delete_document(doc_id)
             await self._search.delete_document(doc_id)

@@ -189,6 +189,10 @@ class IngestionService:
                 total_chunks += len(chunks)
                 doc_ids.append(doc.doc_id)
 
+            # ⚠️ 这里无条件把 job 标为 succeeded，即使中间有文档索引失败。
+            # 默认 fail_fast_on_index_error=True 时失败会先抛出去、走不到这里；
+            # 但把它设成 False 后，**可靠判据是 `indexed < chunk_count`**
+            # （或按 documents.status 查 failed），不能只看 job 状态。
             await self._metadata.update_job(
                 job_id, status="succeeded", chunk_count=total_chunks, message=None
             )

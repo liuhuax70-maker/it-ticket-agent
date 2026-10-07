@@ -31,7 +31,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         super().__init__(app)
         self.settings = settings
         self.counter = counter
-        self.exempt = settings.exempt_paths()
+        self.exempt = settings.rate_limit_exempt()
 
     @staticmethod
     def _key(tenant_id: str, window: int) -> str:

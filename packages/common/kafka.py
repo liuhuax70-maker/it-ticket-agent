@@ -60,7 +60,16 @@ class KafkaPublisher:
 
 
 async def consume(bootstrap: str, topic: str, group_id: str) -> AsyncIterator[dict[str, Any]]:
-    """消费循环（占位实现）。"""
+    """消费循环（占位实现）。
+
+    ⚠️ 语义是"至少投递一次 + 尽力而为"，不是"精确一次"：
+        * ``enable_auto_commit=True``：位点在 **yield 之前**就已提交，
+          所以处理失败也不会重投。不丢消息靠的是下游按 chunk_id 幂等 upsert。
+        * 反序列化失败的消息直接丢弃，只打一条 warning，**没有计数指标也没有 DLQ**。
+          触发原因通常是 schema 不匹配（生产者升级了 payload 而消费者没跟上）。
+          要做到不丢，需引入死信 topic，或至少暴露一个丢弃计数指标。
+        * 各服务 consumers.py 里捕获 handler 异常后继续循环，同样没有重试与 DLQ。
+    """
     if not KAFKA_AVAILABLE:
         raise RuntimeError("aiokafka 未安装，无法启用 Kafka 通道")
     consumer = AIOKafkaConsumer(
@@ -77,5 +86,6 @@ async def consume(bootstrap: str, topic: str, group_id: str) -> AsyncIterator[di
                 yield json.loads(msg.value.decode("utf-8"))
             except Exception:  # noqa: BLE001
                 logger.warning("丢弃无法反序列化的消息 offset=%s", msg.offset)
+                # 丢消息点：offset 已提交、不会重投，schema 不匹配时会静默丢数据
     finally:
         await consumer.stop()

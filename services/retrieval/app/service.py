@@ -57,6 +57,11 @@ class RetrievalService:
         top_k = req.top_k or self._settings.top_k
         filters = self.compile_filters(req)
         if filters is None:
+            # 这是**未受控降级**：filters=None 会被两个 store 翻译成 match-all，
+            # 即不分租户、不分部门的全库召回，且不会报错。检索端口可被直连，
+            # 所以这条 warning 是唯一的告警信号——不要在重构里把它删掉或降级为 debug。
+            # 正常链路上 ACL 由编排层 route 节点从网关身份构造，不应出现 None；
+            # 若真出现，说明身份注入链路断了（网关没注入 / 上游漏传 header）。
             logger.warning("检索未携带 ACL，本次不做权限过滤（仅限内部调试场景）")
 
         hits, timings = await self._hybrid.search(
@@ -93,4 +98,7 @@ class RetrievalService:
         return details
 
     async def aclose(self) -> None:
+        # ⚠️ 这里只关了 BM25 客户端，**Milvus 客户端没有关闭**（向量客户端由
+        # HybridRetriever 持有，未暴露关闭入口）。进程退出时由 OS 回收，不影响
+        # 正确性；但"资源释放不完整"这件事必须写下来，否则重构时容易误以为已经关干净。
         await self._bm25.aclose()

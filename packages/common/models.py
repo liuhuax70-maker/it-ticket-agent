@@ -82,7 +82,11 @@ class Chunk(Base, TimestampMixin):
     char_start: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     char_end: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     token_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
-    # ACL 冗余，用于检索侧一致性校验
+    # ACL 冗余列：写入时随 chunk 一起落库。
+    # ⚠️ 当前**没有任何读取点**——检索侧读的是 Milvus / OpenSearch 里各自的冗余字段，
+    # 并没有任何代码比对这三列与索引侧是否一致。所以它们现在是"写而不读"的历史包袱，
+    # 不要以为"元数据与索引的一致性"已被保障。
+    # 未来若要做一致性校验（写入后抽样比对），这三列就是比对基准。
     tenant_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
     department_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
     visibility: Mapped[str] = mapped_column(String(32), nullable=False, default="internal")
