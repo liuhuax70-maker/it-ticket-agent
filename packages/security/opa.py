@@ -1,10 +1,16 @@
 """OPA 策略决策客户端（fail-closed）。
 
-最小闭环不启用（AUTHZ_ENABLED=false，网关不会调用）；策略本身已写入
-``services/authz/policies/rag.rego``，启用时无需改代码。
+**在用**：api-gateway 通过 ``require_action(...)`` 在 chat / documents / feedback
+上调用它（见 ``apps/api-gateway/app/middleware/identity.py``）。
+只有 ``AUTHZ_ENABLED=false`` 时才整体跳过（此时 ``allow()`` 直接返回放行）。
 
-安全取向：OPA 不可达时**拒绝**而不是放行（fail-closed），
-只有显式 ``enabled=False`` 才跳过决策。
+安全取向：以下三种情况**一律拒绝**，而不是放行——
+    1. OPA 不可达或超时（连接失败、5xx）；
+    2. 响应不是预期结构（result 既不是 bool 也不是对象）；
+    3. result 是对象但没有 allow 字段。
+
+宁可误拒也不要误放：拒绝的代价是一次失败请求，放行的代价是一次越权。
+策略本身在 ``services/authz/policies/rag.rego``。
 """
 
 from __future__ import annotations
