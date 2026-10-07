@@ -95,15 +95,30 @@ class OpenSearchStore:
         await self._client.close()
 
     # ---------------- 索引管理 ----------------
-    async def ensure_index(self) -> None:
+    async def _index_exists(self) -> bool:
         try:
-            exists = await self._client.indices.exists(index=self.index)
-            if not exists:
-                await self._client.indices.create(
-                    index=self.index, body=build_index_body(self._settings.opensearch_analyzer)
-                )
-                logger.info("已创建 OpenSearch 索引 %s", self.index)
+            return bool(await self._client.indices.exists(index=self.index))
+        except Exception:  # noqa: BLE001
+            return False
+
+    async def ensure_index(self) -> None:
+        """幂等建索引。
+
+        ``exists`` 与 ``create`` 之间存在竞态：多个服务（retrieval 与 indexing）
+        同时启动时会并发建同一个索引，后到者会收到 resource_already_exists。
+        因此创建失败后要**再查一次**，只要索引已存在就算成功。
+        """
+        try:
+            if await self._index_exists():
+                return
+            await self._client.indices.create(
+                index=self.index, body=build_index_body(self._settings.opensearch_analyzer)
+            )
+            logger.info("已创建 OpenSearch 索引 %s", self.index)
         except Exception as exc:  # noqa: BLE001
+            if await self._index_exists():
+                logger.info("OpenSearch 索引 %s 已由其他实例创建", self.index)
+                return
             raise DependencyUnavailable("OpenSearch", f"索引初始化失败: {exc}") from exc
 
     async def health(self) -> tuple[bool, str]:

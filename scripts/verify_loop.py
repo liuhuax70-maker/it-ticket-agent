@@ -284,7 +284,8 @@ async def main() -> int:
         for item in _failures:
             print(f"  - {item}")
         return 1
-    print("验收通过：最小闭环 V1~V5 全部满足")
+    scope = "V1~V3" if args.skip_chat else "V1~V5"
+    print(f"验收通过：最小闭环 {scope} 全部满足")
     return 0
 
 

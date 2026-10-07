@@ -28,15 +28,20 @@ async def health(request: Request) -> HealthResponse:
     state = request.app.state
     settings = state.settings
 
-    details: dict[str, str] = {
-        "authz_enabled": str(settings.authz_enabled),
-        "rate_limit_enabled": str(settings.rate_limit_enabled),
+    # 只有「探测器」的结果参与状态判定；开关类字段（authz_enabled 等）
+    # 只是把配置暴露出来，不该让它们把整体状态拉成 degraded。
+    probes: dict[str, str] = {
         "query_orchestrator": await _probe(state.orchestrator),
         "ingestion": await _probe(state.ingestion),
         "model_gateway": await _probe(state.model_gateway),
     }
+    details: dict[str, str] = {
+        **probes,
+        "authz_enabled": str(settings.authz_enabled),
+        "rate_limit_enabled": str(settings.rate_limit_enabled),
+    }
 
-    status = "ok" if all(v == "ok" for v in details.values()) else "degraded"
+    status = "ok" if all(value == "ok" for value in probes.values()) else "degraded"
     return HealthResponse(
         status=status,  # type: ignore[arg-type]
         service=SERVICE_API_GATEWAY,

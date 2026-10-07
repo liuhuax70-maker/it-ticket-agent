@@ -86,15 +86,28 @@ python scripts/migrate.py                         # Alembic 建表
 ### 2.4 配置模型（DeepSeek 双模）
 
 ```ini
-# .env —— 官方 API
+# .env —— 官方 API（默认路径）
 LLM_PROVIDER=deepseek
 DEEPSEEK_API_KEY=sk-xxxx
 
-# .env —— 本地 OpenAI 兼容端点（Ollama / vLLM）
+# .env —— 本地 OpenAI 兼容端点（vLLM / 通用 OpenAI 协议服务）
 LLM_PROVIDER=local
 LOCAL_LLM_BASE_URL=http://localhost:11434/v1
 LOCAL_LLM_MODEL=deepseek-r1:7b
+LOCAL_LLM_API_STYLE=openai
+
+# .env —— 本机 Ollama（推荐本地开发用它）
+LLM_PROVIDER=local
+LOCAL_LLM_MODEL=qwen3.5:4b
+LOCAL_LLM_API_STYLE=ollama   # 走 Ollama 原生接口
+LOCAL_LLM_THINK=false        # 关闭思考链，见下方说明
+LLM_ANSWER_PROMPT_VERSION=v2
 ```
+
+> **思考型模型必须关掉思考链**：`qwen3` / `deepseek-r1` 这类模型在 OpenAI 兼容接口下会把输出预算
+> 全部消耗在思维链上，最终 `content` 为空——表现为「模型莫名其妙一直拒答」（实测 9B 模型耗时 87s 后返回空/拒答）。
+> 由于只有 Ollama 原生接口支持 `think=false`，所以提供了 `LOCAL_LLM_API_STYLE=ollama`；
+> 切换后同一个模型 12s 内就给出了带引用的正确答案。若你的模型不是思考型，保持 `openai` 风格即可。
 
 向量化默认用本地 ONNX（`EMBED_BACKEND=fastembed` + `BAAI/bge-small-zh-v1.5`，512 维），无需外部服务；也可切 `litellm` 走远端 embedding 端点。
 
@@ -153,6 +166,8 @@ data/corpus/    演示语料
 
 1. **权限过滤下沉到存储层**：过滤条件编译成 Milvus `expr` 与 OpenSearch `filter`，绝不在应用层裁剪 top_k 结果——否则越权文档会先挤占 top_k，导致有权限的文档检索不到。详见 `docs/adr/0002`。
 2. **检索为空直接拒答，不调用 LLM**：一个在检索为空时仍然编答案的 RAG 接口，比不可用更危险。
+   拒答判定分三层（哨兵标记 → 固定话术 → 短句否定表述），并且**拒答一律清空 citations**——
+   引用意味着「有资料支撑」，挂在拒答上等于误导用户。详见 `docs/adr/0003`。
 3. **引用可定位**：`chunk` 自带 `char_start/char_end`，切分器保证 `content[char_start:char_end] == chunk.text`；`/chat` 的 `citations` 原样透传，前端可直接跳原文。
 4. **混合检索用 RRF 而非分数加权**：BM25 与余弦相似度量纲不可比，RRF 只用排名，免标定。
 5. **最小闭环先同步直连、Kafka 留接口**：`ChunkSink` 抽象让 ingestion→indexing 在「HTTP 直连 / Kafka 事件」之间切换时不用改业务代码。详见 `docs/adr/0001`。
@@ -198,5 +213,10 @@ terraform -chdir=infra/terraform/envs/dev init && terraform -chdir=infra/terrafo
 | 中文分词 | OpenSearch 用 `standard` 分析器 | 换带 IK 插件的镜像并重建索引 |
 | PDF / Word / HTML | 已支持 Markdown / Txt / PDF（pypdf，无 OCR） | 补 docx / html / OCR |
 | 前端 | 仅 `api-gateway` 内置静态问答页 | `apps/chat-ui`、`apps/admin-console`（Next.js） |
+| 拒答的兜底判定 | 哨兵 + 固定话术 + 短句启发式（阈值 80 字） | 用评测集标定「相关性阈值」，让不可回答的问题在检索阶段就返回空 |
+| 入库吞吐 | 单文档 `/index` 因 Milvus `flush` + OpenSearch `refresh` 约 20s（本机实测） | 大文档改批量写入 + 关闭同步 refresh，用 bulk 参数控制可见性 |
+
+> 实测记录（本机 Docker + CPU 推理）：`/chat` 端到端约 2–14s，其中检索 ~0.3s、生成 2.3–12.6s；
+> `/index` 单文档（10 分块）约 20s，瓶颈在 Milvus flush 与 OpenSearch refresh，不在向量化。
 
 历史 P0 设计与坑位清单见 `docs/architecture/minimal-loop-v0.md`。

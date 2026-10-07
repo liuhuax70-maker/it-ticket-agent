@@ -28,6 +28,8 @@ class ModelTarget:
     litellm_model: str
     api_base: str | None = None
     api_key: str | None = None
+    # provider 特有参数（如 Ollama 的 think=False），原样透传给 LiteLLM
+    extra: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass
@@ -85,10 +87,27 @@ def build_target(settings: LLMSettings, model_override: str | None = None) -> Mo
 
     if provider == "local":
         model = settings.local_llm_model
+        style = (settings.local_llm_api_style or "openai").lower()
+
+        if style == "ollama" and "/" not in model:
+            # Ollama 原生接口：才支持 think=False（关闭思考链）。
+            # api_base 要去掉 /v1 后缀——原生接口挂在根路径下。
+            base = settings.local_llm_base_url.rstrip("/")
+            if base.endswith("/v1"):
+                base = base[: -len("/v1")]
+            return ModelTarget(
+                name=model,
+                provider="ollama",
+                litellm_model=f"ollama/{model}",
+                api_base=base,
+                api_key=settings.local_llm_api_key or "ollama",
+                extra={"think": settings.local_llm_think},
+            )
+
         return ModelTarget(
             name=model,
             provider="local",
-            # 本地端点统一按 OpenAI 兼容协议调用
+            # 本地端点默认按 OpenAI 兼容协议调用（无 think 参数，思考链无法关闭）
             litellm_model=model if "/" in model else f"openai/{model}",
             api_base=settings.local_llm_base_url,
             api_key=settings.local_llm_api_key or "not-needed",
@@ -127,6 +146,8 @@ class LLMClient:
         }
         if target.api_base:
             kwargs["api_base"] = target.api_base
+        # provider 特有参数（如 ollama 的 think）
+        kwargs.update(target.extra)
 
         try:
             resp = await litellm.acompletion(**kwargs)
@@ -198,18 +219,19 @@ class LLMClient:
     def describe(self) -> dict[str, Any]:
         """不泄露密钥的自描述，用于 /health 与 /models。"""
         provider = (self.settings.llm_provider or "deepseek").lower()
-        return {
+        info: dict[str, Any] = {
             "provider": provider,
-            "api_base": (
-                self.settings.deepseek_api_base or "https://api.deepseek.com"
-                if provider == "deepseek"
-                else self.settings.local_llm_base_url
-            ),
-            "model": (
-                self.settings.deepseek_model if provider == "deepseek" else self.settings.local_llm_model
-            ),
             "fallbacks": self.settings.fallback_list(),
-            "key_configured": bool(self.settings.deepseek_api_key)
-            if provider == "deepseek"
-            else True,
+            "prompt_version": self.settings.answer_prompt_version,
         }
+        if provider == "deepseek":
+            info["api_base"] = self.settings.deepseek_api_base or "https://api.deepseek.com"
+            info["model"] = self.settings.deepseek_model
+            info["key_configured"] = bool(self.settings.deepseek_api_key)
+        else:
+            info["api_base"] = self.settings.local_llm_base_url
+            info["model"] = self.settings.local_llm_model
+            info["api_style"] = self.settings.local_llm_api_style
+            info["think"] = self.settings.local_llm_think
+            info["key_configured"] = True
+        return info

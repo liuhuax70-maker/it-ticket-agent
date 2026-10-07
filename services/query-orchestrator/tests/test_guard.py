@@ -1,9 +1,11 @@
-"""引用映射（citations）单元测试。"""
+"""引用映射（citations）与拒答识别单元测试。"""
 
 from __future__ import annotations
 
-from app.graph.nodes.guard import build_citations, extract_citation_indexes
+import pytest
+from app.graph.nodes.guard import build_citations, detect_refusal, extract_citation_indexes
 
+from packages.common.constants import REFUSE_MARKER, REFUSE_TEXT
 from packages.contracts import SearchHit
 
 
@@ -54,3 +56,39 @@ def test_snippet_is_truncated_to_200_chars() -> None:
     hits[0].text = "长" * 500
     citations, _ = build_citations("结论[1]。", hits)
     assert len(citations[0].snippet) == 200
+
+
+# ---------------- 拒答识别 ----------------
+
+
+@pytest.mark.parametrize(
+    "answer",
+    [
+        REFUSE_TEXT,  # 标准话术（v1 提示词）
+        REFUSE_MARKER,  # 哨兵（v2 提示词）
+        "NO_ANSWER",  # 哨兵（模型可能带上标点或额外空白）
+        "",  # 空答案
+        "   ",
+        "公司年会的举办酒店在提供的参考资料中未提及。[1][2][3][4][5]",
+        "参考资料中未包含关于食堂午饭菜单的信息。",
+        "文档里没有相关信息。",
+        "无法回答该问题。",
+        "The context does not mention it.",
+    ],
+)
+def test_detect_refusal_positive(answer: str) -> None:
+    assert detect_refusal(answer) is True
+
+
+@pytest.mark.parametrize(
+    "answer",
+    [
+        "入职体检费用由员工先行垫付，转正后凭发票通过报销系统提交，上限五百元[1]。",
+        # 有实质内容的长答案里出现「未提及」是在说明局部信息，不应误判为拒答
+        "手册未提及加班费的具体标准，但明确规定了年假天数：司龄一至三年者每年五天，三至五年者每年十天，"
+        "五年以上者每年十五天，年假应在当年内使用，因工作原因无法休完的，经部门负责人批准可结转至次年第一季度，"
+        "此外入职满一年后方可享受带薪年假[1]。",
+    ],
+)
+def test_detect_refusal_negative(answer: str) -> None:
+    assert detect_refusal(answer) is False

@@ -8,6 +8,7 @@ from app.graph.nodes.cache import make_cache_lookup_node, make_cache_store_node
 from app.graph.nodes.generate import make_generate_node
 from app.graph.nodes.guard import (
     build_citations,
+    detect_refusal,
     extract_citation_indexes,
     make_guard_node,
     make_refuse_node,
@@ -19,6 +20,7 @@ from app.graph.nodes.route import make_route_node
 
 __all__ = [
     "build_citations",
+    "detect_refusal",
     "extract_citation_indexes",
     "make_cache_lookup_node",
     "make_cache_store_node",

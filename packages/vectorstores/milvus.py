@@ -105,10 +105,21 @@ class MilvusStore:
         self._client.load_collection(self.collection)
         logger.info("已创建 Milvus collection %s (dim=%s)", self.collection, self.dim)
 
+    def _has_collection_sync(self) -> bool:
+        try:
+            return bool(self._client.has_collection(self.collection))
+        except Exception:  # noqa: BLE001
+            return False
+
     async def ensure_collection(self) -> None:
+        """幂等建表。并发启动时 retrieval 与 indexing 会同时建同一个 collection，
+        因此创建失败后需再确认一次是否已被对端建好。"""
         try:
             await asyncio.to_thread(self._ensure_collection_sync)
         except Exception as exc:  # noqa: BLE001
+            if await asyncio.to_thread(self._has_collection_sync):
+                logger.info("Milvus collection %s 已由其他实例创建", self.collection)
+                return
             raise DependencyUnavailable("Milvus", f"collection 初始化失败: {exc}") from exc
 
     async def health(self) -> tuple[bool, str]:

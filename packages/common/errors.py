@@ -44,9 +44,17 @@ class UpstreamError(RagError):
 
 
 class DependencyUnavailable(RagError):
-    """依赖组件不可用（Milvus / OpenSearch / Redis / Postgres）。"""
+    """依赖组件不可用（Milvus / OpenSearch / Redis / Postgres）。
+
+    构造签名与 ``UpstreamError`` 保持一致 ``(service, message)``：
+    同一类错误的两种签名最容易在跨服务调用时写错。
+    """
 
     status_code = 503
+
+    def __init__(self, service: str, message: str, *, detail: dict | None = None) -> None:
+        super().__init__(f"[{service}] {message}", detail=detail)
+        self.service = service
 
 
 def install_exception_handlers(app: FastAPI) -> None:

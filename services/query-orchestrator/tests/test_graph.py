@@ -165,6 +165,19 @@ async def test_model_self_refusal_is_respected(make_graph) -> None:
     assert final["citations"] == []
 
 
+async def test_model_composed_refusal_is_normalized(make_graph) -> None:
+    """模型用自己的话说「资料里没有」也要走拒答，且不能挂引用。"""
+    graph, _, _ = make_graph(
+        hits=[_hit("d_1:4", "x")], answer="参考资料中未提及公司年会的举办地点。[1][2]"
+    )
+    final = await graph.ainvoke(_state())
+
+    assert final["refused"] is True
+    assert final["citations"] == []
+    assert final["answer"] == REFUSE_TEXT, "对外话术必须统一，不能透出模型的自由表述"
+    assert "refusal_detected" in final["errors"]
+
+
 async def test_quoted_short_query_routes_to_keyword(make_graph) -> None:
     graph, retrieval, _ = make_graph(hits=[_hit("d_1:0", "x")])
     await graph.ainvoke(_state(query="“BT-2024”"))

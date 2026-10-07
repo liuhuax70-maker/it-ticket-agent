@@ -16,7 +16,7 @@ from app.clients.model_gateway import ModelGatewayClient
 from app.config import Settings
 from app.graph.nodes.base import add_error, merge_timing
 from app.graph.state import RAGState
-from packages.common.constants import REFUSE_TEXT
+from packages.common.constants import REFUSE_MARKER, REFUSE_TEXT
 from packages.common.logging import get_logger
 from packages.contracts import ChatMessage, Citation, CompletionRequest, SearchHit
 from packages.prompts import get_prompt_registry
@@ -25,6 +25,40 @@ logger = get_logger("orchestrator.node.guard")
 
 _CITE = re.compile(r"\[(\d+)\]")
 _SNIPPET_LEN = 200
+
+# 拒答判定分三层，从可靠到兜底：
+#   1) 哨兵标记 REFUSE_MARKER —— 提示词要求模型只输出这串字符，最可靠；
+#   2) 固定话术 REFUSE_TEXT —— 老版本提示词（v1）与模型自由发挥时可能出现；
+#   3) 短句否定表述 —— 兜底。模型可能用自己的话说「资料中未提及」，
+#      如果只认字符串，就会把这种**正确行为**当成正常作答并挂上误导性引用。
+_REFUSAL_PATTERNS = (
+    re.compile(
+        r"(未提及|没有提及|未包含|没有包含|不包含|未涉及|没有涉及|"
+        r"未找到|没有找到|未提供|没有提供|无法回答|无法解答|无法确定|"
+        r"没有相关|未找到相关|没有这方?面|不存在相关|"
+        r"not\s+mention|no\s+mention|no\s+information|not\s+specified|"
+        r"cannot\s+answer|unable\s+to\s+answer)",
+        re.IGNORECASE,
+    ),
+)
+
+# 兜底层只对「短句」生效：长答案里出现「未提及」通常是在说明局部信息
+# （如「手册未提及加班费，但规定了年假……」），那是有内容的正常回答。
+_MAX_REFUSAL_LEN = 80
+
+
+def detect_refusal(answer: str) -> bool:
+    """判断答案是否属于拒答。"""
+    text = (answer or "").strip()
+    if not text:
+        return True
+    if REFUSE_MARKER in text:
+        return True
+    if REFUSE_TEXT in text:
+        return True
+    if len(text) > _MAX_REFUSAL_LEN:
+        return False
+    return any(pattern.search(text) for pattern in _REFUSAL_PATTERNS)
 
 
 def extract_citation_indexes(answer: str) -> list[int]:
@@ -105,15 +139,19 @@ def make_guard_node(model_gateway: ModelGatewayClient, settings: Settings):
         answer = (state.get("answer") or "").strip()
         hits = list(state.get("hits") or [])
 
-        # 1) 模型自己给出了拒答话术 -> 视为拒答，且不带引用
-        if not answer or REFUSE_TEXT in answer:
+        # 1) 拒答识别：统一话术并清空引用。
+        #    引用意味着「有资料支撑」，挂在拒答上等于误导用户，必须清掉。
+        if detect_refusal(answer):
+            if answer and REFUSE_TEXT not in answer:
+                logger.info("识别到自述式拒答，已归一化为标准话术: %r", answer[:60])
             return merge_timing(
                 state,
                 "guard",
                 started,
-                answer=answer or REFUSE_TEXT,
+                answer=REFUSE_TEXT,
                 citations=[],
                 refused=True,
+                errors=add_error(state, "refusal_detected") if answer else list(state.get("errors") or []),
             )
 
         # 2) 引用映射

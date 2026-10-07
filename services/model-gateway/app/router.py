@@ -8,7 +8,7 @@ import time
 from app.config import Settings
 from app.fallback import FallbackPolicy
 from app.quota import QuotaGuard
-from packages.common.constants import REFUSE_TEXT
+from packages.common.constants import REFUSE_MARKER, REFUSE_TEXT
 from packages.common.errors import UpstreamError
 from packages.common.logging import get_logger
 from packages.contracts import (
@@ -23,6 +23,9 @@ from packages.llms import LLMClient, ModelTarget, build_target
 from packages.prompts import get_prompt_registry
 
 logger = get_logger("model_gateway.router")
+
+# 默认提示版本；实际取值由 Settings.answer_prompt_version 传入
+DEFAULT_PROMPT_VERSION = "v2"
 
 
 def format_context(req: GenerateRequest) -> str:
@@ -41,12 +44,16 @@ def format_context(req: GenerateRequest) -> str:
     return "\n\n".join(blocks)
 
 
-def build_messages(req: GenerateRequest) -> list[dict[str, str]]:
+def build_messages(
+    req: GenerateRequest, prompt_version: str = DEFAULT_PROMPT_VERSION
+) -> list[dict[str, str]]:
     registry = get_prompt_registry()
+    # 两个变量都传：v1 用 refuse_text，v2 用 refuse_marker，便于版本切换时互不影响
     user_content = registry.render(
         "rag_answer",
-        "v1",
+        prompt_version,
         refuse_text=REFUSE_TEXT,
+        refuse_marker=REFUSE_MARKER,
         context=format_context(req),
         query=req.query,
     )
@@ -131,7 +138,7 @@ class ModelRouter:
     async def generate(self, req: GenerateRequest) -> GenerateResponse:
         """RAG 生成：上下文 + 引用约束提示词。"""
         return await self._run(
-            build_messages(req),
+            build_messages(req, self._settings.answer_prompt_version),
             model=req.model,
             temperature=req.temperature,
             max_tokens=req.max_tokens,
