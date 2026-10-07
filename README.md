@@ -257,6 +257,13 @@ data/corpus/    演示语料
 8. **权限数据的失败必须大声**：`tenant/department/owner` 只能由网关从身份注入，客户端不得指定；
    `visibility=private` 缺 `owner` 直接 422，不做默认值兜底——权限字段的错误不会抛异常，
    只会"悄悄搜不到"或"悄悄越权"，是唯一必须靠端到端验收兜住的类别。详见 `docs/adr/0004`。
+9. **缓存键必须包含身份维度**：查询缓存键为
+   `(tenant_id, department_id, user_id, mode, top_k, temperature, query)`。
+   早期实现漏了身份维度，同租户内 alice(hr) 与 bob(engineering) 问同一句问题会共用一条缓存，
+   bob 直接收到带 HR 文档引用的答案——检索层 ACL 被整段绕过。
+   **这类缺陷在 `CACHE_ENABLED=false` 时完全不可见**，只靠人读代码才能发现。详见 `docs/adr/0006`。
+10. **评测分两层**：L1 用可判定的硬事实（越权、拒答、命中）且不依赖裁判模型，
+   L2 才用 RAGAS 打答案质量分。只做 L2 会慢到没人愿意跑，且分数无法定位到样本。详见 `docs/adr/0005`。
 
 ---
 
@@ -294,8 +301,8 @@ terraform -chdir=infra/terraform/envs/dev init && terraform -chdir=infra/terrafo
 | Langfuse | 未配置密钥时静默降级为 no-op | 配置 `LANGFUSE_*` 即开始上报 |
 | 鉴权与授权 | 已接入 Keycloak（JWT + JWKS，验签失败自动刷新）与 OPA（默认拒绝白名单），端到端验收通过 | 字段级/文档级授权、令牌静默刷新、生产用 HTTPS + PKCE 回调域名 |
 | 角色白名单可见性 | `allowed_roles` 已入契约但未参与过滤 | 补存储层 schema/expr 与两个入口的字段传递 |
-| 语义缓存 | 当前为精确匹配 | 建立 eval set 后升级为 embedding 相似度匹配 |
-| Reranker | 默认关闭（透传） | 有 eval set 后再开，否则无法归因 |
+| 语义缓存 | 当前为精确匹配 | 已有 eval set，可升级为 embedding 相似度匹配（须同时保证身份隔离） |
+| Reranker | 默认关闭（透传） | 已有 eval set（hit@k / MRR 可归因），可开 cross-encoder 并对比 |
 | 中文分词 | OpenSearch 用 `standard` 分析器 | 换带 IK 插件的镜像并重建索引 |
 | PDF / Word / HTML | 已支持 Markdown / Txt / PDF（pypdf，无 OCR） | 补 docx / html / OCR |
 | 前端 | `api-gateway` 内置单页应用（问答 + 上传 + 知识库台账 + 深色模式） | `apps/chat-ui`、`apps/admin-console`（Next.js，含评测看板、批量导入、权限配置） |

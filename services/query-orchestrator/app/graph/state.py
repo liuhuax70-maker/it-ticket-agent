@@ -22,6 +22,7 @@ class RAGState(TypedDict, total=False):
     roles: list[str]
     top_k: int
     mode: RetrieveMode
+    temperature: float | None
     trace_id: str
 
     # ---- 中间态 ----

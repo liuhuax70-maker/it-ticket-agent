@@ -203,6 +203,7 @@ async def collect(samples: list[GoldenSample], settings: Settings) -> list[dict[
                 query=sample.question,
                 include_contexts=True,
                 top_k=settings.top_k,
+                temperature=settings.answer_temperature,
             ).model_dump(mode="json")
 
             started = time.perf_counter()

@@ -33,6 +33,11 @@ class Settings(LLMSettings, SecuritySettings):
     top_k: int = 5
     # 拉文档台账用的身份（需要 documents:read；默认取有写权限的 carol）
     ledger_username: str = "carol"
+    # 评测固定作答温度（默认 0）。理由见 docs/adr/0005：
+    # 温度不为 0 时"该不该拒答"对采样极其敏感，同一份评测集连跑两次误答率能翻倍，
+    # 指标就失去了可比性。置为 null 则沿用 model-gateway 的默认温度
+    # （仅在故意观察采样波动时使用）。
+    answer_temperature: float | None = 0.0
     ledger_limit: int = 500
     # 语料缺失时是否仍然继续：默认 False——缺语料跑出来的 hit@k 没有意义，
     # 不如直接失败并把补齐命令打出来

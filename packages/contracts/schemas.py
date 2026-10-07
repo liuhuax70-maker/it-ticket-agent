@@ -220,6 +220,10 @@ class ChatRequest(BaseModel):
     top_k: int | None = None
     mode: RetrieveMode | None = None
     conversation_id: str | None = None
+    # 生成温度。留空则由 model-gateway 用自己的默认配置。
+    # 评测会显式传 0：作答温度不为 0 时"该不该拒答"这类判断对采样极其敏感，
+    # 同一份评测集连跑两次误答率能翻倍，指标就失去了可比性。
+    temperature: float | None = None
     # 评测（RAGAS 的 context 类指标）需要完整上下文；默认不回传，避免正文无谓外泄
     include_contexts: bool = False
 

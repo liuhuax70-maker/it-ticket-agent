@@ -66,6 +66,7 @@ class OrchestratorService:
                     "roles": list(identity.roles),
                     "top_k": top_k,
                     "mode": mode,
+                    "temperature": req.temperature,
                     "trace_id": trace_id,
                     "timings": {},
                     "errors": [],

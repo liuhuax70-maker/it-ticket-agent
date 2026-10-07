@@ -14,14 +14,18 @@ from packages.contracts import Citation
 logger = get_logger("orchestrator.node.cache")
 
 
-def _cache_key(state: RAGState, settings: Settings) -> tuple[str, str, int, str]:
+def _cache_key(state: RAGState, settings: Settings) -> tuple[str, str, str, str, int, str, float | None]:
+    """缓存键分量，见 QueryCache._key 的说明（身份维度缺一即越权风险）。"""
     mode = (state.get("mode") or settings.default_mode()).value
     top_k = state.get("top_k") or settings.top_k
     return (
         state.get("tenant_id") or settings.default_tenant_id,
+        state.get("department_id") or "",
+        state.get("user_id") or "",
         mode,
         top_k,
         state.get("query", ""),
+        state.get("temperature"),
     )
 
 
@@ -31,8 +35,10 @@ def make_cache_lookup_node(cache: QueryCache, settings: Settings):
         if not cache.enabled:
             return merge_timing(state, "cache_lookup", started, cached=False)
 
-        tenant_id, mode, top_k, query = _cache_key(state, settings)
-        payload = await cache.get(tenant_id, mode, top_k, query)
+        tenant_id, department_id, user_id, mode, top_k, query, temperature = _cache_key(state, settings)
+        payload = await cache.get(
+            tenant_id, department_id, user_id, mode, top_k, query, temperature
+        )
         if payload is None:
             return merge_timing(state, "cache_lookup", started, cached=False)
 
@@ -59,9 +65,11 @@ def make_cache_store_node(cache: QueryCache, settings: Settings):
         # 不缓存拒答：把「资料缺失」固化下来，会在文档补录后继续吐旧答案
         if state.get("refused"):
             return merge_timing(state, "cache_store", started)
-        tenant_id, mode, top_k, query = _cache_key(state, settings)
+        tenant_id, department_id, user_id, mode, top_k, query, temperature = _cache_key(state, settings)
         await cache.set(
             tenant_id,
+            department_id,
+            user_id,
             mode,
             top_k,
             query,
@@ -71,6 +79,7 @@ def make_cache_store_node(cache: QueryCache, settings: Settings):
                 "refused": False,
                 "model": state.get("model"),
             },
+            temperature,
         )
         return merge_timing(state, "cache_store", started)
 

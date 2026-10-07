@@ -42,17 +42,63 @@ class QueryCache:
         return self._redis
 
     @staticmethod
-    def _key(tenant_id: str, mode: str, top_k: int, query: str) -> str:
-        digest = hashlib.sha256(
-            f"{tenant_id}|{mode}|{top_k}|{normalize(query)}".encode()
-        ).hexdigest()
+    def _key(
+        tenant_id: str,
+        department_id: str,
+        user_id: str,
+        mode: str,
+        top_k: int,
+        query: str,
+        temperature: float | None = None,
+    ) -> str:
+        """组装缓存键。
+
+        这里每个分量都不是"可选的"，少一个就会出事：
+
+        ``tenant_id / department_id / user_id``
+            **ACL 过滤依赖这三个维度。** 早期实现只用
+            ``(tenant_id, mode, top_k, query)``，结果同租户内 alice（hr）与
+            bob（engineering）问同一句问题时共用同一条缓存——bob 会直接收到
+            alice 那条**带 HR 文档引用**的答案，检索层的 ACL 过滤被整段绕过。
+            这类漏洞在缓存关闭时完全不可见，只在生产开启缓存后才暴露。
+            private 可见性按 owner 过滤，所以 ``user_id`` 不能省。
+        ``mode / top_k``
+            检索方式与召回条数不同，答案就不同。
+        ``temperature``
+            生成温度不同答案就不同；评测会把上一轮的结果当成本轮结果。
+        ``query``
+            归一化后参与摘要，避免空白差异导致无谓穿透。
+        """
+        parts = "|".join(
+            [
+                tenant_id or "-",
+                department_id or "-",
+                user_id or "-",
+                mode,
+                str(top_k),
+                f"{temperature}",
+                normalize(query),
+            ]
+        )
+        digest = hashlib.sha256(parts.encode()).hexdigest()
         return f"rag:cache:{digest}"
 
-    async def get(self, tenant_id: str, mode: str, top_k: int, query: str) -> dict[str, Any] | None:
+    async def get(
+        self,
+        tenant_id: str,
+        department_id: str,
+        user_id: str,
+        mode: str,
+        top_k: int,
+        query: str,
+        temperature: float | None = None,
+    ) -> dict[str, Any] | None:
         if not self.enabled:
             return None
         try:
-            raw = await self._client().get(self._key(tenant_id, mode, top_k, query))
+            raw = await self._client().get(
+                self._key(tenant_id, department_id, user_id, mode, top_k, query, temperature)
+            )
         except Exception as exc:  # noqa: BLE001 - 缓存故障必须降级而不是报错
             logger.warning("缓存读取失败，降级为未命中: %s", exc)
             return None
@@ -65,13 +111,21 @@ class QueryCache:
             return None
 
     async def set(
-        self, tenant_id: str, mode: str, top_k: int, query: str, payload: dict[str, Any]
+        self,
+        tenant_id: str,
+        department_id: str,
+        user_id: str,
+        mode: str,
+        top_k: int,
+        query: str,
+        payload: dict[str, Any],
+        temperature: float | None = None,
     ) -> None:
         if not self.enabled:
             return
         try:
             await self._client().set(
-                self._key(tenant_id, mode, top_k, query),
+                self._key(tenant_id, department_id, user_id, mode, top_k, query, temperature),
                 json.dumps(payload, ensure_ascii=False),
                 ex=self._ttl,
             )
