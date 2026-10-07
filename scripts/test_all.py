@@ -27,6 +27,9 @@ TARGETS: list[tuple[str, str]] = [
     ("services/indexing/tests", "indexing"),
     ("services/retrieval/tests", "retrieval"),
     ("services/query-orchestrator/tests", "query-orchestrator"),
+    ("services/eval/tests", "eval"),
+    ("services/feedback/tests", "feedback"),
+    ("services/authz/tests", "authz"),
 ]
 
 

@@ -133,7 +133,9 @@ class IngestionService:
                 f"{path.name} 超过单文件上限 {self._settings.max_file_size_mb}MB（{size_mb:.1f}MB）"
             )
         parsed = get_parser(path).parse(path)
-        return self._document_from_text(parsed.text, parsed.source, parsed.title, acl)
+        # source 统一用 posix 分隔符：doc_id 由 source 派生，若分隔符随平台变化，
+        # Windows 与 Linux 上同一文件会得到不同 doc_id，增量同步与引用回查都会错位。
+        return self._document_from_text(parsed.text, path.as_posix(), parsed.title, acl)
 
     # ---------------- 主流程 ----------------
     async def ingest(self, req: IngestRequest) -> IngestResponse:

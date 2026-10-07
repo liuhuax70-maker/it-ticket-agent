@@ -100,6 +100,8 @@ class OrchestratorService:
             cached=bool(final.get("cached", False)),
             model=final.get("model"),
             trace_id=trace_id,
+            # 缓存命中时没有 contexts（缓存只存答案与引用），评测脚本需注意
+            contexts=list(final.get("contexts") or []) if req.include_contexts else None,
         )
 
     async def health(self) -> dict[str, str]:

@@ -220,6 +220,8 @@ class ChatRequest(BaseModel):
     top_k: int | None = None
     mode: RetrieveMode | None = None
     conversation_id: str | None = None
+    # 评测（RAGAS 的 context 类指标）需要完整上下文；默认不回传，避免正文无谓外泄
+    include_contexts: bool = False
 
 
 class ChatResponse(BaseModel):
@@ -230,6 +232,8 @@ class ChatResponse(BaseModel):
     cached: bool = False
     model: str | None = None
     trace_id: str | None = None
+    # 仅在 ChatRequest.include_contexts=true 时填充
+    contexts: list[ContextItem] | None = None
 
 
 # --------------------------------------------------------------------------

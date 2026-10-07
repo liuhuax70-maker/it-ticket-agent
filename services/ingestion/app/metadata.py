@@ -107,6 +107,32 @@ class MetadataStore:
                 "visibility": row.visibility,
             }
 
+    async def list_documents(
+        self, *, limit: int = 100, offset: int = 0, tenant_id: str | None = None
+    ) -> list[dict]:
+        async with session_scope(self._url) as session:
+            stmt = select(DocumentRow).order_by(DocumentRow.created_at.desc())
+            if tenant_id:
+                stmt = stmt.where(DocumentRow.tenant_id == tenant_id)
+            stmt = stmt.limit(limit).offset(offset)
+            rows = (await session.scalars(stmt)).all()
+            return [
+                {
+                    "doc_id": row.doc_id,
+                    "title": row.title,
+                    "source": row.source,
+                    "status": row.status,
+                    "content_hash": row.content_hash,
+                    "chunk_count": row.chunk_count,
+                    "tenant_id": row.tenant_id,
+                    "department_id": row.department_id,
+                    "visibility": row.visibility,
+                    "created_at": row.created_at.isoformat() if row.created_at else None,
+                    "updated_at": row.updated_at.isoformat() if row.updated_at else None,
+                }
+                for row in rows
+            ]
+
     # ---------------- 接入任务 ----------------
     async def create_job(self, source: str) -> str:
         job_id = uuid.uuid4()

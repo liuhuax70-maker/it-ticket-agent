@@ -46,7 +46,7 @@ dev = [
   "mypy>=1.11",
 ]
 # 评测服务需要（较重）
-eval = ["ragas>=0.2", "datasets>=2.20"]
+eval = ["ragas>=0.2", "datasets>=2.20", "langchain-openai>=0.2"]
 # Langfuse trace 上报（未安装时 observability 自动降级为 no-op）
 observability = ["langfuse>=2.50"]
 # 备选本地向量化后端（体积大，默认用 fastembed）

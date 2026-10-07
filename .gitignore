@@ -28,6 +28,8 @@ htmlcov/
 data/index/
 data/uploads/
 data/manifest.json
+eval_data/reports/
+eval_data/bad_cases/
 volumes/
 logs/
 *.log

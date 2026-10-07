@@ -93,6 +93,19 @@ async def stats() -> dict[str, object]:
     return await _service()._metadata.stats()  # noqa: SLF001
 
 
+@app.get("/documents")
+async def list_documents(
+    limit: int = 100,
+    offset: int = 0,
+    tenant_id: str = "",
+) -> dict[str, object]:
+    """文档台账（按创建时间倒序）。供增量同步与留存清理任务使用。"""
+    rows = await _service()._metadata.list_documents(  # noqa: SLF001
+        limit=min(max(limit, 1), 500), offset=max(offset, 0), tenant_id=tenant_id or None
+    )
+    return {"total": len(rows), "items": rows}
+
+
 @app.get("/documents/{doc_id}")
 async def get_document(doc_id: str) -> dict[str, object]:
     document = await _service()._metadata.get_document(doc_id)  # noqa: SLF001

@@ -1,0 +1,33 @@
+{
+  "_comment": [
+    "chunks 索引模板（与 packages/search/opensearch.py::build_index_body 保持一致）。",
+    "服务启动时会自动建索引，本文件用于：1) 在管控台手工建；2) 后续需要改 mapping 时走版本化变更。",
+    "analyzer 默认 standard；集群装了 IK 插件后可改为 ik_max_word（中文分词更准，但需要重建索引）。"
+  ],
+  "settings": {
+    "number_of_shards": 1,
+    "number_of_replicas": 0,
+    "refresh_interval": "1s"
+  },
+  "mappings": {
+    "properties": {
+      "text": { "type": "text", "analyzer": "standard" },
+      "chunk_id": { "type": "keyword" },
+      "doc_id": { "type": "keyword" },
+      "doc_title": {
+        "type": "text",
+        "analyzer": "standard",
+        "fields": { "keyword": { "type": "keyword" } }
+      },
+      "source": { "type": "keyword" },
+      "chunk_index": { "type": "integer" },
+      "section_path": { "type": "text", "analyzer": "standard" },
+      "char_start": { "type": "integer" },
+      "char_end": { "type": "integer" },
+      "tenant_id": { "type": "keyword" },
+      "department_id": { "type": "keyword" },
+      "visibility": { "type": "keyword" },
+      "owner": { "type": "keyword" }
+    }
+  }
+}
