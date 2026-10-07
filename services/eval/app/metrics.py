@@ -18,7 +18,12 @@ RAGAS（L2）负责答案质量这类需要主观判断的维度，两层互补�
     citation_coverage  作答样本中带引用的比例（引用强制是产品约束）
     false_refusal    正样本被误判为拒答（漏答）
     false_answer     负样本没有拒答（幻觉风险）
-    leak             出现了越权来源（禁止来源或不在该身份的可见集合内）——**必须为 0**
+    leak             引用到了该身份**不该看到**的文档——**必须为 0**。
+                     禁止集合由采集器推导（数据集声明 + 台账 ACL），本模块只做判定。
+
+注意 leak 与 false_answer 是**两件事**，不能合并：越权是安全问题（存储层过滤失效），
+误答是生成质量问题（模型没拒绝）。实测里 alice 追问他人私有文档时"没拒答但引用的
+全是自己有权看的文档"——它该计 false_answer，绝不能计 leak。
 """
 
 from __future__ import annotations
@@ -65,6 +70,7 @@ class MetricsReport(BaseModel):
 
     leak_rate: float = 0.0
     leak_count: int = 0
+    leak_details: list[dict[str, Any]] = Field(default_factory=list)
     context_empty_rate: float | None = None
     error_count: int = 0
 
@@ -166,23 +172,23 @@ def compute(rows: list[dict[str, Any]]) -> MetricsReport:
     report.false_answer_rate = _rate(len(negative) - correct_neg, len(negative))
 
     # ---- 越权泄露（必须为 0）----
+    # forbidden_doc_ids 由采集器保证是**完整**集合：数据集显式声明 + 台账 ACL 推导。
+    # 这里只做判定，不再自己算可见集合——两处各算一套正是漏检的来源。
     leaks: list[dict[str, Any]] = []
     for row in rows:
-        cited = _cited_doc_ids(row)
         forbidden = set(row.get("forbidden_doc_ids") or [])
-        allowed = set(row.get("allowed_doc_ids") or [])
-        bad = [d for d in cited if d in forbidden or (allowed and d not in allowed)]
+        bad = [d for d in _cited_doc_ids(row) if d in forbidden]
         if bad:
             leaks.append(
                 {
                     "sample_id": row.get("sample_id"),
                     "identity": row.get("identity"),
                     "leaked_doc_ids": bad,
-                    "reason": "forbidden" if any(d in forbidden for d in bad) else "not_in_allowed_set",
                 }
             )
     report.leak_count = len(leaks)
     report.leak_rate = _rate(len(leaks), len(rows)) or 0.0
+    report.leak_details = leaks
 
     report.context_empty_rate = _rate(empty_contexts, len(rows))
     report.error_count = sum(1 for r in rows if r.get("error"))
@@ -213,13 +219,7 @@ def compute(rows: list[dict[str, Any]]) -> MetricsReport:
             "leak_count": sum(
                 1
                 for r in group
-                if (
-                    set(_cited_doc_ids(r)) & set(r.get("forbidden_doc_ids") or [])
-                    or (
-                        r.get("allowed_doc_ids")
-                        and any(d not in set(r["allowed_doc_ids"]) for d in _cited_doc_ids(r))
-                    )
-                )
+                if set(_cited_doc_ids(r)) & set(r.get("forbidden_doc_ids") or [])
             ),
         }
 
@@ -291,6 +291,15 @@ def format_markdown(report: MetricsReport, *, title: str = "评测基线", extra
             lines.append(
                 f"| {tag} | {stats['count']} | {pct(stats['hit_at_k'])} | "
                 f"{pct(stats['false_refusal_rate'])} | {pct(stats['false_answer_rate'])} | {stats['leak_count']} |"
+            )
+
+    if report.leak_details:
+        lines.extend(
+            ["", "## 越权明细（必须为 0）", "", "| 样本 | 身份 | 泄露的文档 |", "| --- | --- | --- |"]
+        )
+        for item in report.leak_details:
+            lines.append(
+                f"| {item.get('sample_id')} | {item.get('identity', '')} | {item.get('leaked_doc_ids')} |"
             )
 
     if report.failures:

@@ -12,7 +12,7 @@ from typing import Any
 from app.collector import _missing_sources_error, collect, preflight
 from app.config import Settings
 from app.datasets import GoldenSample
-from app.metrics import compute
+from app.metrics import MetricsReport, compute
 from packages.common.errors import ValidationError
 from packages.common.logging import get_logger
 
@@ -52,6 +52,32 @@ def _stratified_subset(rows: list[dict[str, Any]], limit: int) -> list[dict[str,
     return picked
 
 
+async def _score_l2(rows: list[dict[str, Any]], settings: Settings) -> dict[str, Any] | None:
+    """跑 L2（RAGAS）。失败只记录错误，绝不吃掉已经算好的 L1。"""
+    subset = _stratified_subset(rows, settings.ragas_max_samples)
+    if not subset:
+        return None
+    try:
+        # 惰性导入：没装 eval extra 时 L1 照常可用，只是 L2 报错
+        from app.ragas_runner import score
+
+        # RAGAS 是同步阻塞的，放到线程里避免卡住事件循环
+        return await asyncio.to_thread(score, subset, settings)
+    except Exception as exc:  # noqa: BLE001
+        logger.error("L2（RAGAS）打分失败，仅返回 L1 指标: %s", exc)
+        return {"metrics": {}, "judge_model": None, "error": str(exc)}
+
+
+def _log_l1(l1: MetricsReport) -> None:
+    logger.info(
+        "L1 完成: hit@k=%s 漏答=%s 误答=%s 越权=%s 条",
+        l1.hit_at_k,
+        l1.false_refusal_rate,
+        l1.false_answer_rate,
+        l1.leak_count,
+    )
+
+
 async def run(
     samples: list[GoldenSample],
     settings: Settings,
@@ -64,35 +90,30 @@ async def run(
 
     rows = await collect(samples, settings)
     l1 = compute(rows)
-    logger.info(
-        "L1 完成: hit@k=%s 漏答=%s 误答=%s 越权=%s 条",
-        l1.hit_at_k,
-        l1.false_refusal_rate,
-        l1.false_answer_rate,
-        l1.leak_count,
-    )
+    _log_l1(l1)
 
-    l2: dict[str, Any] | None = None
     want_ragas = settings.ragas_enabled if with_ragas is None else with_ragas
-    if want_ragas:
-        subset = _stratified_subset(rows, settings.ragas_max_samples)
-        try:
-            # 惰性导入：没装 eval extra 时 L1 照常可用，只是 L2 报错
-            from app.ragas_runner import score
+    l2 = await _score_l2(rows, settings) if want_ragas else None
 
-            # RAGAS 是同步阻塞的，放到线程里避免卡住事件循环
-            l2 = await asyncio.to_thread(score, subset, settings)
-        except Exception as exc:  # noqa: BLE001
-            # L2 失败不能吃掉已经算好的 L1
-            logger.error("L2（RAGAS）打分失败，仅返回 L1 指标: %s", exc)
-            l2 = {"metrics": {}, "judge_model": None, "error": str(exc)}
+    return {"preflight": pre, "l1": l1, "l2": l2, "rows": rows}
 
-    return {
-        "preflight": pre,
-        "l1": l1,
-        "l2": l2,
-        "rows": rows,
+
+async def rescore(rows: list[dict[str, Any]], settings: Settings) -> dict[str, Any]:
+    """只用**已采集**的行重算 L1 + L2（不重新打真实链路）。
+
+    调整裁判模型、指标集合或超时策略时用这个：采集要十几分钟，
+    重打分只需要裁判那部分时间——这也是把流程拆成"采集 / 打分"两段的原因。
+    """
+    l1 = compute(rows)
+    _log_l1(l1)
+    l2 = await _score_l2(rows, settings) if settings.ragas_enabled else None
+    pre = {
+        "authz_mode": "rescored-from-cache",
+        "missing_sources": [],
+        "sample_count": len(rows),
+        "identities": sorted({str(row.get("identity", "")) for row in rows}),
     }
+    return {"preflight": pre, "l1": l1, "l2": l2, "rows": rows}
 
 
-__all__ = ["run"]
+__all__ = ["rescore", "run"]

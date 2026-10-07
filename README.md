@@ -159,15 +159,18 @@ python scripts/verify_loop.py --skip-chat   # 只验服务健康、接入幂等�
 L2 用 RAGAS 打答案质量分。
 
 ```bash
-python scripts/prepare_corpus.py                 # 准备语料（10 篇通用 + 3 篇权限）
-# 启动 eval 服务（:8006）后：
-curl -X POST localhost:8006/eval/preflight -H 'Content-Type: application/json' -d '{}'   # 只做前置检查，秒级
-curl -X POST localhost:8006/eval/run -H 'Content-Type: application/json' \
-     -d '{"run_ragas": false}'                   # 只跑 L1（快，适合迭代）
-python -m pipelines.eval_dag.run                 # 全量（含 L2）
+make corpus           # 准备语料（10 篇通用 + 3 篇权限，回读校验 ACL）
+make eval-preflight   # 前置检查：语料是否入库、鉴权是否可用（秒级，不调用模型）
+make eval-fast        # 只跑 L1（确定性指标，分钟级，适合改参数后反复跑）
+make eval             # 全量（L1 + L2 RAGAS）
 ```
 
-评测集 `configs/eval/golden.jsonl`（41 条）分四类：
+当前基线（41 条样本、本地 Ollama 4B 作答、`top_k=5`）：
+
+```
+hit@k 100.0%（95% 区间 89.3%~100.0%）   MRR 1.000   片段召回 100.0%   引用覆盖 100.0%
+漏答率 0.0%    误答率 22.2%    越权泄露 0 条    延迟 P50 3.8s / P95 5.0s
+```
 
 | 类别 | 条数 | 目的 |
 | --- | --- | --- |
@@ -180,7 +183,11 @@ L1 指标：`hit@k`（带 Wilson 95% 区间）、`MRR`、片段召回、引用�
 漏答率、误答率、**越权泄露数（必须为 0）**，并给出标签分组与失败样本明细。
 L2 指标：`faithfulness`、`context_precision`、`context_recall`（负样本不参与）。
 
-报告落盘 `eval_data/reports/baseline_latest.json` 与 `.md`（JSON 供机器比对，Markdown 供人读）。
+报告落盘 `eval_data/reports/`（`baseline_latest.json` 供机器比对、`baseline_latest.md` 供人读）。
+
+> 已知的两条失败都不是权限问题：「帮我写一首关于加班的诗」未拒答；
+> alice 追问 carol 的私有交接清单时也未拒答，但她引用的是**自己有权看**的文档——
+> 这正是把「越权」与「误答」拆成两个指标的意义：前者是安全不变量，后者是生成质量问题。
 
 ### 2.8 权限闭环验收（S7，本项目的主线）
 
@@ -188,8 +195,8 @@ V1~V5 只证明「链路能跑」，且是在**单租户单部门**下跑的。�
 **真实身份**跑一遍隔离矩阵：
 
 ```bash
-docker compose --profile authz up -d            # Keycloak + OPA
-python scripts/verify_permissions.py            # 清理历史产物 -> 上传权限语料 -> 跑矩阵
+docker compose --profile authz up -d   # Keycloak + OPA
+make verify-permissions                # 清理历史产物 -> 上传权限语料 -> 跑隔离矩阵
 python scripts/verify_permissions.py --skip-prepare   # 沿用现有语料，不改动知识库
 ```
 

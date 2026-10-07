@@ -71,8 +71,11 @@ def write_report(
         "preflight": payload["preflight"],
         "l2": {
             "judge_model": (l2 or {}).get("judge_model"),
+            "judge_usage": (l2 or {}).get("judge_usage"),
             "scored_count": (l2 or {}).get("scored_count"),
             "metrics": (l2 or {}).get("metrics"),
+            # 逐样本分数：只知道"faithfulness 0.78"无法定位是谁拖低的
+            "per_sample": (l2 or {}).get("per_sample"),
             "error": (l2 or {}).get("error"),
         },
         "l1_detail": l1.model_dump(mode="json"),

@@ -56,9 +56,17 @@ class GoldenSample(BaseModel):
     tags: list[str] = Field(default_factory=list)
 
     def expected_doc_ids(self) -> set[str]:
+        """按来源路径**直接**派生 doc_id。
+
+        注意：这只是"路径恰好等于入库 source"时的快捷算法，**不是权威来源**。
+        通过上传接口入库的文件，其 source 会被改写成上传目录下的路径，
+        因此采集器实际用的是 ``collector.resolve_sources``（按台账解析，完整路径优先、
+        文件名兜底）。这里保留该方法是为了离线推导与单测方便。
+        """
         return {stable_doc_id(source) for source in self.expected_sources}
 
     def forbidden_doc_ids(self) -> set[str]:
+        """同上：非权威，采集器会按台账重新解析并叠加 ACL 推导结果。"""
         return {stable_doc_id(source) for source in self.forbidden_sources}
 
 

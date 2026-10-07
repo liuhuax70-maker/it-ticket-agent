@@ -27,6 +27,7 @@ SERVICES: list[tuple[str, str, int]] = [
     ("ingestion", "services/ingestion", 8004),
     ("query-orchestrator", "services/query-orchestrator", 8001),
     ("api-gateway", "apps/api-gateway", 8000),
+    ("eval", "services/eval", 8006),
 ]
 
 

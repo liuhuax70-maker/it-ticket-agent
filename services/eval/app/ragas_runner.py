@@ -101,13 +101,22 @@ def score(rows: list[dict[str, Any]], settings: Settings) -> dict[str, Any]:
     judge = ProjectLLMJudge(settings)
     metrics = _load_metrics(selected, judge)
     logger.info(
-        "开始 RAGAS 打分: %s 条，指标 %s，裁判 %s", len(ragas_rows), selected, judge.target_name
+        "开始 RAGAS 打分: %s 条，指标 %s，裁判 %s（超时 %ss，并发 %s）",
+        len(ragas_rows),
+        selected,
+        judge.target_name,
+        settings.judge_timeout,
+        settings.judge_workers,
     )
 
+    from ragas.run_config import RunConfig
+
+    run_config = RunConfig(timeout=settings.judge_timeout, max_workers=settings.judge_workers)
     result = evaluate(
         dataset=EvaluationDataset.from_list(ragas_rows),
         metrics=[metric for _, metric in metrics],
         raise_exceptions=False,
+        run_config=run_config,
     )
     frame = result.to_pandas()
 

@@ -42,6 +42,11 @@ class Settings(LLMSettings, SecuritySettings):
     ragas_enabled: bool = True
     # 裁判每样本要发多次请求，本地小模型很慢，默认只跑一小部分
     ragas_max_samples: int = 12
+    # 单个评测任务的超时与并发上限。
+    # ragas 默认 timeout=180s：本地小模型下 context_precision 这类"对每条上下文分别
+    # 调用裁判"的指标会整批超时（表现为全 NaN，很容易被误读成"裁判不会解析"）。
+    judge_timeout: float = 900.0
+    judge_workers: int = 4
 
     # 裁判模型（留空=用 LLM_PROVIDER 的默认模型）
     judge_model: str = ""

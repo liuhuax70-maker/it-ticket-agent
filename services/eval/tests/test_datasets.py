@@ -2,14 +2,16 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 
 import pytest
 from app.collector import _acl_forbidden_doc_ids, _missing_sources_error, resolve_sources
+from app.config import Settings
 from app.datasets import EvalIdentity, load_samples
 from app.metrics import compute, format_markdown, wilson_interval
 from app.reports import summarize, write_report
-from app.runner import _stratified_subset
+from app.runner import _stratified_subset, rescore
 
 from packages.common.errors import ConfigError, NotFoundError
 from packages.common.ids import stable_doc_id
@@ -310,6 +312,17 @@ def test_summarize_exposes_both_layers() -> None:
     assert summary["ragas"]["faithfulness"] == 0.9
     assert summary["authz_mode"] == "token"
     assert summary["leak_count"] == 0
+
+
+def test_rescore_recomputes_l1_from_saved_rows() -> None:
+    """离线重打分必须重算 L1，而不是信任报告里缓存的聚合值。"""
+    rows = [_row("a", citations=[{"doc_id": "d_x"}], expected=["d_x"])]
+    result = asyncio.run(rescore(rows, Settings(ragas_enabled=False)))
+
+    assert result["preflight"]["authz_mode"] == "rescored-from-cache"
+    assert result["preflight"]["sample_count"] == 1
+    assert result["l1"].hit_at_k == 1.0
+    assert result["l2"] is None  # 没开 ragas 就不该去打分
 
 
 def test_write_report_creates_json_and_markdown(tmp_path) -> None:

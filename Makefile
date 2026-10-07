@@ -3,7 +3,7 @@ PY ?= python
 
 .DEFAULT_GOAL := help
 
-.PHONY: help install infra-up infra-full infra-down infra-ps migrate seed index api gateway orchestrator retrieval ingestion indexing model-gateway run-all verify test lint fmt
+.PHONY: help install infra-up infra-full infra-down infra-ps migrate seed index api gateway orchestrator retrieval ingestion indexing model-gateway run-all verify corpus verify-permissions eval eval-fast eval-preflight test lint fmt
 
 help: ## 列出所有可用目标
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-16s\033[0m %s\n", $$1, $$2}'
@@ -31,6 +31,21 @@ seed: ## 导入语料并建立索引（调用 ingestion -> indexing）
 
 verify: ## 端到端闭环验收
 	$(PY) scripts/verify_loop.py
+
+corpus: ## 准备评测/权限语料（通用 + 权限）
+	$(PY) scripts/prepare_corpus.py
+
+verify-permissions: ## 权限闭环验收（需要 Keycloak + OPA）
+	$(PY) scripts/verify_permissions.py
+
+eval: ## 完整评测（L1 + L2 RAGAS，需要 eval 服务在 :8006）
+	PYTHONPATH=. $(PY) -m pipelines.eval_dag.run
+
+eval-fast: ## 只跑 L1 确定性指标（不调用裁判模型）
+	PYTHONPATH=. $(PY) -m pipelines.eval_dag.run --no-ragas
+
+eval-preflight: ## 评测前置检查（语料是否入库、鉴权是否可用）
+	PYTHONPATH=. $(PY) -m pipelines.eval_dag.run --preflight
 
 run-all: ## 本地一键启动全部服务（前台，Ctrl+C 退出）
 	$(PY) scripts/dev_services.py
