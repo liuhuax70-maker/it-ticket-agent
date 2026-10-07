@@ -139,7 +139,10 @@ def score(rows: list[dict[str, Any]], settings: Settings) -> dict[str, Any]:
             "note": "没有可用于 L2 的样本",
         }
 
-    judge = ProjectLLMJudge(settings)
+    # 必须把 judge_model 传下去：留空才回落到 LLM_PROVIDER 的默认模型。
+    # 不传的话 JUDGE_MODEL 会被静默忽略——想做"强模型作答 + 便宜模型当裁判"
+    # （或反过来）时，配置看起来生效了其实没有。
+    judge = ProjectLLMJudge(settings, model=settings.judge_model or None)
     metrics = _load_metrics(selected, judge)
     logger.info(
         "开始 RAGAS 打分: %s 条，指标 %s，裁判 %s（超时 %ss，并发 %s）",
@@ -168,6 +171,8 @@ def score(rows: list[dict[str, Any]], settings: Settings) -> dict[str, Any]:
         "metrics": scores,
         "per_sample": per_sample,
         "judge_model": judge.target_name,
+        # 端点实际服务的模型名（与请求名不同时才有值，例如中转把 chat 映射成 flash）
+        "judge_served_model": judge.served_name or None,
         "judge_usage": judge.usage,
         "requested_metrics": requested,
         "scored_count": len(ragas_rows),

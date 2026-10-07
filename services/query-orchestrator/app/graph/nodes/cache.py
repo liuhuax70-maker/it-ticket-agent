@@ -41,7 +41,14 @@ def make_cache_lookup_node(cache: QueryCache, settings: Settings):
             state, settings
         )
         payload = await cache.get(
-            tenant_id, department_id, user_id, mode, top_k, query, temperature
+            tenant_id,
+            department_id,
+            user_id,
+            mode,
+            top_k,
+            query,
+            temperature,
+            settings.cache_version,
         )
         if payload is None:
             return merge_timing(state, "cache_lookup", started, cached=False)
@@ -86,6 +93,7 @@ def make_cache_store_node(cache: QueryCache, settings: Settings):
                 "model": state.get("model"),
             },
             temperature,
+            settings.cache_version,
         )
         return merge_timing(state, "cache_store", started)
 

@@ -74,10 +74,20 @@ class ProjectLLMJudge(BaseRagasLLM):
         self._max_tokens = max_tokens
         self._prompt_tokens = 0
         self._completion_tokens = 0
+        # 端点**实际服务**的模型名（取自响应），用于归因：
+        # 中转/代理/平台侧常把请求的模型名映射成别的名字（例如 deepseek-chat -> deepseek-flash），
+        # 只记请求名会让"模型变了"与"系统变差"分不开。
+        self._served: str = ""
 
     @property
     def target_name(self) -> str:
+        """请求的模型名（litellm 形态）。"""
         return self._target.litellm_model
+
+    @property
+    def served_name(self) -> str:
+        """端点实际服务的模型名；尚未调用时为空串。"""
+        return self._served
 
     @property
     def usage(self) -> dict[str, int]:
@@ -111,6 +121,8 @@ class ProjectLLMJudge(BaseRagasLLM):
             usage = result.usage or {}
             self._prompt_tokens += int(usage.get("prompt_tokens", 0) or 0)
             self._completion_tokens += int(usage.get("completion_tokens", 0) or 0)
+            if result.model and result.model != self._target.litellm_model:
+                self._served = result.model
             generations.append(Generation(text=result.text or ""))
         return LLMResult(generations=[generations], llm_output={})
 

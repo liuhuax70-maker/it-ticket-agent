@@ -20,6 +20,22 @@ logger = get_logger("eval.reports")
 MIN_SAMPLES_FOR_CONFIDENCE = 30
 
 
+def _dominant_answer_model(rows: list[dict[str, Any]]) -> str | None:
+    """出现次数最多的作答模型名（同一轮里理论上应只有一个）。
+
+    取众数而不是第一条：采集过程中若发生模型降级/回退，会出现多个模型名，
+    这时"众数"能反映主体，而第一条第恰好是降级结果时会把整轮归因写错。
+    """
+    counts: dict[str, int] = {}
+    for row in rows:
+        name = row.get("answer_model")
+        if name:
+            counts[str(name)] = counts.get(str(name), 0) + 1
+    if not counts:
+        return None
+    return max(counts.items(), key=lambda item: item[1])[0]
+
+
 def summarize(payload: dict[str, Any]) -> dict[str, Any]:
     l1: MetricsReport = payload["l1"]
     l2: dict[str, Any] | None = payload.get("l2")
@@ -41,6 +57,10 @@ def summarize(payload: dict[str, Any]) -> dict[str, Any]:
         "latency_ms_p95": l1.latency_ms_p95,
         "ragas": (l2 or {}).get("metrics") or {},
         "judge_model": (l2 or {}).get("judge_model"),
+        # 端点实际服务的裁判模型（与 judge_model 不同说明配置名被中转映射）
+        "judge_served_model": (l2 or {}).get("judge_served_model"),
+        # 作答模型：指标对比必须能归因到模型，否则会把换模型的功劳记到别处
+        "answer_model": _dominant_answer_model(payload["rows"]),
         "authz_mode": payload["preflight"].get("authz_mode"),
         "confidence": "ok" if l1.count >= MIN_SAMPLES_FOR_CONFIDENCE else "insufficient_samples",
         "latency_ms_avg": round(sum(latencies) / len(latencies), 1) if latencies else None,
@@ -71,6 +91,9 @@ def write_report(
         "preflight": payload["preflight"],
         "l2": {
             "judge_model": (l2 or {}).get("judge_model"),
+            # 端点实际服务的模型名。与 judge_model 不一致时说明配置名被中转映射了——
+            # 记录它才能回答"分数变了是系统变差还是模型换了一个"。
+            "judge_served_model": (l2 or {}).get("judge_served_model"),
             "judge_usage": (l2 or {}).get("judge_usage"),
             "scored_count": (l2 or {}).get("scored_count"),
             "metrics": (l2 or {}).get("metrics"),
@@ -90,8 +113,16 @@ def write_report(
         l1,
         title=f"评测基线（{stamp}）",
         extra={
+            # 归属信息放在最前：读报告的人必须先知道"这些数字是哪个模型产出的"
+            "作答模型": report["summary"]["answer_model"] or "—",
             **((l2 or {}).get("metrics") or {}),
             **({"裁判模型": (l2 or {}).get("judge_model", "—")} if l2 else {}),
+            # 仅在与请求名不同时展示，避免正常情况下的噪音
+            **(
+                {"裁判实际服务模型": (l2 or {}).get("judge_served_model")}
+                if (l2 or {}).get("judge_served_model")
+                else {}
+            ),
             **({"L2 错误": (l2 or {}).get("error")} if (l2 or {}).get("error") else {}),
         },
     )

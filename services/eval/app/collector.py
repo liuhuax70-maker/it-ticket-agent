@@ -262,6 +262,9 @@ def _build_row(
         "expected_snippets": sample.expected_snippets,
         "forbidden_doc_ids": sorted(forbidden),
         "answer": body.get("answer", ""),
+        # 作答用的模型名。必须落盘：否则"误答率从 44.4% 降到 x%"无法归因到模型切换，
+        # 后人会以为那是提示词或检索的功劳。
+        "answer_model": body.get("model"),
         "refused": bool(body.get("refused")),
         "cached": bool(body.get("cached")),
         "citations": citations,

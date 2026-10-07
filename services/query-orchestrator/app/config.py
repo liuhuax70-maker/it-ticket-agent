@@ -34,6 +34,16 @@ class Settings(BaseAppSettings):
     cache_enabled: bool = False
     cache_ttl_seconds: int = 3600
     redis_url: str = "redis://localhost:6379/0"
+    # 缓存版本号，参与缓存键。
+    #
+    # **改变任何影响答案内容的配置后必须调大它**：更换作答模型（LLM_PROVIDER）、
+    # 改提示词、改切分参数、改 top_k 语义等。否则新配置会继续命中旧配置产出的答案，
+    # 直到 TTL 过期——症状是"配置改了但没生效"，而且在 TTL 内新旧答案混在一起，
+    # 评测结果无法归因（报告里的 answer_model 会暴露这种混用）。
+    #
+    # 之所以用显式版本号而不是把模型名拼进键：编排层并不知道 model-gateway 实际用哪个模型
+    # （那是下游的配置），拼一个自己都不知道的值只会制造假的安全感。
+    cache_version: str = "1"
 
     # ---- 身份默认值（鉴权开启后由网关透传真实身份）----
     default_tenant_id: str = "default"

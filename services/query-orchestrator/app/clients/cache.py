@@ -54,6 +54,7 @@ class QueryCache:
         top_k: int,
         query: str,
         temperature: float | None = None,
+        version: str = "1",
     ) -> str:
         """组装缓存键。
 
@@ -72,9 +73,14 @@ class QueryCache:
             生成温度不同答案就不同；评测会把上一轮的结果当成本轮结果。
         ``query``
             归一化后参与摘要，避免空白差异导致无谓穿透。
+        ``version``
+            显式失效开关（``CACHE_VERSION``）。换作答模型/改提示词/改切分参数后
+            调大它即可让旧答案立刻失效，而不是等 TTL 过期或手动 flushdb。
+            它解决的是"缓存键无法表达的那些变化"——编排层并不知道下游实际用哪个模型。
         """
         parts = "|".join(
             [
+                version or "1",
                 tenant_id or "-",
                 department_id or "-",
                 user_id or "-",
@@ -85,7 +91,7 @@ class QueryCache:
             ]
         )
         digest = hashlib.sha256(parts.encode()).hexdigest()
-        return f"rag:cache:{digest}"
+        return f"rag:cache:v{version or '1'}:{digest}"
 
     async def get(
         self,
@@ -96,12 +102,15 @@ class QueryCache:
         top_k: int,
         query: str,
         temperature: float | None = None,
+        version: str = "1",
     ) -> dict[str, Any] | None:
         if not self.enabled:
             return None
         try:
             raw = await self._client().get(
-                self._key(tenant_id, department_id, user_id, mode, top_k, query, temperature)
+                self._key(
+                    tenant_id, department_id, user_id, mode, top_k, query, temperature, version
+                )
             )
         except Exception as exc:  # noqa: BLE001 - 缓存故障必须降级而不是报错
             logger.warning("缓存读取失败，降级为未命中: %s", exc)
@@ -124,12 +133,15 @@ class QueryCache:
         query: str,
         payload: dict[str, Any],
         temperature: float | None = None,
+        version: str = "1",
     ) -> None:
         if not self.enabled:
             return
         try:
             await self._client().set(
-                self._key(tenant_id, department_id, user_id, mode, top_k, query, temperature),
+                self._key(
+                    tenant_id, department_id, user_id, mode, top_k, query, temperature, version
+                ),
                 json.dumps(payload, ensure_ascii=False),
                 ex=self._ttl,
             )

@@ -16,8 +16,9 @@ def _key(
     top_k: int = 5,
     query: str = "招聘需求审批中，编制核对需要在几个工作日内完成？",
     temperature: float | None = None,
+    version: str = "1",
 ) -> str:
-    return QueryCache._key(tenant, department, user, mode, top_k, query, temperature)
+    return QueryCache._key(tenant, department, user, mode, top_k, query, temperature, version)
 
 
 def test_cache_key_separates_departments() -> None:
@@ -54,3 +55,18 @@ def test_cache_key_handles_missing_identity_parts() -> None:
     """匿名请求（占位身份）也要能算出稳定的键，不能因为 None 抛异常。"""
     assert _key(department="", user="") != ""
     assert _key(department="", user="") == _key(department="", user="")
+
+
+def test_cache_key_separates_versions() -> None:
+    """版本号是**显式失效开关**：换作答模型后必须让旧答案立刻失配。
+
+    编排层不知道下游实际用哪个模型，所以无法把模型名拼进键；
+    靠 CACHE_VERSION 让"换模型/改提示词/改切分"这些变化能被主动作废。
+    没有这条，切到 DeepSeek 后会继续命中 4B 的旧答案直到 TTL 过期。
+    """
+    assert _key(version="1") != _key(version="2")
+
+
+def test_cache_key_includes_version_in_prefix() -> None:
+    """前缀里带版本，便于运维按版本批量清理（KEYS rag:cache:v1:*）。"""
+    assert _key(version="7").startswith("rag:cache:v7:")

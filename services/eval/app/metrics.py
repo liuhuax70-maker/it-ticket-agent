@@ -118,6 +118,19 @@ def _first_hit_rank(row: dict[str, Any]) -> int | None:
     return next((i for i, doc_id in enumerate(cited, start=1) if doc_id in expected), None)
 
 
+def _unique_doc_ids(row: dict[str, Any]) -> list[str]:
+    """去重后的引用文档列表（保持出现顺序）。
+
+    同一篇文档常因多个 chunk 被重复引用，直接打印会出现
+    ``['d_a', 'd_b', 'd_a']`` 这种看起来像数据错误的内容，
+    也会让失败明细比实际更"严重"。
+    """
+    seen: dict[str, None] = {}
+    for doc_id in _cited_doc_ids(row):
+        seen.setdefault(doc_id, None)
+    return list(seen)
+
+
 def _apply_retrieval_metrics(report: MetricsReport, positive: list[dict[str, Any]]) -> set[str]:
     """填 hit@k / MRR / 置信区间，返回命中过的样本 id 集合。
 
@@ -196,7 +209,7 @@ def _apply_leak_metrics(report: MetricsReport, rows: list[dict[str, Any]]) -> No
     leaks: list[dict[str, Any]] = []
     for row in rows:
         forbidden = set(row.get("forbidden_doc_ids") or [])
-        leaked = [doc_id for doc_id in _cited_doc_ids(row) if doc_id in forbidden]
+        leaked = [doc_id for doc_id in _unique_doc_ids(row) if doc_id in forbidden]
         if leaked:
             leaks.append(
                 {
@@ -260,7 +273,7 @@ def _failure_kind(row: dict[str, Any], hit_samples: set[str]) -> tuple[str, str]
     否则同一条样本会在明细里出现好几行，掩盖真正的优先级。
     """
     sample_id = row.get("sample_id")
-    cited = _cited_doc_ids(row)
+    cited = _unique_doc_ids(row)
     if row.get("error"):
         return "error", str(row["error"])
     if row.get("should_refuse") and not row.get("refused"):
