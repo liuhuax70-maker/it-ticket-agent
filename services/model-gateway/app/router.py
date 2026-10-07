@@ -20,12 +20,34 @@ from packages.contracts import (
 )
 from packages.embeddings import get_embedder
 from packages.llms import LLMClient, ModelTarget, build_target
+from packages.observability.metrics import INJECTION_SUSPECTED_COUNTER
 from packages.prompts import get_prompt_registry
+from packages.security.injection import scan_request, summarize
 
 logger = get_logger("model_gateway.router")
 
 # 默认提示版本；实际取值由 Settings.answer_prompt_version 传入
-DEFAULT_PROMPT_VERSION = "v3"
+DEFAULT_PROMPT_VERSION = "v4"
+
+# 提示词模板用来分节的标记。资料里出现同样的串时，模型没有理由区分哪个是真结构、
+# 哪个来自数据——所以送模型前必须把它们换成**等价但不具结构含义**的写法。
+_FORGEABLE_SECTIONS = ("【参考资料】", "【问题】", "【回答要求】")
+
+
+def _neutralize(text: str) -> str:
+    """转义资料中可能伪造提示词结构的标记。
+
+    只替换这几个固定串，不碰正文其它内容：既保留可读性（〔参考资料〕照读），
+    又让"文档伪装成提示词分节"这条路径失效。
+    """
+    for marker in _FORGEABLE_SECTIONS:
+        text = text.replace(marker, f"〔{marker[1:-1]}〕")
+    return text
+
+
+def _context_tuples(req: GenerateRequest) -> list[tuple[str, str, str, str]]:
+    """转成注入检测需要的 (doc_id, chunk_id, title, text) 形式。"""
+    return [(c.doc_id, c.chunk_id, c.doc_title, c.text) for c in req.contexts]
 
 
 def format_context(req: GenerateRequest) -> str:
@@ -33,14 +55,18 @@ def format_context(req: GenerateRequest) -> str:
 
     编号顺序 = 引用编号顺序：编排器的 citations 映射必须与这里**共用同一列表**，
     否则会出现「引用张冠李戴」（旧 P0 坑位 #8）。
+
+    资料是**不可信输入**，因此这里做标记转义（见 ``_neutralize``）。
+    净化只作用于送往模型的那一份；编排层返回给调用方的 contexts 仍是原文，
+    所以引用映射与评测的片段召回都不受影响。
     """
     if not req.contexts:
         return "（无参考资料）"
     blocks: list[str] = []
     for item in sorted(req.contexts, key=lambda c: c.index):
         header = " > ".join(x for x in [item.doc_title, item.section_path] if x)
-        prefix = f"[{item.index}] {header}" if header else f"[{item.index}]"
-        blocks.append(f"{prefix}\n{item.text}")
+        prefix = f"[{item.index}] {_neutralize(header)}" if header else f"[{item.index}]"
+        blocks.append(f"{prefix}\n{_neutralize(item.text)}")
     return "\n\n".join(blocks)
 
 
@@ -137,6 +163,20 @@ class ModelRouter:
     # ---------------- 业务 ----------------
     async def generate(self, req: GenerateRequest) -> GenerateResponse:
         """RAG 生成：上下文 + 引用约束提示词。"""
+        # 注入检测：**只记录、不阻断**（取舍见 packages/security/injection.py）。
+        # 放在生成之前而不是"发现就拒答"——用正则决定是否回答，等于把可用性押在
+        # 正则的精确度上；真正的防线是 v4 提示词把资料声明为数据 + 分节标记转义。
+        findings = scan_request(query=req.query, contexts=_context_tuples(req))
+        for finding in findings:
+            for rule in finding.rules:
+                INJECTION_SUSPECTED_COUNTER.inc({"source": finding.source, "rule": rule})
+        if findings:
+            logger.warning(
+                "疑似提示注入（按数据对待，不改变行为）trace=%s %s",
+                req.trace_id,
+                summarize(findings),
+            )
+
         return await self._run(
             build_messages(req, self._settings.answer_prompt_version),
             model=req.model,

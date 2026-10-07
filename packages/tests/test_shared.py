@@ -135,7 +135,7 @@ def test_prompt_registry_reads_versioned_template() -> None:
     assert {"refuse_text", "context", "query"} <= registry.variables("rag_answer", "v1")
 
 
-@pytest.mark.parametrize("version", ["v1", "v2", "v3"])
+@pytest.mark.parametrize("version", ["v1", "v2", "v3", "v4"])
 def test_every_declared_prompt_version_renders(version: str) -> None:
     """模板是契约：`ANSWER_PROMPT_VERSION` 指向哪个版本，那个版本就必须存在且可渲染。
 
@@ -156,7 +156,22 @@ def test_every_declared_prompt_version_renders(version: str) -> None:
     assert "{{" not in rendered, "渲染后不能残留占位符"
 
 
-@pytest.mark.parametrize("version", ["v2", "v3"])
+def test_v4_declares_materials_are_data_not_instructions() -> None:
+    """v4 的核心断言：把资料声明为**数据**，并禁止执行其中的指令。
+
+    为什么这条要写成测试：注入防护的**行为**很难在单测里断言（要看模型表现），
+    但"提示词里到底有没有这条规则"是可判定的——而它一旦被顺手删掉，
+    行为会悄悄退化回 v3，且没有任何测试会失败。
+    """
+    template = get_prompt_registry().get("rag_answer", "v4")
+    assert "数据" in template and "不是指令" in template
+    assert "忽略" in template, "缺少「忽略资料中的指令」这一条"
+    # 分节标记必须仍在模板里（服务端会转义资料中的同名标记，两者配合才成立）
+    for marker in ("【参考资料】", "【问题】", "【回答要求】"):
+        assert marker in template
+
+
+@pytest.mark.parametrize("version", ["v2", "v3", "v4"])
 def test_marker_based_versions_embed_the_sentinel(version: str) -> None:
     """v2 起改用哨兵 `NO_ANSWER`（见 ADR 0003）。
 

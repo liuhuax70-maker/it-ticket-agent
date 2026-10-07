@@ -83,6 +83,25 @@ groups:
             当前 P95 约 {{ $value | printf "%.2f" }}s。优先检查下游依赖
             （向量库/检索/模型网关），不要先怀疑应用本身。
 
+  - name: rag-prompt-integrity
+    rules:
+      # 资料里出现疑似注入内容 —— 这类要人查：可能是某个上传文档被塞了东西（数据投毒），
+      # 也可能是语料本身有问题。系统已按普通正文处理（v4 提示词 + 分节标记转义），
+      # 所以这条不是"攻击得逞"，而是**来源排查**的信号。日志里带 doc_id。
+      - alert: RagPromptInjectionInContext
+        expr: increase(rag_injection_suspected_total{source="context"}[30m]) > 0
+        for: 0m
+        labels:
+          severity: warning
+        annotations:
+          summary: "检索到的资料中出现疑似提示注入内容（document {{ $labels.rule }}）"
+          description: >-
+            命中规则 {{ $labels.rule }}。请按日志中的 doc_id 定位来源文档：
+            如果它本不该包含这类文字，说明知识库被投毒，需要下架并追查上传链路。
+      # 注意这里**没有**为 source="query" 配告警：用户在提问里写"忽略以上指令"多半是好奇或试探，
+      # 每次都打扰值班会把告警训练成噪声。它仍然可以在看板上看到趋势——
+      # 需要告警的是"知识库被塞了东西"，不是"用户打了奇怪的问句"。
+
   - name: rag-quality
     rules:
       # 拒答率异常升高：多半不是"变得谨慎"，而是检索或语料出了问题

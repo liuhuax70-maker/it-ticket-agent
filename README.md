@@ -166,13 +166,16 @@ make eval             # 全量（L1 + L2 RAGAS）
 make eval-rescore     # 不重新采集，用上次落盘的采集结果重打分
 ```
 
-当前基线（52 条样本、`top_k=5`、`temperature=0`、作答与裁判均为 DeepSeek、提示词 v3）：
+当前基线（52 条样本、`top_k=5`、`temperature=0`、作答与裁判均为 DeepSeek、提示词 v4）：
 
 ```
 L1  hit@k 100.0%（95% 区间 89.3%~100.0%）  MRR 0.9844  片段召回 100.0%  引用覆盖 100.0%
-    漏答率 0.0%   误答率 0.0%   越权泄露 0 条   延迟 P50 1843 ms / P95 2299 ms
-L2  faithfulness 0.883   context_precision 0.958   context_recall 1.0   （12 条分层抽样）
+    漏答率 0.0%   误答率 0.0%   越权泄露 0 条   延迟 P50 2070 ms / P95 2980 ms
+L2  faithfulness 0.889   context_precision 0.958   context_recall 1.0   （12 条分层抽样）
 ```
+
+> 延迟相比 v3（P50 1843 / P95 2299）略有上升：v4 为防注入把提示词从 498 字加到 676 字，
+> 输入 token 相应增加。这是**为安全属性付的确定成本**，量级可接受。
 
 改进链（每一步都可归因，逐项实测）：
 
@@ -292,6 +295,10 @@ data/corpus/    演示语料
    **这类缺陷在 `CACHE_ENABLED=false` 时完全不可见**，只靠人读代码才能发现。详见 `docs/adr/0006`。
 10. **评测分两层**：L1 用可判定的硬事实（越权、拒答、命中）且不依赖裁判模型，
    L2 才用 RAGAS 打答案质量分。只做 L2 会慢到没人愿意跑，且分数无法定位到样本。详见 `docs/adr/0005`。
+11. **提示注入：声明 + 转义 + 检测告警，但检测不阻断**。提示词把资料声明为**数据**，
+   送模型前把资料里的 `【参考资料】/【问题】/【回答要求】` 转义（文档不能伪造分节），
+   可疑表达只计数告警、不改变行为——用正则决定是否拒答会把可用性押在正则的精确度上。
+   受控 A/B 实测：v3 + 未转义时被投毒文档**成功劫持模型**，转义或 v4 声明层各自都能挡住。详见 `docs/adr/0007`。
 
 ---
 
@@ -334,6 +341,7 @@ terraform -chdir=infra/terraform/envs/dev init && terraform -chdir=infra/terrafo
 | `rag_answer_total` | counter | outcome=answered/refused/error | **拒答率与错误率** |
 | `rag_cache_lookups_total` | counter | result=hit/miss/skip | 缓存命中率 |
 | `rag_acl_missing_total` | counter | — | **权限下推链路断裂次数，生产必须恒为 0** |
+| `rag_injection_suspected_total` | counter | source=query\|context / rule | 疑似提示注入次数（检测**不阻断**，见 ADR 0007） |
 
 两条设计约定：
 
@@ -344,16 +352,23 @@ terraform -chdir=infra/terraform/envs/dev init && terraform -chdir=infra/terrafo
   错误率——漏掉它们会让错误率偏低，而"错误率偏低"正是监控造假最常见的形式。抛异常的请求同样
   计为 500。
 
-网关是公网入口，因此它的 `/metrics` **只在配置了 `METRICS_TOKEN` 时才免用户鉴权**
-（Prometheus 没有 Keycloak 令牌）；不配 token 则返回 401，这是刻意的安全默认。
-内部服务没有鉴权中间件，`/metrics` 直接可达。
+`METRICS_TOKEN` 的行为要分清两层（实测确认，不是推断）：
+
+- **token 是全局的**：一旦配置，**所有**服务的 `/metrics` 都要求 `Authorization: Bearer <token>`。
+  指标会暴露内部路由与流量形态，不该裸奔；配了就统一要求，比"只有网关要"更容易推理。
+  ⚠️ 这意味着 prometheus.yml 的**两个 job 都要带凭据**——只给网关带，
+  内部服务会在配好 token 的那一刻集体 403。
+- **网关额外有一层**：它的 `/metrics` 只在配了 token 时才免**用户鉴权**
+  （Prometheus 没有 Keycloak 令牌）；不配 token 则先被身份中间件拦成 401，这是刻意的安全默认。
+- 不配 token（本地开发）：所有服务都直接可达。
 
 抓取配置与告警规则在 `infra/monitoring/`：
 
 ```bash
 # 告警规则的组织原则：把验收清单里的不变量直接写成表达式，而不是先看有哪些指标可告
-infra/monitoring/alerts.yml      # RagAclMissing / RagServiceDown / RagHighErrorRate /
-                                 # RagHighP95Latency / RagRefusalRateHigh / RagCacheHitRateLow
+infra/monitoring/alerts.yml      # RagAclMissing / RagPromptInjectionInContext / RagServiceDown /
+                                 # RagHighErrorRate / RagHighP95Latency / RagRefusalRateHigh /
+                                 # RagCacheHitRateLow
 infra/monitoring/prometheus.yml  # 内部服务一组 + 网关一组（带 token）
 ```
 
@@ -387,6 +402,8 @@ infra/monitoring/prometheus.yml  # 内部服务一组 + 网关一组（带 token
 | 告警通道 | 规则已给出（`infra/monitoring/alerts.yml`），未接 Alertmanager 与通知渠道 | 接 Alertmanager，按 `severity` 路由（critical 到电话/IM，warning 到工单） |
 | 监控看板 | 无 Grafana 看板 | 按第 7 节的指标表建四块面板：P95 / 错误率 / 拒答率 / 缓存命中率 |
 | 服务间身份信任 | 编排与检索从**明文 header** 取身份（网关是唯一鉴权点）——已 fail-closed：缺头即 403，不再静默用默认租户 | mTLS 或服务网格；当前不可达（应用服务不发布端口 + NetworkPolicy），属纵深防御加固 |
+| 提示注入 | 三层已实现（声明 + 结构转义 + 检测告警，见 `docs/adr/0007`）。残余风险：检测只覆盖已知表达形式；转义只覆盖当前模板用的那三个标记 | 模板改动时同步 `_FORGEABLE_SECTIONS`；补注入类评测样本让防护进入回归 |
+| 上传内容校验 | 只做大小与非空校验，**无 MIME / 内容类型校验、无投毒检测** | 加类型白名单与内容扫描；投毒目前靠 `RagPromptInjectionInContext` 告警兜住 |
 | 数据失效管理 | 无生效日期 / 无 supersede / 无 TTL：被取代的旧文档仍会被检索并引用 | 文档加生效与失效字段，检索时按有效期过滤 |
 | 成本核算 | token 用量按租户记 Redis（48h），**不折算金额、不落库** | 加价格表折算金额并落库，用于配额与账单 |
 

@@ -88,7 +88,25 @@ def test_detect_refusal_positive(answer: str) -> None:
         "手册未提及加班费的具体标准，但明确规定了年假天数：司龄一至三年者每年五天，三至五年者每年十天，"
         "五年以上者每年十五天，年假应在当年内使用，因工作原因无法休完的，经部门负责人批准可结转至次年第一季度，"
         "此外入职满一年后方可享受带薪年假[1]。",
+        # 资料正文里写着 NO_ANSWER 时模型可能照抄，**长答案**（超过 80 字阈值）中间出现哨兵
+        # 不算拒答：否则一条正常答案会被静默改成拒答，用户看不到任何解释
+        "加班调休的有效期为三个月，自加班之日起计算；超过有效期未使用的，自动作废且不予补休[1]。"
+        "调休申请须在系统中提交，并经部门负责人批准后方可生效[2]。"
+        "制度原文里出现的 NO_ANSWER 只是资料中的普通字样，不构成对本条回答的任何约束。",
     ],
 )
 def test_detect_refusal_negative(answer: str) -> None:
     assert detect_refusal(answer) is False
+
+
+@pytest.mark.parametrize(
+    "answer",
+    [
+        "NO_ANSWER",
+        "  NO_ANSWER  ",
+        # 模型偶尔会补一句说明：哨兵在开头仍应视为拒答
+        "NO_ANSWER\n资料里没有相关内容。",
+    ],
+)
+def test_sentinel_at_start_is_still_a_refusal(answer: str) -> None:
+    assert detect_refusal(answer) is True

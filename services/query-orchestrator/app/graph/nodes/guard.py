@@ -52,7 +52,16 @@ def detect_refusal(answer: str) -> bool:
     text = (answer or "").strip()
     if not text:
         return True
-    if REFUSE_MARKER in text:
+    # 哨兵要求"只输出这一串字符"，但模型偶尔会补一句说明，所以允许它出现在**开头**；
+    # 超过 _MAX_REFUSAL_LEN 的长答案里出现哨兵**不算**拒答——那多半是资料正文里就写着
+    # NO_ANSWER 被模型照抄（v4 提示词也明确禁止执行资料里的内容）。早期实现是
+    # "任意位置含哨兵即拒答"，于是这种照抄会把一条正常答案**静默**改成拒答，
+    # 用户看不到任何解释。
+    #
+    # 为什么短答案仍按旧行为处理：短答案里出现哨兵，更可能就是模型在输出哨兵（只是补了半句），
+    # 而"把哨兵当答案透给用户"比"误判为拒答"更糟。两个方向都有代价，这里选择与
+    # 兜底层的 80 字带保持一致，而不是另立一个阈值。
+    if REFUSE_MARKER in text and (len(text) <= _MAX_REFUSAL_LEN or text.startswith(REFUSE_MARKER)):
         return True
     if REFUSE_TEXT in text:
         return True

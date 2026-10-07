@@ -18,10 +18,17 @@ rule_files:
   - /etc/prometheus/alerts.yml
 
 scrape_configs:
-  # 内部服务：没有鉴权中间件，/metrics 直接可达。
-  # 生产上这些服务不应发布端口，抓取走集群网络即可。
+  # 内部服务。
+  #
+  # ⚠️ 这里也带 authorization：**配置了 METRICS_TOKEN 之后，所有服务的 /metrics 都要求它**，
+  # 不只是网关（见 packages/observability/metrics.py::metrics_endpoint）。
+  # 早期文档写成"内部服务直接可达"，实测配了 token 后内部服务同样返回 403 —— 配置与代码不一致，
+  # 会让整套监控在配好 token 的那一刻集体失联。两个 job 用同一个凭据文件。
   - job_name: rag-internal
     metrics_path: /metrics
+    authorization:
+      type: Bearer
+      credentials_file: /etc/prometheus/metrics_token
     static_configs:
       # 本机形态；k8s 请替换为服务 DNS
       - targets:
@@ -36,10 +43,9 @@ scrape_configs:
         labels:
           tier: internal
 
-  # api-gateway 单独一组：它是公网入口，/metrics 只在配置了 METRICS_TOKEN 时
-  # 才免用户鉴权（见 packages/security/config.py::authz_exempt），
-  # 所以抓取必须带上同一个 token。
-  # token 放文件而不是写在这里：这个文件会进版本库。
+  # api-gateway 单独一组：它是公网入口，除了要求 token 之外，
+  # 还**只在配置了 METRICS_TOKEN 时才免用户鉴权**（见 packages/security/config.py::authz_exempt）——
+  # 否则网关的 /metrics 会先被身份中间件拦成 401。
   - job_name: rag-api-gateway
     metrics_path: /metrics
     authorization:

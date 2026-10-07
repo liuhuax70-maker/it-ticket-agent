@@ -380,6 +380,14 @@ ACL_MISSING_COUNTER = REGISTRY.counter(
     "检索请求未携带 ACL 的次数——生产环境必须恒为 0，否则是权限下推链路断裂",
 )
 
+# 提示注入尝试。计数**不表示攻击得逞**——检测只负责让它可见（见
+# packages/security/injection.py 的取舍说明：检测不阻断）。
+INJECTION_SUSPECTED_COUNTER = REGISTRY.counter(
+    "rag_injection_suspected_total",
+    "疑似提示注入次数（按来源与规则分类）",
+    ("source", "rule"),
+)
+
 
 def metrics_endpoint(registry: MetricsRegistry | None = None, token: str = ""):
     """构造 ``/metrics`` 端点。
@@ -432,6 +440,7 @@ __all__ = [
     "ACL_MISSING_COUNTER",
     "ANSWER_COUNTER",
     "CACHE_LOOKUP_COUNTER",
+    "INJECTION_SUSPECTED_COUNTER",
     "MetricsMiddleware",
     "MetricsRegistry",
     "REGISTRY",
