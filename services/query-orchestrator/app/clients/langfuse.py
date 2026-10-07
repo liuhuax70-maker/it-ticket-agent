@@ -17,9 +17,7 @@ from packages.observability.langfuse import truncate
 logger = get_logger("orchestrator.langfuse")
 
 
-def build_tracer(
-    *, host: str, public_key: str, secret_key: str, service: str
-) -> Tracer:
+def build_tracer(*, host: str, public_key: str, secret_key: str, service: str) -> Tracer:
     return Tracer(host=host, public_key=public_key, secret_key=secret_key, service=service)
 
 

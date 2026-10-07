@@ -58,7 +58,11 @@ def inspect_policies() -> list[dict[str, Any]]:
                 "file": path.as_posix(),
                 "sha256": hashlib.sha256(content.encode("utf-8")).hexdigest()[:16],
                 "package": next(
-                    (line.split()[1] for line in content.splitlines() if line.startswith("package ")),
+                    (
+                        line.split()[1]
+                        for line in content.splitlines()
+                        if line.startswith("package ")
+                    ),
                     "",
                 ),
                 "rules": sorted(set(_RULE.findall(content))),

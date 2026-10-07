@@ -27,7 +27,12 @@ if TYPE_CHECKING:  # 只在类型检查时引入：运行时不装 eval extra �
 logger = get_logger("eval.ragas")
 
 # 需要 embedding 模型的指标：当前不启用（本地 embedding 未接入 RAGAS 的 wrapper 体系）
-REQUIRES_EMBEDDING = {"answer_relevancy", "answer_correctness", "semantic_similarity", "answer_similarity"}
+REQUIRES_EMBEDDING = {
+    "answer_relevancy",
+    "answer_correctness",
+    "semantic_similarity",
+    "answer_similarity",
+}
 
 # 指标键 -> ragas 指标类名。
 # 这里用 ragas 的**经典指标**（ragas.metrics）而不是 collections：
@@ -75,6 +80,44 @@ def _to_ragas_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return converted
 
 
+def _aggregate(frame: Any, metrics: list[tuple[str, Any]]) -> tuple[dict, dict]:
+    """从结果表里取每个指标的均值与逐样本分数。
+
+    列名以 ragas 指标对象自带的 ``name`` 为准——本仓库里 context_precision 的真实列名是
+    ``llm_context_precision_without_reference``，与我们对外的 key 不同。
+    全部 NaN 时给出 ``None`` 并告警，不让 null 悄悄躺在报告里。
+    """
+    scores: dict[str, float | None] = {}
+    per_sample: dict[str, list[float | None]] = {}
+    for key, metric in metrics:
+        column = getattr(metric, "name", key)
+        if column not in frame.columns:
+            logger.warning("结果里没有指标列 %s（实际列: %s）", column, list(frame.columns))
+            scores[key] = None
+            continue
+        series = frame[column].astype("float64")
+        scores[key] = None if series.isna().all() else round(float(series.mean()), 4)
+        per_sample[key] = [
+            None if value != value else round(float(value), 4) for value in series.tolist()
+        ]
+
+    unresolved = [key for key, value in scores.items() if value is None]
+    if unresolved:
+        logger.warning("以下指标全部为 NaN（裁判输出无法解析）: %s", unresolved)
+    return scores, per_sample
+
+
+def _select_metrics(requested: list[str]) -> list[str]:
+    """从请求的指标里挑出当前可用的，并说明哪些被跳过。"""
+    skipped = [name for name in requested if name in REQUIRES_EMBEDDING]
+    if skipped:
+        logger.warning("以下指标需要 embedding 模型，当前跳过: %s", skipped)
+    selected = [name for name in requested if name in LEGACY_METRIC_NAMES]
+    if not selected:
+        raise ConfigError(f"没有可用指标（可选: {sorted(LEGACY_METRIC_NAMES)}；请求: {requested}）")
+    return selected
+
+
 def score(rows: list[dict[str, Any]], settings: Settings) -> dict[str, Any]:
     """对采集结果做 RAGAS 打分。需要 ``eval`` 可选依赖。"""
     try:
@@ -85,18 +128,16 @@ def score(rows: list[dict[str, Any]], settings: Settings) -> dict[str, Any]:
     from app.judge import ProjectLLMJudge
 
     requested = settings.metric_list()
-    skipped = [m for m in requested if m in REQUIRES_EMBEDDING]
-    if skipped:
-        logger.warning("以下指标需要 embedding 模型，当前跳过: %s", skipped)
-    selected = [m for m in requested if m in LEGACY_METRIC_NAMES]
-    if not selected:
-        raise ConfigError(
-            f"没有可用指标（可选: {sorted(LEGACY_METRIC_NAMES)}；请求: {requested}）"
-        )
+    selected = _select_metrics(requested)
 
     ragas_rows = _to_ragas_rows(rows)
     if not ragas_rows:
-        return {"metrics": {}, "judge_model": None, "scored_count": 0, "note": "没有可用于 L2 的样本"}
+        return {
+            "metrics": {},
+            "judge_model": None,
+            "scored_count": 0,
+            "note": "没有可用于 L2 的样本",
+        }
 
     judge = ProjectLLMJudge(settings)
     metrics = _load_metrics(selected, judge)
@@ -119,22 +160,7 @@ def score(rows: list[dict[str, Any]], settings: Settings) -> dict[str, Any]:
         run_config=run_config,
     )
     frame = result.to_pandas()
-
-    scores: dict[str, float | None] = {}
-    per_sample: dict[str, list[float | None]] = {}
-    for key, metric in metrics:
-        column = getattr(metric, "name", key)
-        if column not in frame.columns:
-            logger.warning("结果里没有指标列 %s（实际列: %s）", column, list(frame.columns))
-            scores[key] = None
-            continue
-        series = frame[column].astype("float64")
-        scores[key] = None if series.isna().all() else round(float(series.mean()), 4)
-        per_sample[key] = [None if v != v else round(float(v), 4) for v in series.tolist()]
-
-    nan_metrics = [k for k, v in scores.items() if v is None]
-    if nan_metrics:
-        logger.warning("以下指标全部为 NaN（裁判输出无法解析）: %s", nan_metrics)
+    scores, per_sample = _aggregate(frame, metrics)
 
     return {
         "metrics": scores,

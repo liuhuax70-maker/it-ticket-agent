@@ -82,7 +82,12 @@ class FakeIngestion:
     async def list_documents(
         self, *, tenant_id=None, keyword=None, limit: int = 50, offset: int = 0
     ) -> dict:  # noqa: ANN001
-        self.list_query = {"tenant_id": tenant_id, "keyword": keyword, "limit": limit, "offset": offset}
+        self.list_query = {
+            "tenant_id": tenant_id,
+            "keyword": keyword,
+            "limit": limit,
+            "offset": offset,
+        }
         return {
             "total": 1,
             "limit": limit,
@@ -112,10 +117,16 @@ class FakeIngestion:
 
     async def ingest(self, req: IngestRequest) -> IngestResponse:
         self.ingest_requests.append(req)
-        return IngestResponse(job_id="j1", status="succeeded", documents=1, chunk_count=6, indexed=6)
+        return IngestResponse(
+            job_id="j1", status="succeeded", documents=1, chunk_count=6, indexed=6
+        )
 
-    async def upload(self, filename: str, content: bytes, *, acl, reindex: bool = False) -> IngestResponse:  # noqa: ANN001, ARG002
-        return IngestResponse(job_id="j2", status="succeeded", documents=1, chunk_count=2, indexed=2)
+    async def upload(
+        self, filename: str, content: bytes, *, acl, reindex: bool = False
+    ) -> IngestResponse:  # noqa: ANN001, ARG002
+        return IngestResponse(
+            job_id="j2", status="succeeded", documents=1, chunk_count=2, indexed=2
+        )
 
     async def get_job(self, job_id: str) -> dict:
         return {"job_id": job_id, "status": "succeeded"}
@@ -261,7 +272,11 @@ def test_ingest_cannot_override_tenant_or_department(client) -> None:
         json={
             "content": "# x",
             "filename": "a.md",
-            "acl": {"tenant_id": "other-tenant", "department_id": "other-dept", "visibility": "department"},
+            "acl": {
+                "tenant_id": "other-tenant",
+                "department_id": "other-dept",
+                "visibility": "department",
+            },
         },
     )
     assert resp.status_code == 200

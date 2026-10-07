@@ -100,5 +100,8 @@ tf-plan-dev: ## dev 环境 plan
 lint: ## 静态检查
 	ruff check .
 
-fmt: ## 自动格式化
-	ruff format . && ruff check --fix .
+fmt: ## 统一格式（ruff format，与 lint 一样走 $(PY) -m）
+	$(PY) -m ruff format .
+
+fmt-check: ## 检查格式是否统一（CI 门禁用）
+	$(PY) -m ruff format --check .

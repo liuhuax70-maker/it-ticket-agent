@@ -45,7 +45,9 @@ async def lifespan(app: FastAPI):
     logger.info(
         "model-gateway 启动: provider=%s model=%s fallbacks=%s",
         settings.llm_provider,
-        settings.deepseek_model if settings.llm_provider == "deepseek" else settings.local_llm_model,
+        settings.deepseek_model
+        if settings.llm_provider == "deepseek"
+        else settings.local_llm_model,
         settings.fallback_list(),
     )
     try:
@@ -120,7 +122,9 @@ async def health() -> HealthResponse:
         details["config"] = str(exc)
     details["embed_backend"] = f"{settings.embed_backend}:{settings.embed_model}"
     details["quota_enforced"] = str(settings.quota_enabled)
-    return HealthResponse(status=status, service=settings.service_name, version=VERSION, details=details)
+    return HealthResponse(
+        status=status, service=settings.service_name, version=VERSION, details=details
+    )
 
 
 def run() -> None:  # pragma: no cover - 手工启动

@@ -71,8 +71,16 @@ class HybridRetriever:
                 raise first
             raise DependencyUnavailable("retrieval", "两路检索均失败")
 
-        vector_hits = self._cut(vector_result, self._min_score) if not isinstance(vector_result, BaseException) else []
-        bm25_hits = self._cut(bm25_result, self._min_score) if not isinstance(bm25_result, BaseException) else []
+        vector_hits = (
+            self._cut(vector_result, self._min_score)
+            if not isinstance(vector_result, BaseException)
+            else []
+        )
+        bm25_hits = (
+            self._cut(bm25_result, self._min_score)
+            if not isinstance(bm25_result, BaseException)
+            else []
+        )
         # ⚠️ 耗时通过实例属性回传，而 HybridRetriever 是进程内单例：
         # 并发 hybrid 请求会互相覆盖这个值，调用方拿到的可能是别的请求的耗时
         # （属性也没在 __init__ 里初始化，靠下游 getattr 默认值兜底）。
@@ -116,5 +124,7 @@ class HybridRetriever:
             top_k=top_k,
         )
         timings["fusion"] = _ms(started)
-        logger.debug("混合检索: vector=%s bm25=%s fused=%s", len(vector_hits), len(bm25_hits), len(fused))
+        logger.debug(
+            "混合检索: vector=%s bm25=%s fused=%s", len(vector_hits), len(bm25_hits), len(fused)
+        )
         return fused, timings

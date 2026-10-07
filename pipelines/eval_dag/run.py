@@ -37,7 +37,9 @@ def _print_summary(summary: dict) -> None:
         return "—" if value is None else f"{float(value) * 100:.1f}%"
 
     print("\n=== L1 确定性指标 ===")
-    print(f"  样本            {summary.get('count')}（正 {summary.get('positive')} / 负 {summary.get('negative')}）")
+    print(
+        f"  样本            {summary.get('count')}（正 {summary.get('positive')} / 负 {summary.get('negative')}）"
+    )
     print(f"  hit@k           {pct(summary.get('hit_at_k'))}   区间 {summary.get('hit_at_k_ci95')}")
     print(f"  MRR             {summary.get('mrr')}")
     print(f"  片段召回        {pct(summary.get('snippet_recall'))}")
@@ -45,7 +47,9 @@ def _print_summary(summary: dict) -> None:
     print(f"  漏答率          {pct(summary.get('false_refusal_rate'))}")
     print(f"  误答率          {pct(summary.get('false_answer_rate'))}")
     print(f"  越权泄露        {summary.get('leak_count')} 条")
-    print(f"  延迟 P50/P95     {summary.get('latency_ms_p50')} / {summary.get('latency_ms_p95')} ms")
+    print(
+        f"  延迟 P50/P95     {summary.get('latency_ms_p50')} / {summary.get('latency_ms_p95')} ms"
+    )
     print(f"  鉴权模式        {summary.get('authz_mode')}")
 
     ragas = summary.get("ragas") or {}
@@ -73,7 +77,9 @@ async def run(args: argparse.Namespace) -> int:
     payload: dict = {"dataset_path": args.dataset, "limit": args.limit, "write_report": True}
     async with httpx.AsyncClient(timeout=7200.0) as client:
         if args.preflight:
-            code, body = await _post(client, "/eval/preflight", {"dataset_path": args.dataset, "limit": args.limit})
+            code, body = await _post(
+                client, "/eval/preflight", {"dataset_path": args.dataset, "limit": args.limit}
+            )
             if code:
                 return code
             print(json.dumps(body, ensure_ascii=False, indent=2))
@@ -120,7 +126,9 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="RAG 评测跑批（L1 确定性 + L2 RAGAS）")
     parser.add_argument("--dataset", default=None, help="评测集路径（默认用服务配置）")
     parser.add_argument("--limit", type=int, default=None, help="样本数上限")
-    parser.add_argument("--no-ragas", dest="ragas", action="store_false", help="只跑 L1，跳过 RAGAS")
+    parser.add_argument(
+        "--no-ragas", dest="ragas", action="store_false", help="只跑 L1，跳过 RAGAS"
+    )
     parser.add_argument("--preflight", action="store_true", help="只做前置检查")
     parser.add_argument(
         "--rescore", action="store_true", help="不重新采集，用上次落盘的采集结果重打分"

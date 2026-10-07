@@ -113,11 +113,11 @@ async def verify_acl(tokens: TokenProvider, doc_ids: dict[str, str]) -> bool:
             continue
         actual = (meta.get("tenant_id"), meta.get("department_id"), meta.get("visibility"))
         expected = (meta.get("tenant_id"), expected_department, visibility)
-        flag = "OK " if actual == expected else "!! "
+        marker = "OK " if actual == expected else "!! "
         if actual != expected:
             healthy = False
         print(
-            f"[corpus] {flag}{filename:<18} 上传者={uploader:<6} 落库 tenant/dept/vis = {actual}"
+            f"[corpus] {marker}{filename:<18} 上传者={uploader:<6} 落库 tenant/dept/vis = {actual}"
         )
     return healthy
 
@@ -125,9 +125,7 @@ async def verify_acl(tokens: TokenProvider, doc_ids: dict[str, str]) -> bool:
 async def main() -> int:
     parser = argparse.ArgumentParser(description="准备知识库语料")
     parser.add_argument("--only", choices=["general", "permissions"], default=None)
-    parser.add_argument(
-        "--no-reindex", action="store_true", help="不清理旧分块（内容未变时更快）"
-    )
+    parser.add_argument("--no-reindex", action="store_true", help="不清理旧分块（内容未变时更快）")
     args = parser.parse_args()
 
     settings = SecuritySettings()

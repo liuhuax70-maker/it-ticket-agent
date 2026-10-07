@@ -20,8 +20,12 @@ jobs:
           python-version: "3.11"
           cache: pip
       - run: pip install -e ".[dev]"
-      - name: ruff
+      - name: ruff 静态检查
         run: ruff check .
+      # 格式不统一会产生大量无意义 diff，让 code review 失效，所以单独设门禁。
+      # 本地跑 `make fmt` 修。
+      - name: ruff 格式统一
+        run: ruff format --check .
 
   test:
     name: 单元与集成测试（全部离线，不需要外部依赖）

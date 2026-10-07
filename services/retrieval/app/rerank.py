@@ -73,4 +73,8 @@ class Reranker:
             updated.score = round(score, 6)
             updated.retriever = "rerank"
             out.append(updated)
-        return out, f"cross-encoder:{self.model_name}", round((time.perf_counter() - started) * 1000, 1)
+        return (
+            out,
+            f"cross-encoder:{self.model_name}",
+            round((time.perf_counter() - started) * 1000, 1),
+        )

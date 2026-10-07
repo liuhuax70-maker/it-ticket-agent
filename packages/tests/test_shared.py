@@ -116,7 +116,9 @@ def test_prompt_render_rejects_missing_variable() -> None:
 
 def test_prompt_render_substitutes_all_placeholders() -> None:
     registry = get_prompt_registry()
-    rendered = registry.render("rag_answer", "v1", refuse_text="不知道", context="上下文", query="问题")
+    rendered = registry.render(
+        "rag_answer", "v1", refuse_text="不知道", context="上下文", query="问题"
+    )
     assert "{{" not in rendered
     assert "上下文" in rendered and "问题" in rendered and "不知道" in rendered
 
@@ -128,6 +130,7 @@ def test_prompt_registry_missing_template_raises(tmp_path) -> None:
 
 
 # ---------------- 身份校验 ----------------
+
 
 def test_identity_to_acl_carries_owner_for_private_visibility() -> None:
     """private 可见性靠 owner 判定：请求方 ACL 必须带上 user_id。"""

@@ -27,9 +27,7 @@ class PdfParser(BaseParser):
         pages = [(page.extract_text() or "") for page in reader.pages]
         text = "\n\n".join(pages).strip()
         if not text:
-            raise ValidationError(
-                f"{path.name} 未抽取到任何文本（可能是扫描件，需要 OCR）"
-            )
+            raise ValidationError(f"{path.name} 未抽取到任何文本（可能是扫描件，需要 OCR）")
 
         title = ""
         try:

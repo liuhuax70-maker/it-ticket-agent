@@ -108,7 +108,9 @@ app = create_app()
 def run() -> None:  # pragma: no cover
     import uvicorn
 
-    uvicorn.run("app.main:app", host=app.state.settings.host, port=app.state.settings.port, reload=False)
+    uvicorn.run(
+        "app.main:app", host=app.state.settings.host, port=app.state.settings.port, reload=False
+    )
 
 
 __all__ = ["app", "create_app", "SERVICE_API_GATEWAY"]

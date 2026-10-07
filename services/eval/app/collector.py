@@ -107,7 +107,10 @@ def _acl_forbidden_doc_ids(
         if str(meta.get("tenant_id", "")) != identity.tenant_id:
             forbidden.add(doc_id)
             continue
-        if visibility == "department" and str(meta.get("department_id", "")) != identity.department_id:
+        if (
+            visibility == "department"
+            and str(meta.get("department_id", "")) != identity.department_id
+        ):
             forbidden.add(doc_id)
             continue
         if visibility == "private" and doc_id not in expected_doc_ids:
@@ -162,113 +165,167 @@ def _missing_sources_error(summary: dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
-async def collect(samples: list[GoldenSample], settings: Settings) -> list[dict[str, Any]]:
-    """逐条采集。返回的行同时携带 L1 判定所需的全部信息。"""
-    tokens = TokenProvider(settings)
-    ledger = await _fetch_ledger(settings, tokens)
-    authz_available = bool(await tokens.token(settings.ledger_username))
-    if not authz_available:
-        logger.warning(
-            "取不到 Keycloak 令牌，回退为固定身份请求头——"
-            "此时**权限类样本不具备验证意义**，请不要据此判断越权行为"
-        )
+async def _identity_headers(tokens: TokenProvider, identity: EvalIdentity) -> dict[str, str]:
+    """按样本身份构造请求头。
 
-    declared = {
-        source
-        for sample in samples
-        for source in [*sample.expected_sources, *sample.forbidden_sources]
+    取不到令牌时回退为固定身份头——注意这会让**权限类样本失去验证意义**
+    （``preflight`` 与报告里的 ``authz_mode`` 会如实标出这种降级）。
+    """
+    token = await tokens.token(identity.username)
+    if token:
+        return {"Authorization": f"Bearer {token}"}
+    return {
+        "x-tenant-id": identity.tenant_id,
+        "x-department-id": identity.department_id,
+        "x-user-id": identity.user_id,
     }
-    resolved, unresolved = resolve_sources(declared, ledger)
-    if unresolved:
-        raise ConfigError(_missing_sources_error({"missing_sources": sorted(unresolved)}))
 
-    rows: list[dict[str, Any]] = []
-    gateway = settings.api_gateway_url.rstrip("/")
-    async with httpx.AsyncClient(timeout=settings.request_timeout) as client:
-        for index, sample in enumerate(samples, start=1):
-            headers: dict[str, str] = {}
-            token = await tokens.token(sample.identity.username)
-            if token:
-                headers["Authorization"] = f"Bearer {token}"
-            else:
-                headers.update(
-                    {
-                        "x-tenant-id": sample.identity.tenant_id,
-                        "x-department-id": sample.identity.department_id,
-                        "x-user-id": sample.identity.user_id,
-                    }
+
+def _chat_payload(sample: GoldenSample, settings: Settings) -> dict[str, Any]:
+    return ChatRequest(
+        query=sample.question,
+        include_contexts=True,
+        top_k=settings.top_k,
+        temperature=settings.answer_temperature,
+    ).model_dump(mode="json")
+
+
+async def _ask(
+    client: httpx.AsyncClient,
+    gateway: str,
+    payload: dict[str, Any],
+    headers: dict[str, str],
+    sample_id: str,
+) -> tuple[dict[str, Any], str | None, float]:
+    """发一次 /chat。返回 (响应体, 错误信息, 耗时毫秒)。
+
+    单条失败不中断整轮：失败信息带进该行，由指标层统计成 ``error_count``。
+    """
+    started = time.perf_counter()
+    try:
+        resp = await client.post(f"{gateway}/chat", json=payload, headers=headers)
+        resp.raise_for_status()
+        body: dict[str, Any] = resp.json()
+        error = None
+    except Exception as exc:  # noqa: BLE001
+        body = {}
+        error = f"{exc.__class__.__name__}: {exc}"
+        logger.error("采集失败 sample=%s err=%s", sample_id, error)
+    return body, error, round((time.perf_counter() - started) * 1000, 1)
+
+
+def _extract_contexts(body: dict[str, Any]) -> tuple[list[str], list[dict[str, Any]]]:
+    """取出 (上下文列表, 引用列表)。
+
+    网关未返回上下文时（如拒答路径）用引用片段兜底，保证片段召回仍有可判定的依据。
+    """
+    citations = body.get("citations") or []
+    contexts = [str(item.get("text", "")) for item in (body.get("contexts") or [])]
+    if not contexts:
+        contexts = [str(citation.get("snippet", "")) for citation in citations]
+    return contexts, citations
+
+
+def _expected_and_forbidden(
+    sample: GoldenSample,
+    ledger: dict[str, dict[str, Any]],
+    resolved: dict[str, str],
+) -> tuple[set[str], set[str]]:
+    """该样本的 (期望来源, 禁止来源) doc_id 集合。
+
+    禁止集合 = 数据集显式声明 + 按台账 ACL 推导，两者都要——
+    只靠手写声明会漏检，只靠自动推导会漏掉 private 文档。
+    """
+    expected = {resolved[source] for source in sample.expected_sources if source in resolved}
+    forbidden = {resolved[source] for source in sample.forbidden_sources if source in resolved}
+    return expected, forbidden | _acl_forbidden_doc_ids(ledger, sample.identity, expected)
+
+
+def _build_row(
+    sample: GoldenSample,
+    body: dict[str, Any],
+    error: str | None,
+    latency_ms: float,
+    expected: set[str],
+    forbidden: set[str],
+) -> dict[str, Any]:
+    """把一次采集结果整理成指标层可直接消费的行。"""
+    contexts, citations = _extract_contexts(body)
+    return {
+        "sample_id": sample.id,
+        "question": sample.question,
+        "reference": sample.reference,
+        "identity": sample.identity.describe(),
+        "tags": sample.tags,
+        "should_refuse": sample.should_refuse,
+        "expected_doc_ids": sorted(expected),
+        "expected_snippets": sample.expected_snippets,
+        "forbidden_doc_ids": sorted(forbidden),
+        "answer": body.get("answer", ""),
+        "refused": bool(body.get("refused")),
+        "cached": bool(body.get("cached")),
+        "citations": citations,
+        "contexts": contexts,
+        "latency_ms": latency_ms,
+        "timings_ms": body.get("timings_ms") or {},
+        "error": error,
+    }
+
+
+async def collect(samples: list[GoldenSample], settings: Settings) -> list[dict[str, Any]]:
+    """逐条采集，返回的行携带 L1 判定所需的全部信息。
+
+    只做编排：前置检查 → 逐条请求 → 组装行。单个样本的细节见各自的 ``_`` 函数。
+    """
+    tokens = TokenProvider(settings)
+    try:
+        ledger = await _fetch_ledger(settings, tokens)
+        # 台账要在**采集之前**校验：没有台账就无法做越权兜底检查，
+        # 等采完 41 条样本再报错等于整轮白跑。
+        if not ledger:
+            raise ConfigError(
+                "无法读取文档台账（/documents 不可用），拒绝继续："
+                "缺少台账就无法做越权兜底检查，此时评测结果不可信"
+            )
+        if not await tokens.token(settings.ledger_username):
+            logger.warning(
+                "取不到 Keycloak 令牌，回退为固定身份请求头——"
+                "此时**权限类样本不具备验证意义**，请不要据此判断越权行为"
+            )
+
+        declared = {
+            source
+            for sample in samples
+            for source in [*sample.expected_sources, *sample.forbidden_sources]
+        }
+        resolved, unresolved = resolve_sources(declared, ledger)
+        if unresolved:
+            raise ConfigError(_missing_sources_error({"missing_sources": sorted(unresolved)}))
+
+        rows: list[dict[str, Any]] = []
+        gateway = settings.api_gateway_url.rstrip("/")
+        async with httpx.AsyncClient(timeout=settings.request_timeout) as client:
+            for index, sample in enumerate(samples, start=1):
+                headers = await _identity_headers(tokens, sample.identity)
+                body, error, latency_ms = await _ask(
+                    client, gateway, _chat_payload(sample, settings), headers, sample.id
                 )
-
-            payload = ChatRequest(
-                query=sample.question,
-                include_contexts=True,
-                top_k=settings.top_k,
-                temperature=settings.answer_temperature,
-            ).model_dump(mode="json")
-
-            started = time.perf_counter()
-            error: str | None = None
-            body: dict[str, Any] = {}
-            try:
-                resp = await client.post(f"{gateway}/chat", json=payload, headers=headers)
-                resp.raise_for_status()
-                body = resp.json()
-            except Exception as exc:  # noqa: BLE001
-                error = f"{exc.__class__.__name__}: {exc}"
-                logger.error("采集失败 sample=%s err=%s", sample.id, error)
-
-            latency_ms = round((time.perf_counter() - started) * 1000, 1)
-            citations = body.get("citations") or []
-            contexts = [str(item.get("text", "")) for item in (body.get("contexts") or [])]
-            if not contexts:
-                # 网关未返回上下文时（如拒答路径）用引用片段兜底，
-                # 保证片段召回仍有可判定的依据
-                contexts = [str(c.get("snippet", "")) for c in citations]
-
-            expected_doc_ids = {resolved[s] for s in sample.expected_sources if s in resolved}
-            forbidden = {
-                resolved[s] for s in sample.forbidden_sources if s in resolved
-            } | _acl_forbidden_doc_ids(ledger, sample.identity, expected_doc_ids)
-
-            rows.append(
-                {
-                    "sample_id": sample.id,
-                    "question": sample.question,
-                    "reference": sample.reference,
-                    "identity": sample.identity.describe(),
-                    "tags": sample.tags,
-                    "should_refuse": sample.should_refuse,
-                    "expected_doc_ids": sorted(expected_doc_ids),
-                    "expected_snippets": sample.expected_snippets,
-                    "forbidden_doc_ids": sorted(forbidden),
-                    "answer": body.get("answer", ""),
-                    "refused": bool(body.get("refused")),
-                    "cached": bool(body.get("cached")),
-                    "citations": citations,
-                    "contexts": contexts,
-                    "latency_ms": latency_ms,
-                    "timings_ms": body.get("timings_ms") or {},
-                    "error": error,
-                }
-            )
-            logger.info(
-                "[%s/%s] %s identity=%s citations=%s refused=%s %sms",
-                index,
-                len(samples),
-                sample.id,
-                sample.identity.username,
-                len(citations),
-                bool(body.get("refused")),
-                latency_ms,
-            )
-
-    await tokens.aclose()
-    if not ledger:
-        raise ConfigError(
-            "无法读取文档台账（/documents 不可用），拒绝继续："
-            "缺少台账就无法做越权兜底检查，此时评测结果不可信"
-        )
-    return rows
+                expected, forbidden = _expected_and_forbidden(sample, ledger, resolved)
+                rows.append(_build_row(sample, body, error, latency_ms, expected, forbidden))
+                logger.info(
+                    "[%s/%s] %s identity=%s citations=%s refused=%s %sms",
+                    index,
+                    len(samples),
+                    sample.id,
+                    sample.identity.username,
+                    len(body.get("citations") or []),
+                    bool(body.get("refused")),
+                    latency_ms,
+                )
+        return rows
+    finally:
+        # 放在 finally：请求中途抛异常时也要释放连接池
+        await tokens.aclose()
 
 
 __all__ = ["_acl_forbidden_doc_ids", "_missing_sources_error", "collect", "preflight"]

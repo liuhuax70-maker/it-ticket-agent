@@ -39,7 +39,11 @@ def test_load_samples_parses_permission_fields(tmp_path) -> None:
                     "expected_sources": [SOURCE],
                     "expected_snippets": ["十五天"],
                     "forbidden_sources": ["data/corpus_permissions/carol_note.md"],
-                    "identity": {"username": "bob", "tenant_id": "default", "department_id": "engineering"},
+                    "identity": {
+                        "username": "bob",
+                        "tenant_id": "default",
+                        "department_id": "engineering",
+                    },
                     "tags": ["permission"],
                 }
             )
@@ -216,7 +220,11 @@ def _ledger(**entries):
 def test_acl_forbidden_covers_other_tenant_and_department() -> None:
     ledger = _ledger(
         d_other_tenant={"tenant_id": "tenant-b", "department_id": "hr", "visibility": "internal"},
-        d_other_dept={"tenant_id": "default", "department_id": "engineering", "visibility": "department"},
+        d_other_dept={
+            "tenant_id": "default",
+            "department_id": "engineering",
+            "visibility": "department",
+        },
         d_same_dept={"tenant_id": "default", "department_id": "hr", "visibility": "department"},
         d_internal={"tenant_id": "default", "department_id": "finance", "visibility": "internal"},
         d_private={"tenant_id": "default", "department_id": "hr", "visibility": "private"},
@@ -228,7 +236,9 @@ def test_acl_forbidden_covers_other_tenant_and_department() -> None:
 
 
 def test_private_doc_is_allowed_when_explicitly_expected() -> None:
-    ledger = _ledger(d_private={"tenant_id": "default", "department_id": "hr", "visibility": "private"})
+    ledger = _ledger(
+        d_private={"tenant_id": "default", "department_id": "hr", "visibility": "private"}
+    )
     identity = EvalIdentity(username="carol", tenant_id="default", department_id="hr")
     assert _acl_forbidden_doc_ids(ledger, identity, expected_doc_ids={"d_private"}) == set()
 
@@ -326,7 +336,9 @@ def test_rescore_recomputes_l1_from_saved_rows() -> None:
 
 
 def test_write_report_creates_json_and_markdown(tmp_path) -> None:
-    path = write_report(tmp_path, _payload(), name="baseline", dataset_path="configs/eval/golden.jsonl")
+    path = write_report(
+        tmp_path, _payload(), name="baseline", dataset_path="configs/eval/golden.jsonl"
+    )
     assert path.exists()
     assert (tmp_path / "baseline_latest.json").exists()
     assert (tmp_path / "baseline_latest.md").exists()

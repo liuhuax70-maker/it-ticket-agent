@@ -83,6 +83,7 @@ def auth_headers() -> dict[str, str]:
         print(f"  [INFO] 未获取令牌，按鉴权关闭处理（{exc.__class__.__name__}）")
     return _headers
 
+
 _failures: list[str] = []
 _warnings: list[str] = []
 
@@ -174,6 +175,7 @@ async def check_ingest(client: httpx.AsyncClient) -> None:
 
 
 # ---------------------------------------------------------------- V3
+
 
 async def retrieval_search(client: httpx.AsyncClient, query: str, top_k: int = 5) -> list[dict]:
     resp = await client.post(

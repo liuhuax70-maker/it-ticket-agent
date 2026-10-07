@@ -22,10 +22,10 @@ from pydantic import BaseModel, Field
 class Visibility(StrEnum):
     """文档可见级别，供 ACL 过滤使用。"""
 
-    public = "public"          # 全员可见
-    internal = "internal"      # 租户内可见
+    public = "public"  # 全员可见
+    internal = "internal"  # 租户内可见
     department = "department"  # 仅所属部门可见
-    private = "private"        # 仅所有者可见
+    private = "private"  # 仅所有者可见
 
 
 class ACL(BaseModel):

@@ -44,7 +44,9 @@ class FeedbackStore:
         logger.info("收到反馈 tenant=%s rating=%s id=%s", tenant_id, rating, feedback_id)
         return feedback_id
 
-    async def list_recent(self, *, tenant_id: str | None = None, limit: int = 50) -> list[dict[str, Any]]:
+    async def list_recent(
+        self, *, tenant_id: str | None = None, limit: int = 50
+    ) -> list[dict[str, Any]]:
         async with session_scope(self._url) as session:
             stmt = select(Feedback).order_by(Feedback.created_at.desc()).limit(limit)
             if tenant_id:

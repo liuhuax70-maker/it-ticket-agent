@@ -41,84 +41,97 @@ class CompletionResult:
     timings_ms: dict[str, float] = field(default_factory=dict)
 
 
+def _target_from_full_name(name: str, settings: LLMSettings) -> ModelTarget:
+    """``provider/model`` 形式的完整 LiteLLM 名：按前缀推断连什么端点。"""
+    prefix = name.split("/", 1)[0]
+    is_deepseek = prefix == "deepseek"
+    return ModelTarget(
+        name=name,
+        provider=prefix,
+        litellm_model=name,
+        api_base=(settings.deepseek_api_base or None)
+        if is_deepseek
+        else settings.local_llm_base_url,
+        api_key=(
+            settings.deepseek_api_key if is_deepseek else (settings.local_llm_api_key or None)
+        ),
+    )
+
+
+def _deepseek_target(settings: LLMSettings) -> ModelTarget:
+    """DeepSeek 官方 API。缺少密钥直接报错——静默降级到别的模型会掩盖配置错误。"""
+    if not settings.deepseek_api_key:
+        raise ConfigError(
+            "缺少 DEEPSEEK_API_KEY：请在 .env 配置官方密钥，"
+            "或设置 LLM_PROVIDER=local 走本地 OpenAI 兼容端点"
+        )
+    model = settings.deepseek_model
+    return ModelTarget(
+        name=model,
+        provider="deepseek",
+        litellm_model=f"deepseek/{model}",
+        api_base=settings.deepseek_api_base or None,
+        api_key=settings.deepseek_api_key,
+    )
+
+
+def _local_target(settings: LLMSettings) -> ModelTarget:
+    """本地端点。按 ``LOCAL_LLM_API_STYLE`` 选协议。
+
+    两种协议的差别很关键：只有 **Ollama 原生协议**能传 ``think=False`` 关掉思考链；
+    OpenAI 兼容协议下思考型模型会把预算花在思维链上、content 为空。
+    """
+    model = settings.local_llm_model
+    style = (settings.local_llm_api_style or "openai").lower()
+
+    if style == "ollama" and "/" not in model:
+        # Ollama 原生接口挂在根路径下，所以要去掉 base_url 里的 /v1 后缀
+        base = settings.local_llm_base_url.rstrip("/")
+        if base.endswith("/v1"):
+            base = base[: -len("/v1")]
+        return ModelTarget(
+            name=model,
+            provider="ollama",
+            litellm_model=f"ollama/{model}",
+            api_base=base,
+            api_key=settings.local_llm_api_key or "ollama",
+            extra={"think": settings.local_llm_think},
+        )
+
+    return ModelTarget(
+        name=model,
+        provider="local",
+        litellm_model=model if "/" in model else f"openai/{model}",
+        api_base=settings.local_llm_base_url,
+        api_key=settings.local_llm_api_key or "not-needed",
+    )
+
+
 def build_target(settings: LLMSettings, model_override: str | None = None) -> ModelTarget:
-    """把配置解析成 LiteLLM 调用目标。
+    """把配置解析成 LiteLLM 调用目标（按 provider 分派）。
 
     ``model_override`` 支持两种写法：
         * 逻辑名 ``deepseek`` / ``local``：切到对应 provider 的默认模型
         * 完整 LiteLLM 名 ``deepseek/deepseek-chat``：直接透传
 
     ⚠️ 已知陷阱：``model_override`` 若是**既非上述逻辑名、也不含 "/"** 的值
-    （例如 ``gpt-4o``、``qwen3.5:4b``），下面三个分支全部落空，函数会**静默**返回
+    （例如 ``gpt-4o``、``qwen3.5:4b``），三个分支全部落空，函数会**静默**返回
     当前 provider 的默认模型——不抛异常、不打日志。后果是
     ``LLM_FALLBACK_MODELS=gpt-4o`` 这种配置看起来生效了，实际兜底成了"对同一模型
-    重试一次"。新增来源的模型名时，要么用完整 LiteLLM 名，要么在下面补显式分支。
+    重试一次"。新增来源的模型名时，要么用完整 LiteLLM 名，要么在这里补显式分支。
     """
     provider = (settings.llm_provider or "deepseek").lower()
-
-    if model_override:
-        if model_override == "deepseek":
-            provider = "deepseek"
-        elif model_override == "local":
-            provider = "local"
-        elif "/" in model_override:
-            # 完整 LiteLLM 名，按前缀推断 provider
-            prefix = model_override.split("/", 1)[0]
-            return ModelTarget(
-                name=model_override,
-                provider=prefix,
-                litellm_model=model_override,
-                api_base=settings.deepseek_api_base or None
-                if prefix == "deepseek"
-                else settings.local_llm_base_url,
-                api_key=settings.deepseek_api_key
-                if prefix == "deepseek"
-                else (settings.local_llm_api_key or None),
-            )
+    if model_override == "deepseek":
+        provider = "deepseek"
+    elif model_override == "local":
+        provider = "local"
+    elif model_override and "/" in model_override:
+        return _target_from_full_name(model_override, settings)
 
     if provider == "deepseek":
-        if not settings.deepseek_api_key:
-            raise ConfigError(
-                "缺少 DEEPSEEK_API_KEY：请在 .env 配置官方密钥，"
-                "或设置 LLM_PROVIDER=local 走本地 OpenAI 兼容端点"
-            )
-        model = settings.deepseek_model
-        return ModelTarget(
-            name=model,
-            provider="deepseek",
-            litellm_model=f"deepseek/{model}",
-            api_base=settings.deepseek_api_base or None,
-            api_key=settings.deepseek_api_key,
-        )
-
+        return _deepseek_target(settings)
     if provider == "local":
-        model = settings.local_llm_model
-        style = (settings.local_llm_api_style or "openai").lower()
-
-        if style == "ollama" and "/" not in model:
-            # Ollama 原生接口：才支持 think=False（关闭思考链）。
-            # api_base 要去掉 /v1 后缀——原生接口挂在根路径下。
-            base = settings.local_llm_base_url.rstrip("/")
-            if base.endswith("/v1"):
-                base = base[: -len("/v1")]
-            return ModelTarget(
-                name=model,
-                provider="ollama",
-                litellm_model=f"ollama/{model}",
-                api_base=base,
-                api_key=settings.local_llm_api_key or "ollama",
-                extra={"think": settings.local_llm_think},
-            )
-
-        return ModelTarget(
-            name=model,
-            provider="local",
-            # 本地端点默认按 OpenAI 兼容协议调用（无 think 参数，思考链无法关闭）
-            litellm_model=model if "/" in model else f"openai/{model}",
-            api_base=settings.local_llm_base_url,
-            api_key=settings.local_llm_api_key or "not-needed",
-        )
-
+        return _local_target(settings)
     raise ConfigError(f"不支持的 LLM_PROVIDER={provider!r}（可选：deepseek | local）")
 
 
@@ -143,9 +156,7 @@ class LLMClient:
         kwargs: dict[str, Any] = {
             "model": target.litellm_model,
             "messages": messages,
-            "temperature": (
-                self.settings.llm_temperature if temperature is None else temperature
-            ),
+            "temperature": (self.settings.llm_temperature if temperature is None else temperature),
             "max_tokens": self.settings.llm_max_tokens if max_tokens is None else max_tokens,
             "timeout": self.settings.llm_timeout,
             "api_key": target.api_key,

@@ -134,7 +134,10 @@ class OpenSearchStore:
     async def health(self) -> tuple[bool, str]:
         try:
             info = await self._client.info()
-            return True, f"cluster={info.get('cluster_name')} version={info.get('version', {}).get('number')}"
+            return (
+                True,
+                f"cluster={info.get('cluster_name')} version={info.get('version', {}).get('number')}",
+            )
         except Exception as exc:  # noqa: BLE001
             return False, str(exc)
 
@@ -177,7 +180,9 @@ class OpenSearchStore:
             for chunk in chunks
         ]
         try:
-            success, errors = await async_bulk(self._client, actions, raise_on_error=False, refresh=True)
+            success, errors = await async_bulk(
+                self._client, actions, raise_on_error=False, refresh=True
+            )
         except Exception as exc:  # noqa: BLE001
             raise DependencyUnavailable("OpenSearch", f"批量写入失败: {exc}") from exc
         if errors:

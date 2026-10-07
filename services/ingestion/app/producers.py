@@ -78,7 +78,11 @@ class KafkaChunkSink:
         # 若改成随机 key 或按 chunk_id 分区，同一文档的删除与写入可能乱序到达消费端，
         # 结果是"先写后删"——文档刚建好就被删掉，且没有任何报错。
         await self._publisher.publish(payload, key=chunks[0].doc_id if chunks else None)
-        logger.info("已投递 chunk-events: doc_id=%s chunks=%s", chunks[0].doc_id if chunks else "-", len(chunks))
+        logger.info(
+            "已投递 chunk-events: doc_id=%s chunks=%s",
+            chunks[0].doc_id if chunks else "-",
+            len(chunks),
+        )
         return IndexResponse(
             doc_id=chunks[0].doc_id if chunks else "",
             chunks_indexed=len(chunks),
@@ -100,7 +104,9 @@ class KafkaChunkSink:
         await self._publisher.stop()
 
 
-def build_sink(*, use_kafka: bool, indexing_url: str, timeout: float, bootstrap: str, topic: str) -> ChunkSink:
+def build_sink(
+    *, use_kafka: bool, indexing_url: str, timeout: float, bootstrap: str, topic: str
+) -> ChunkSink:
     if use_kafka:
         logger.info("ChunkSink=Kafka topic=%s", topic)
         return KafkaChunkSink(bootstrap, topic)

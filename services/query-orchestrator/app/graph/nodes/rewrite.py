@@ -24,7 +24,7 @@ _MAX_REWRITE_LEN = 200
 
 def _clean(text: str) -> str:
     line = text.strip().splitlines()[0].strip() if text.strip() else ""
-    return line.strip('"“”「」\'')
+    return line.strip("\"“”「」'")
 
 
 def make_rewrite_node(model_gateway: ModelGatewayClient, settings: Settings):

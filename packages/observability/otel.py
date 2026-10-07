@@ -23,6 +23,8 @@ def init_otel(service_name: str, endpoint: str | None = None, enabled: bool = Fa
         logger.debug("OTel 未启用: service=%s", service_name)
         return False
     logger.warning(
-        "init_otel 目前是占位实现，未接入 exporter（service=%s endpoint=%s）", service_name, endpoint
+        "init_otel 目前是占位实现，未接入 exporter（service=%s endpoint=%s）",
+        service_name,
+        endpoint,
     )
     return False

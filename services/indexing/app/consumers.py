@@ -37,6 +37,8 @@ async def consume_chunk_events(service: IndexService, settings: Settings) -> Non
                 reindex=bool(payload.get("reindex", False)),
             )
             result = await service.index(req)
-            logger.info("Kafka 消费入库成功 doc_id=%s chunks=%s", result.doc_id, result.chunks_indexed)
+            logger.info(
+                "Kafka 消费入库成功 doc_id=%s chunks=%s", result.doc_id, result.chunks_indexed
+            )
         except Exception as exc:  # noqa: BLE001 - 单条失败不应终止消费循环
             logger.error("Kafka 消费入库失败: %s", exc)

@@ -123,7 +123,9 @@ class ProjectLLMJudge(BaseRagasLLM):
         callbacks: Any = None,
     ) -> LLMResult:
         return _run_sync(
-            self.agenerate_text(prompt, n=n, temperature=temperature, stop=stop, callbacks=callbacks)
+            self.agenerate_text(
+                prompt, n=n, temperature=temperature, stop=stop, callbacks=callbacks
+            )
         )
 
     def is_finished(self, response: LLMResult) -> bool:

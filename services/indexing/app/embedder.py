@@ -55,7 +55,9 @@ class EmbeddingPipeline:
         await self._cache.set_many(
             self.model_name, "document", texts, [c for c in cached if c is not None]
         )
-        logger.info("embedding 计算 %s 条，命中缓存 %s 条", len(missing_idx), len(texts) - len(missing_idx))
+        logger.info(
+            "embedding 计算 %s 条，命中缓存 %s 条", len(missing_idx), len(texts) - len(missing_idx)
+        )
         return [vec for vec in cached if vec is not None]
 
     async def aclose(self) -> None:

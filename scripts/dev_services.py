@@ -60,7 +60,6 @@ def main(argv: list[str]) -> int:
         print(f"[dev] 启动 {name:<18} :{port}")
         processes.append((name, subprocess.Popen(cmd, cwd=ROOT, env=env)))
 
-
     def shutdown(*_: object) -> None:
         print("\n[dev] 正在停止全部服务…")
         for _, proc in processes:

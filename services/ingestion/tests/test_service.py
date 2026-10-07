@@ -31,7 +31,9 @@ class FakeMetadata:
         self.jobs["job-1"] = {"source": source, "status": "running"}
         return "job-1"
 
-    async def update_job(self, job_id: str, *, status: str, doc_id=None, chunk_count=0, message=None) -> None:
+    async def update_job(
+        self, job_id: str, *, status: str, doc_id=None, chunk_count=0, message=None
+    ) -> None:
         self.jobs[job_id].update({"status": status, "doc_id": doc_id, "message": message})
 
     async def upsert_document(self, doc, *, status: str = "pending") -> None:
@@ -67,7 +69,10 @@ class FakeSink:
         if self.fail:
             raise RuntimeError("indexing down")
         return IndexResponse(
-            doc_id=chunks[0].doc_id, chunks_indexed=len(chunks), milvus=len(chunks), opensearch=len(chunks)
+            doc_id=chunks[0].doc_id,
+            chunks_indexed=len(chunks),
+            milvus=len(chunks),
+            opensearch=len(chunks),
         )
 
     async def delete_document(self, doc_id: str) -> dict[str, int]:
@@ -104,7 +109,9 @@ def wire(monkeypatch):
 async def test_ingest_inline_content(wire) -> None:
     state = wire()
     result = await state["service"].ingest(  # type: ignore[union-attr]
-        IngestRequest(content=CONTENT, filename="handbook.md", acl=ACL(tenant_id="t1", department_id="hr"))
+        IngestRequest(
+            content=CONTENT, filename="handbook.md", acl=ACL(tenant_id="t1", department_id="hr")
+        )
     )
     assert result.status == "succeeded"
     assert result.documents == 1

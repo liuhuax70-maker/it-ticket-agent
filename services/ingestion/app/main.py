@@ -77,7 +77,9 @@ async def ingest_upload(
     # 显式失败而不是静默降级：private 但没有 owner，落库后**任何人都检索不到**，
     # 这种"看起来成功实际不可用"的状态比直接报错危险得多。
     if acl_visibility is Visibility.private and not owner:
-        raise ValidationError("visibility=private 时必须提供 owner（由 api-gateway 注入调用方身份）")
+        raise ValidationError(
+            "visibility=private 时必须提供 owner（由 api-gateway 注入调用方身份）"
+        )
 
     acl = ACL(
         tenant_id=tenant_id or settings.default_tenant_id,
@@ -85,7 +87,9 @@ async def ingest_upload(
         visibility=acl_visibility,
         owner=owner or None,
     )
-    return await _service().ingest_bytes(file.filename or "upload.bin", data, acl=acl, reindex=reindex)
+    return await _service().ingest_bytes(
+        file.filename or "upload.bin", data, acl=acl, reindex=reindex
+    )
 
 
 @app.get("/jobs/{job_id}")

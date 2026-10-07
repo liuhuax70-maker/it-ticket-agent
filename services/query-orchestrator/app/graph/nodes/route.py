@@ -30,7 +30,11 @@ def make_route_node(settings: Settings):
         mode = state.get("mode")
         if mode is None:
             mode = settings.default_mode()
-            if settings.retrieve_mode == RetrieveMode.hybrid.value and _QUOTED.search(query) and len(query) <= 16:
+            if (
+                settings.retrieve_mode == RetrieveMode.hybrid.value
+                and _QUOTED.search(query)
+                and len(query) <= 16
+            ):
                 logger.debug("检测到精确术语查询，改走 BM25: %r", query)
                 mode = RetrieveMode.keyword
 

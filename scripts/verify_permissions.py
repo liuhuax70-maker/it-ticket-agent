@@ -77,7 +77,11 @@ VISIBLE_DOCS = {
 # 探针问题刻意选**只在该受控文档里出现**的事实：扩语料后，"调薪窗口在四月"
 # 这类事实在公共文档里也有，用它做权限探针就不再能区分"看到了"和"没看到"。
 QUERIES = {
-    "hr": ("招聘需求审批中，编制核对需要在几个工作日内完成？", "人力资源部内部制度", {"alice", "carol"}),
+    "hr": (
+        "招聘需求审批中，编制核对需要在几个工作日内完成？",
+        "人力资源部内部制度",
+        {"alice", "carol"},
+    ),
     "eng": ("P1 告警需要在几分钟内响应？", "工程部运行手册", {"bob", "erin"}),
     "priv": ("入职交接清单的第 3 项是什么？", "入职交接清单", {"carol"}),
     # 公共基线：租户内所有身份都应命中；tenant-b 因租户隔离拿不到
@@ -111,7 +115,10 @@ def wait_keycloak(timeout: int = 180) -> None:
     deadline = time.time() + timeout
     while time.time() < deadline:
         try:
-            if httpx.get(f"{KEYCLOAK}/.well-known/openid-configuration", timeout=5).status_code == 200:
+            if (
+                httpx.get(f"{KEYCLOAK}/.well-known/openid-configuration", timeout=5).status_code
+                == 200
+            ):
                 return
         except Exception:  # noqa: BLE001
             pass
@@ -144,9 +151,7 @@ def decode_claims(access_token: str) -> dict:
 
 def chat(access_token: str | None, query: str) -> dict:
     headers = {"Authorization": f"Bearer {access_token}"} if access_token else {}
-    resp = httpx.post(
-        f"{GATEWAY}/chat", json={"query": query}, headers=headers, timeout=180
-    )
+    resp = httpx.post(f"{GATEWAY}/chat", json={"query": query}, headers=headers, timeout=180)
     if resp.status_code != 200:
         raise RuntimeError(f"HTTP {resp.status_code}: {resp.text[:200]}")
     return resp.json()
@@ -195,7 +200,10 @@ def phase_auth_gate() -> dict[str, str]:
     check(no_token.status_code == 401, f"无令牌访问 /chat 被拒（HTTP {no_token.status_code}）")
 
     bad_token = httpx.post(
-        f"{GATEWAY}/chat", json={"query": "x"}, headers={"Authorization": "Bearer not-a-jwt"}, timeout=10
+        f"{GATEWAY}/chat",
+        json={"query": "x"},
+        headers={"Authorization": "Bearer not-a-jwt"},
+        timeout=10,
     )
     check(bad_token.status_code == 401, f"伪造令牌被拒（HTTP {bad_token.status_code}）")
 
@@ -218,7 +226,9 @@ def phase_clean(tokens: dict[str, str]) -> None:
     """
     print("\nP1a 清理历史上传产物")
     listing = list_documents(tokens["carol"])
-    stale = [item for item in listing.get("items", []) if item["source"].startswith("data/uploads/")]
+    stale = [
+        item for item in listing.get("items", []) if item["source"].startswith("data/uploads/")
+    ]
     if not stale:
         ok("没有需要清理的文档")
         return
@@ -274,12 +284,17 @@ def phase_matrix(tokens: dict[str, str], doc_ids: dict[str, str]) -> None:
             if leaked:
                 fail(f"{name:<6} 引用了越权文档 {leaked}")
             else:
-                ok(f"{name:<6} 引用未越权（{len(titles)} 条引用，可见集合 {sorted(visible) or '空'}）")
+                ok(
+                    f"{name:<6} 引用未越权（{len(titles)} 条引用，可见集合 {sorted(visible) or '空'}）"
+                )
 
             if name in should_hit:
                 check(hit and not refused, f"{name:<6} 命中专属文档「{expect_title}」")
             else:
-                check(not hit, f"{name:<6} 未获得「{expect_title}」的任何引用（citations={titles or '空'}）")
+                check(
+                    not hit,
+                    f"{name:<6} 未获得「{expect_title}」的任何引用（citations={titles or '空'}）",
+                )
 
 
 def phase_storage_filter(tokens: dict[str, str]) -> None:
@@ -297,17 +312,26 @@ def phase_storage_filter(tokens: dict[str, str]) -> None:
     resp = httpx.post(f"{RETRIEVAL}/search", json=payload, timeout=60)
     resp.raise_for_status()
     hits = resp.json().get("hits", [])
-    hr_hits = [h for h in hits if "hr_policy" in h.get("source", "") or "人力资源部内部制度" in h.get("doc_title", "")]
+    hr_hits = [
+        h
+        for h in hits
+        if "hr_policy" in h.get("source", "") or "人力资源部内部制度" in h.get("doc_title", "")
+    ]
     check(
         not hr_hits,
         f"以 engineering 身份检索 HR 原句，结果不含 HR 文档（命中 {len(hits)} 条，其中 HR {len(hr_hits)} 条）",
     )
 
     # 反向对照：同一句话以 hr 身份检索必须能命中，证明上面不是因为"索引里没有"
-    payload_hr = dict(payload, acl={"tenant_id": "default", "department_id": "hr", "visibility": "internal"})
+    payload_hr = dict(
+        payload, acl={"tenant_id": "default", "department_id": "hr", "visibility": "internal"}
+    )
     hit_hr = httpx.post(f"{RETRIEVAL}/search", json=payload_hr, timeout=60).json().get("hits", [])
     check(
-        any("人力资源部内部制度" in h.get("doc_title", "") or "hr_policy" in h.get("source", "") for h in hit_hr),
+        any(
+            "人力资源部内部制度" in h.get("doc_title", "") or "hr_policy" in h.get("source", "")
+            for h in hit_hr
+        ),
         f"同一句话以 hr 身份检索可以命中（命中 {len(hit_hr)} 条）— 对照组成立",
     )
 
@@ -330,7 +354,9 @@ def phase_opa(tokens: dict[str, str]) -> None:
         headers={"Authorization": f"Bearer {tokens['carol']}"},
         timeout=600,
     )
-    check(resp_ok.status_code == 200, f"carol（rag_writer）写入被放行（HTTP {resp_ok.status_code}）")
+    check(
+        resp_ok.status_code == 200, f"carol（rag_writer）写入被放行（HTTP {resp_ok.status_code}）"
+    )
     if resp_ok.status_code == 200:
         doc_id = (resp_ok.json().get("doc_ids") or [""])[0]
         httpx.delete(

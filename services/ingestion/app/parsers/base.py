@@ -46,9 +46,7 @@ def get_parser(path: Path) -> BaseParser:
     ext = path.suffix.lower()
     parser = _REGISTRY.get(ext)
     if parser is None:
-        raise ValidationError(
-            f"不支持的扩展名 {ext!r}（已注册: {sorted(_REGISTRY)}）"
-        )
+        raise ValidationError(f"不支持的扩展名 {ext!r}（已注册: {sorted(_REGISTRY)}）")
     return parser
 
 

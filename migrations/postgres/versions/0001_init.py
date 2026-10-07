@@ -30,8 +30,12 @@ def upgrade() -> None:
             nullable=False,
             server_default=sa.text("'{}'::jsonb"),
         ),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
-        sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
+        sa.Column(
+            "created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False
+        ),
+        sa.Column(
+            "updated_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False
+        ),
     )
 
     op.create_table(
@@ -53,8 +57,12 @@ def upgrade() -> None:
             nullable=False,
             server_default=sa.text("'{}'::jsonb"),
         ),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
-        sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
+        sa.Column(
+            "created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False
+        ),
+        sa.Column(
+            "updated_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False
+        ),
     )
     op.create_index("ix_documents_tenant_id", "documents", ["tenant_id"])
     op.create_index("ix_documents_department_id", "documents", ["department_id"])
@@ -77,8 +85,12 @@ def upgrade() -> None:
         sa.Column("tenant_id", sa.String(64), nullable=False),
         sa.Column("department_id", sa.String(64), nullable=False),
         sa.Column("visibility", sa.String(32), nullable=False, server_default="internal"),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
-        sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
+        sa.Column(
+            "created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False
+        ),
+        sa.Column(
+            "updated_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False
+        ),
     )
     op.create_index("ix_chunks_doc_id", "chunks", ["doc_id"])
     op.create_index("ix_chunks_doc_index", "chunks", ["doc_id", "chunk_index"])
@@ -93,8 +105,12 @@ def upgrade() -> None:
         sa.Column("status", sa.String(32), nullable=False, server_default="pending"),
         sa.Column("message", sa.Text, nullable=True),
         sa.Column("chunk_count", sa.Integer, nullable=False, server_default="0"),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
-        sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
+        sa.Column(
+            "created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False
+        ),
+        sa.Column(
+            "updated_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False
+        ),
     )
     op.create_index("ix_ingestion_jobs_doc_id", "ingestion_jobs", ["doc_id"])
 
@@ -108,8 +124,12 @@ def upgrade() -> None:
         sa.Column("rating", sa.Integer, nullable=True),
         sa.Column("comment", sa.Text, nullable=True),
         sa.Column("trace_id", sa.String(64), nullable=True),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
-        sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
+        sa.Column(
+            "created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False
+        ),
+        sa.Column(
+            "updated_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False
+        ),
     )
     op.create_index("ix_feedback_tenant_id", "feedback", ["tenant_id"])
     op.create_index("ix_feedback_rating", "feedback", ["rating"])

@@ -106,7 +106,9 @@ class IndexService:
     async def delete_document(self, doc_id: str) -> dict[str, int]:
         milvus_n = await self._vectors.delete_document(doc_id)
         opensearch_n = await self._search.delete_document(doc_id)
-        logger.info("删除文档索引 doc_id=%s milvus=%s opensearch=%s", doc_id, milvus_n, opensearch_n)
+        logger.info(
+            "删除文档索引 doc_id=%s milvus=%s opensearch=%s", doc_id, milvus_n, opensearch_n
+        )
         return {"milvus": milvus_n, "opensearch": opensearch_n}
 
     async def health(self) -> dict[str, str]:

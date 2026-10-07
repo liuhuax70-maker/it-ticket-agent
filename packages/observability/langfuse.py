@@ -90,7 +90,9 @@ class Tracer:
         try:
             from langfuse import Langfuse  # 可选依赖
         except ImportError:
-            logger.warning("未安装 langfuse SDK，追踪降级为 no-op：pip install -e '.[observability]'")
+            logger.warning(
+                "未安装 langfuse SDK，追踪降级为 no-op：pip install -e '.[observability]'"
+            )
             return
         try:
             self._client = Langfuse(host=host, public_key=public_key, secret_key=secret_key)

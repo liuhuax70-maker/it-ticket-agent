@@ -138,7 +138,9 @@ def test_v2_puts_requirements_after_question() -> None:
     from packages.prompts import get_prompt_registry
 
     template = get_prompt_registry().get("rag_answer", "v2")
-    assert template.index("【参考资料】") < template.index("【问题】") < template.index("【回答要求】")
+    assert (
+        template.index("【参考资料】") < template.index("【问题】") < template.index("【回答要求】")
+    )
     # 必须显式给出「有资料就要答」的正向约束，否则小模型倾向一律拒答
     assert "必须" in template
     assert "只有当" in template

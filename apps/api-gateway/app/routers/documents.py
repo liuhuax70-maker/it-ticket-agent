@@ -32,9 +32,7 @@ def _settings(request: Request) -> Settings:
 
 
 @router.post("/ingest", response_model=IngestResponse, summary="按路径或文本接入")
-async def ingest(
-    req: IngestRequest, request: Request, identity: DocumentWriter
-) -> IngestResponse:
+async def ingest(req: IngestRequest, request: Request, identity: DocumentWriter) -> IngestResponse:
     # ACL 组装规则：**租户与部门只能来自身份**，调用方只被允许选择可见范围。
     # 否则客户端可以把自己的文档塞进别的租户（越权写入）。
     requested = req.acl

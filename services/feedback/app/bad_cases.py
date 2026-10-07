@@ -21,7 +21,9 @@ class BadCaseCollector:
         self._store = store
         self._dir = Path(output_dir)
 
-    async def collect(self, *, limit: int = 100, tenant_id: str | None = None) -> list[dict[str, Any]]:
+    async def collect(
+        self, *, limit: int = 100, tenant_id: str | None = None
+    ) -> list[dict[str, Any]]:
         return await self._store.list_bad_cases(limit=limit, tenant_id=tenant_id)
 
     async def export(

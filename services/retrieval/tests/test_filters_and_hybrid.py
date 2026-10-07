@@ -12,7 +12,11 @@ from packages.retrievers.base import RETRIEVER_BM25, RETRIEVER_VECTOR
 
 def _hit(chunk_id: str, text: str = "内容", score: float = 1.0, retriever: str = "") -> SearchHit:
     return SearchHit(
-        chunk_id=chunk_id, doc_id=chunk_id.split(":")[0], text=text, score=score, retriever=retriever
+        chunk_id=chunk_id,
+        doc_id=chunk_id.split(":")[0],
+        text=text,
+        score=score,
+        retriever=retriever,
     )
 
 
@@ -81,7 +85,9 @@ async def test_hybrid_fuses_two_routes_with_rrf() -> None:
         "d_1:1",
         "d_1:0",
     ]
-    assert all(h.retriever == f"{RETRIEVER_VECTOR}+{RETRIEVER_BM25}" or "+" in h.retriever for h in hits)
+    assert all(
+        h.retriever == f"{RETRIEVER_VECTOR}+{RETRIEVER_BM25}" or "+" in h.retriever for h in hits
+    )
     assert "fusion" in timings
 
 

@@ -21,8 +21,12 @@ class FakeStore:
     async def list_recent(self, *, tenant_id=None, limit: int = 50) -> list[dict]:  # noqa: ANN001, ARG002
         return self.rows[:limit]
 
-    async def list_bad_cases(self, *, limit: int = 100, max_rating: int = -1, tenant_id=None) -> list[dict]:  # noqa: ANN001, ARG002
-        return [row for row in self.rows if row["rating"] is not None and row["rating"] <= max_rating][:limit]
+    async def list_bad_cases(
+        self, *, limit: int = 100, max_rating: int = -1, tenant_id=None
+    ) -> list[dict]:  # noqa: ANN001, ARG002
+        return [
+            row for row in self.rows if row["rating"] is not None and row["rating"] <= max_rating
+        ][:limit]
 
     async def health(self) -> tuple[bool, str]:
         return True, "fake"

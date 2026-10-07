@@ -29,7 +29,9 @@ sys.path.insert(0, str(ROOT))
 INGESTION_URL = os.getenv("RAG_INGESTION_URL", "http://localhost:8004")
 
 
-async def _list_documents(client: httpx.AsyncClient, tenant_id: str | None, limit: int) -> list[dict]:
+async def _list_documents(
+    client: httpx.AsyncClient, tenant_id: str | None, limit: int
+) -> list[dict]:
     params = {"limit": limit, "offset": 0}
     if tenant_id:
         params["tenant_id"] = tenant_id

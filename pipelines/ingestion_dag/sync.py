@@ -73,14 +73,18 @@ async def sync(root: Path, *, reindex: bool, dry_run: bool) -> int:
 
             payload = {"path": rel_source, "reindex": reindex or action == "update"}
             try:
-                ingest_resp = await client.post(f"{INGESTION_URL}/ingest", json=payload, timeout=600.0)
+                ingest_resp = await client.post(
+                    f"{INGESTION_URL}/ingest", json=payload, timeout=600.0
+                )
             except Exception as exc:  # noqa: BLE001
                 print(f"[sync] 接入失败 {rel_source}: {exc}")
                 failed += 1
                 continue
 
             if ingest_resp.status_code >= 400:
-                print(f"[sync] 接入失败 {rel_source}: {ingest_resp.status_code} {ingest_resp.text[:200]}")
+                print(
+                    f"[sync] 接入失败 {rel_source}: {ingest_resp.status_code} {ingest_resp.text[:200]}"
+                )
                 failed += 1
                 continue
 

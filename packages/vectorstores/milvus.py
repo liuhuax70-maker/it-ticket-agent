@@ -76,7 +76,10 @@ def build_index_params(client: MilvusClient, settings: MilvusSettings) -> Any:
         field_name="vector",
         index_type="HNSW",
         metric_type="COSINE",
-        params={"M": settings.milvus_hnsw_m, "efConstruction": settings.milvus_hnsw_ef_construction},
+        params={
+            "M": settings.milvus_hnsw_m,
+            "efConstruction": settings.milvus_hnsw_ef_construction,
+        },
     )
     for field in SCALAR_INDEX_FIELDS:
         params.add_index(field_name=field, index_type="INVERTED")
@@ -99,7 +102,9 @@ class MilvusStore:
     def _ensure_collection_sync(self) -> None:
         if self._client.has_collection(self.collection):
             return
-        schema = build_collection_schema(self._client, self.dim, self._settings.milvus_text_max_length)
+        schema = build_collection_schema(
+            self._client, self.dim, self._settings.milvus_text_max_length
+        )
         index_params = build_index_params(self._client, self._settings)
         self._client.create_collection(
             collection_name=self.collection, schema=schema, index_params=index_params

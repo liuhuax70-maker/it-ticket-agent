@@ -229,9 +229,11 @@ permission-aware-rag/
 ```python
 from dataclasses import dataclass, field
 
+
 @dataclass(frozen=True)
 class ACL:
     """P0 全部取默认值；字段先立好，P2 从数据源抽取真实值。"""
+
     tenant_id: str = "default"
     department_id: str = "default"
     document_id: str = ""
@@ -240,24 +242,26 @@ class ACL:
     def default(cls, doc_id: str) -> "ACL":
         return cls(document_id=doc_id)
 
+
 @dataclass
 class Document:
     doc_id: str
-    source: str                    # 文件路径或 URI
+    source: str  # 文件路径或 URI
     title: str
     raw_text: str
     acl: ACL
-    metadata: dict = field(default_factory=dict)   # owner / created_at / updated_at，P1 补齐
+    metadata: dict = field(default_factory=dict)  # owner / created_at / updated_at，P1 补齐
+
 
 @dataclass
 class Chunk:
-    chunk_id: str                  # f"{doc_id}:{chunk_index}"
+    chunk_id: str  # f"{doc_id}:{chunk_index}"
     doc_id: str
     text: str
     chunk_index: int
     char_start: int
     char_end: int
-    section_path: str              # "员工手册 > 第三章 福利 > 3.2 体检"
+    section_path: str  # "员工手册 > 第三章 福利 > 3.2 体检"
     acl: ACL
 ```
 
@@ -281,15 +285,15 @@ class Chunk:
 
 ```python
 schema = client.create_schema(auto_id=True, enable_dynamic_field=False)
-schema.add_field("id",            DataType.INT64,   is_primary=True)
-schema.add_field("vector",        DataType.FLOAT_VECTOR, dim=512)
-schema.add_field("chunk_id",      DataType.VARCHAR, max_length=64)
-schema.add_field("doc_id",        DataType.VARCHAR, max_length=64)
-schema.add_field("text",          DataType.VARCHAR, max_length=4096)
-schema.add_field("chunk_index",   DataType.INT32)
-schema.add_field("section_path",  DataType.VARCHAR, max_length=512)
-schema.add_field("tenant_id",     DataType.VARCHAR, max_length=64)   # ACL 占位
-schema.add_field("department_id", DataType.VARCHAR, max_length=64)   # ACL 占位
+schema.add_field("id", DataType.INT64, is_primary=True)
+schema.add_field("vector", DataType.FLOAT_VECTOR, dim=512)
+schema.add_field("chunk_id", DataType.VARCHAR, max_length=64)
+schema.add_field("doc_id", DataType.VARCHAR, max_length=64)
+schema.add_field("text", DataType.VARCHAR, max_length=4096)
+schema.add_field("chunk_index", DataType.INT32)
+schema.add_field("section_path", DataType.VARCHAR, max_length=512)
+schema.add_field("tenant_id", DataType.VARCHAR, max_length=64)  # ACL 占位
+schema.add_field("department_id", DataType.VARCHAR, max_length=64)  # ACL 占位
 ```
 
 要点：
@@ -332,6 +336,7 @@ schema.add_field("department_id", DataType.VARCHAR, max_length=64)   # ACL 占�
 # config/settings.py
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
@@ -350,6 +355,7 @@ class Settings(BaseSettings):
     chunk_overlap: int = 80
     top_k: int = 5
     use_redis_cache: bool = False
+
 
 settings = Settings()
 ```
@@ -404,9 +410,11 @@ from langchain_text_splitters import RecursiveCharacterTextSplitter
 
 HEADER_RE = re.compile(r"^(#{1,6})\s+(.+)$", re.M)
 
+
 def _header_spans(text: str) -> list[tuple[int, int, str]]:
     """返回 [(char_offset, level, title)]，用于给 chunk 标注 section_path。"""
     return [(m.start(), len(m.group(1)), m.group(2).strip()) for m in HEADER_RE.finditer(text)]
+
 
 def _section_path(spans, pos: int) -> str:
     stack: list[str] = []
@@ -417,6 +425,7 @@ def _section_path(spans, pos: int) -> str:
             stack.pop()
         stack.append(title)
     return " > ".join(stack)
+
 
 def split_document(doc, chunk_size: int, chunk_overlap: int) -> list[Chunk]:
     spans = _header_spans(doc.raw_text)
@@ -429,11 +438,18 @@ def split_document(doc, chunk_size: int, chunk_overlap: int) -> list[Chunk]:
     out: list[Chunk] = []
     for i, piece in enumerate(splitter.create_documents([doc.raw_text])):
         start = piece.metadata["start_index"]
-        out.append(Chunk(
-            chunk_id=f"{doc.doc_id}:{i}", doc_id=doc.doc_id, text=piece.page_content,
-            chunk_index=i, char_start=start, char_end=start + len(piece.page_content),
-            section_path=_section_path(spans, start), acl=doc.acl,
-        ))
+        out.append(
+            Chunk(
+                chunk_id=f"{doc.doc_id}:{i}",
+                doc_id=doc.doc_id,
+                text=piece.page_content,
+                chunk_index=i,
+                char_start=start,
+                char_end=start + len(piece.page_content),
+                section_path=_section_path(spans, start),
+                acl=doc.acl,
+            )
+        )
     return out
 ```
 
@@ -456,23 +472,24 @@ from sentence_transformers import SentenceTransformer
 # bge-zh 系列：查询侧需要 instruction，文档侧不需要。
 QUERY_INSTRUCTION = "为这个句子生成表示以用于检索相关文章："
 
+
 class BGEEmbeddings(Embeddings):
     def __init__(self, model_name: str, batch_size: int = 32):
         self._model_name, self._batch_size, self._model = model_name, batch_size, None
 
     @property
     def model(self) -> SentenceTransformer:
-        if self._model is None:                      # 全进程只加载一次
+        if self._model is None:  # 全进程只加载一次
             self._model = SentenceTransformer(self._model_name)
         return self._model
 
     def embed_documents(self, texts: list[str]) -> list[list[float]]:
-        return self.model.encode(texts, batch_size=self._batch_size,
-                                 normalize_embeddings=True).tolist()
+        return self.model.encode(
+            texts, batch_size=self._batch_size, normalize_embeddings=True
+        ).tolist()
 
     def embed_query(self, text: str) -> list[float]:
-        return self.model.encode([QUERY_INSTRUCTION + text],
-                                 normalize_embeddings=True)[0].tolist()
+        return self.model.encode([QUERY_INSTRUCTION + text], normalize_embeddings=True)[0].tolist()
 ```
 
 - 关键点：
@@ -490,6 +507,7 @@ class BGEEmbeddings(Embeddings):
 ```python
 from pymilvus import DataType, MilvusClient
 
+
 class ChunkStore:
     def __init__(self, uri: str, collection: str, dim: int):
         self.client = MilvusClient(uri=uri)
@@ -501,23 +519,37 @@ class ChunkStore:
         schema = self.client.create_schema(auto_id=True, enable_dynamic_field=False)
         # ... §6.1 的字段定义 ...
         index = self.client.prepare_index_params()
-        index.add_index(field_name="vector", index_type="HNSW",
-                        metric_type="COSINE", params={"M": 16, "efConstruction": 200})
+        index.add_index(
+            field_name="vector",
+            index_type="HNSW",
+            metric_type="COSINE",
+            params={"M": 16, "efConstruction": 200},
+        )
         self.client.create_collection(self.collection, schema=schema, index_params=index)
 
     def insert_chunks(self, chunks: list[Chunk], vectors: list[list[float]]) -> int:
-        rows = [{
-            "vector": v, "chunk_id": c.chunk_id, "doc_id": c.doc_id, "text": c.text,
-            "chunk_index": c.chunk_index, "section_path": c.section_path,
-            "tenant_id": c.acl.tenant_id, "department_id": c.acl.department_id,
-        } for c, v in zip(chunks, vectors)]
+        rows = [
+            {
+                "vector": v,
+                "chunk_id": c.chunk_id,
+                "doc_id": c.doc_id,
+                "text": c.text,
+                "chunk_index": c.chunk_index,
+                "section_path": c.section_path,
+                "tenant_id": c.acl.tenant_id,
+                "department_id": c.acl.department_id,
+            }
+            for c, v in zip(chunks, vectors)
+        ]
         self.client.insert(collection_name=self.collection, data=rows)
-        self.client.flush(self.collection)           # P0 关键：写完立刻可见
+        self.client.flush(self.collection)  # P0 关键：写完立刻可见
         return len(rows)
 
     def search(self, query_vector: list[float], top_k: int) -> list[dict]:
         res = self.client.search(
-            collection_name=self.collection, data=[query_vector], limit=top_k,
+            collection_name=self.collection,
+            data=[query_vector],
+            limit=top_k,
             output_fields=["chunk_id", "doc_id", "text", "chunk_index", "section_path"],
             consistency_level="Strong",
         )
@@ -560,17 +592,26 @@ class ChunkStore:
 ```python
 CITE_RE = re.compile(r"\[(\d+)\]")
 
+
 def build_citations(answer: str, chunks: list[Chunk]) -> list[dict]:
     used = sorted({int(m) for m in CITE_RE.findall(answer)})
-    picked = used or [1]                      # 模型漏标时兜底附 top1，保证引用非空
+    picked = used or [1]  # 模型漏标时兜底附 top1，保证引用非空
     out = []
     for i in picked:
         if not 1 <= i <= len(chunks):
             continue
         c = chunks[i - 1]
-        out.append({"index": i, "doc_id": c.doc_id, "chunk_index": c.chunk_index,
-                    "section_path": c.section_path, "char_start": c.char_start,
-                    "char_end": c.char_end, "snippet": c.text[:200]})
+        out.append(
+            {
+                "index": i,
+                "doc_id": c.doc_id,
+                "chunk_index": c.chunk_index,
+                "section_path": c.section_path,
+                "char_start": c.char_start,
+                "char_end": c.char_end,
+                "snippet": c.text[:200],
+            }
+        )
     return out
 ```
 
@@ -593,17 +634,20 @@ class RAGState(TypedDict):
     citations: list[dict]
     timings: dict
 
+
 def build_graph(retriever, llm, store):
     g = StateGraph(RAGState)
     g.add_node("retrieve", lambda s: {"contexts": retriever.retrieve(s["query"], settings.top_k)})
     g.add_node("generate", lambda s: {"answer": llm.answer(s["query"], s["contexts"])})
-    g.add_node("cite",     lambda s: {"citations": build_citations(s["answer"], s["contexts"])})
-    g.add_node("refuse",   lambda s: {"answer": REFUSE_TEXT, "citations": []})
+    g.add_node("cite", lambda s: {"citations": build_citations(s["answer"], s["contexts"])})
+    g.add_node("refuse", lambda s: {"answer": REFUSE_TEXT, "citations": []})
 
     g.add_edge(START, "retrieve")
-    g.add_conditional_edges("retrieve",
+    g.add_conditional_edges(
+        "retrieve",
         lambda s: "generate" if s["contexts"] else "refuse",
-        {"generate": "generate", "refuse": "refuse"})
+        {"generate": "generate", "refuse": "refuse"},
+    )
     g.add_edge("generate", "cite")
     g.add_edge("cite", END)
     g.add_edge("refuse", END)

@@ -32,7 +32,9 @@ def get_engine(database_url: str, *, echo: bool = False) -> AsyncEngine:
     return _engine
 
 
-def get_session_factory(database_url: str, *, echo: bool = False) -> async_sessionmaker[AsyncSession]:
+def get_session_factory(
+    database_url: str, *, echo: bool = False
+) -> async_sessionmaker[AsyncSession]:
     global _session_factory
     if _session_factory is None:
         _session_factory = async_sessionmaker(

@@ -60,7 +60,9 @@ def _build_sections(content: str, doc_title: str) -> list[_Section]:
     return sections
 
 
-def _atoms(text: str, base: int, separators: tuple[str, ...], max_atom: int) -> list[tuple[int, int]]:
+def _atoms(
+    text: str, base: int, separators: tuple[str, ...], max_atom: int
+) -> list[tuple[int, int]]:
     """把文本切成不超过 max_atom 的连续片段区间。"""
     if not text:
         return []
@@ -90,9 +92,7 @@ def _atoms(text: str, base: int, separators: tuple[str, ...], max_atom: int) -> 
     return spans
 
 
-def _pack(
-    atoms: list[tuple[int, int]], chunk_size: int, overlap: int
-) -> list[tuple[int, int]]:
+def _pack(atoms: list[tuple[int, int]], chunk_size: int, overlap: int) -> list[tuple[int, int]]:
     """贪心装箱：尽量填满 chunk_size，块间保留 overlap。"""
     if not atoms:
         return []

@@ -64,7 +64,10 @@ class FakeGateway:
     async def generate(self, req) -> GenerateResponse:  # noqa: ANN001
         self.generate_calls += 1
         return GenerateResponse(
-            answer=self.answer, model="fake", provider="fake", timings_ms={"generate": 12.0, "total": 13.0}
+            answer=self.answer,
+            model="fake",
+            provider="fake",
+            timings_ms={"generate": 12.0, "total": 13.0},
         )
 
     async def complete(self, req) -> GenerateResponse:  # noqa: ANN001
@@ -85,7 +88,9 @@ def make_graph():
         retrieval = FakeRetrieval(hits)
         gateway = FakeGateway(answer)
         cache = QueryCache(settings.redis_url, 60, enabled=False)
-        graph = build_graph(retrieval=retrieval, model_gateway=gateway, cache=cache, settings=settings)
+        graph = build_graph(
+            retrieval=retrieval, model_gateway=gateway, cache=cache, settings=settings
+        )
         return graph, retrieval, gateway
 
     return _make

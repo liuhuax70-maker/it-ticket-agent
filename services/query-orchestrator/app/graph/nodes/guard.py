@@ -110,7 +110,9 @@ async def _llm_grounded(
     审核开启与否由 ``GUARD_LLM_ENABLED`` 决定，默认关闭。
     """
     hits = list(state.get("hits") or [])
-    context = "\n\n".join(f"[{i}] {h.text}" for i, h in enumerate(hits, start=1)) or "（无参考资料）"
+    context = (
+        "\n\n".join(f"[{i}] {h.text}" for i, h in enumerate(hits, start=1)) or "（无参考资料）"
+    )
     prompt = get_prompt_registry().render(
         "guard", "v1", context=context, answer=answer, context_count=len(hits)
     )
@@ -151,7 +153,9 @@ def make_guard_node(model_gateway: ModelGatewayClient, settings: Settings):
                 answer=REFUSE_TEXT,
                 citations=[],
                 refused=True,
-                errors=add_error(state, "refusal_detected") if answer else list(state.get("errors") or []),
+                errors=add_error(state, "refusal_detected")
+                if answer
+                else list(state.get("errors") or []),
             )
 
         # 2) 引用映射
@@ -182,7 +186,13 @@ def make_guard_node(model_gateway: ModelGatewayClient, settings: Settings):
                 errors = [*errors, f"guard_failed: {exc}"]
 
         return merge_timing(
-            state, "guard", started, answer=answer, citations=citations, refused=refused, errors=errors
+            state,
+            "guard",
+            started,
+            answer=answer,
+            citations=citations,
+            refused=refused,
+            errors=errors,
         )
 
     return guard
