@@ -9,7 +9,6 @@
   'use strict';
 
   var STORE_CONV = 'par.conversations.v2';
-  var STORE_THEME = 'par.theme';
   var MAX_CONV = 50;
   var NEAR_BOTTOM_PX = 90;
 
@@ -544,7 +543,9 @@
       var btn = document.createElement('button');
       btn.className = 'suggestion';
       btn.type = 'button';
-      btn.innerHTML = '<span class="sug-q"></span><span class="sug-tip"></span>';
+      btn.innerHTML = '<svg class="sug-ico" viewBox="0 0 24 24" width="20" height="20" aria-hidden="true">' +
+        '<path d="M4 5.5A1.5 1.5 0 0 1 5.5 4H10l2 2h6.5A1.5 1.5 0 0 1 20 7.5v9A1.5 1.5 0 0 1 18.5 18h-13A1.5 1.5 0 0 1 4 16.5v-11Z" fill="none" stroke="currentColor" stroke-width="1.6"/></svg>' +
+        '<span class="sug-text"><span class="sug-q"></span><span class="sug-tip"></span></span>';
       btn.querySelector('.sug-q').textContent = item.q;
       btn.querySelector('.sug-tip').textContent = item.tip;
       btn.addEventListener('click', function () { send(item.q); });
@@ -781,23 +782,20 @@
 
   // ---------------- 主题与侧栏 ----------------
 
-  function applyTheme(theme) {
-    document.documentElement.dataset.theme = theme;
-    var dark = theme === 'dark';
-    $('themeIcon').textContent = dark ? '☀️' : '🌙';
-    $('themeText').textContent = dark ? '浅色模式' : '深色模式';
-    try { localStorage.setItem(STORE_THEME, theme); } catch (err) { /* 忽略 */ }
-  }
-
-  function wireTheme() {
-    var saved = null;
-    try { saved = localStorage.getItem(STORE_THEME); } catch (err) { /* 忽略 */ }
-    var prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
-    applyTheme(saved || (prefersDark ? 'dark' : 'light'));
-
-    $('themeToggle').addEventListener('click', function () {
-      applyTheme(document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark');
-    });
+  function wireCollapse() {
+    var app = document.querySelector('.app');
+    var btn = $('sidebarToggle');
+    var expand = $('sidebarExpand');
+    var KEY = 'par.sidebar';
+    try {
+      if (localStorage.getItem(KEY) === 'collapsed') app.classList.add('collapsed');
+    } catch (err) { /* 忽略 */ }
+    function toggle() {
+      var collapsed = app.classList.toggle('collapsed');
+      try { localStorage.setItem(KEY, collapsed ? 'collapsed' : 'open'); } catch (err) { /* 忽略 */ }
+    }
+    if (btn) btn.addEventListener('click', toggle);
+    if (expand) expand.addEventListener('click', toggle);
   }
 
   function openSidebar() {
@@ -1212,7 +1210,7 @@
     if (conversations.length) currentId = conversations[0].id;
     else newConversation();
 
-    wireTheme();
+    wireCollapse();
     wireSidebar();
     wireInput();
     wireCitations();
