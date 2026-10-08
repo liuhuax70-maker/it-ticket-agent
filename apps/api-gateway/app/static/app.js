@@ -178,6 +178,15 @@
     });
   }
 
+  // 401 时把登录入口高亮 3 秒：用户的第一反应是"页面坏了"，而不是"我该登录"。
+  // 侧栏底部的登录按钮很容易被忽略，尤其是知识库文档很长的场景。
+  function highlightAuth() {
+    var btn = $('authBtn');
+    if (!btn) return;
+    btn.classList.add('pulse');
+    setTimeout(function () { btn.classList.remove('pulse'); }, 3000);
+  }
+
   function renderAuthState() {
     var token = storedToken();
     var label = $('authLabel');
@@ -702,7 +711,9 @@
       .then(function (resp) {
         return resp.json().then(function (data) {
           if (!resp.ok) {
-            throw new Error(data.message || data.detail || ('HTTP ' + resp.status));
+            var err = new Error(data.message || data.detail || ('HTTP ' + resp.status));
+            err.status = resp.status;
+            throw err;
           }
           return data;
         });
@@ -724,6 +735,18 @@
         //    等于把兜底链绕过去。
       })
       .catch(function (err) {
+        if (err && err.status === 401) {
+          // 没登录 / 令牌过期：给出可操作的下一步，而不是把「缺少 Bearer 令牌」这种
+          // 面向开发者的措辞甩进气泡里——那是用户唯一能看到的东西。
+          toast('登录后才能提问，请先登录', 'fail');
+          conv.messages.push({
+            role: 'assistant',
+            content: '',
+            error: '需要登录后才能提问。点击左下角「登录」或「注册」后重试。'
+          });
+          highlightAuth();
+          return;
+        }
         if (err && err.name === 'AbortError') {
           conv.messages.push({
             role: 'assistant',

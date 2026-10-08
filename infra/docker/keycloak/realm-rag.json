@@ -2,7 +2,15 @@
   "realm": "rag",
   "enabled": true,
   "sslRequired": "none",
-  "registrationAllowed": false,
+  "registrationAllowed": true,
+  "registrationEmailAsUsername": false,
+  "rememberMe": true,
+  "verifyEmail": false,
+  "resetPasswordAllowed": true,
+  "loginWithEmailAllowed": true,
+  "defaultRole": {
+    "name": "rag_user"
+  },
   "accessTokenLifespan": 1800,
   "roles": {
     "realm": [
@@ -171,6 +179,8 @@
       "enabled": true,
       "email": "admin@example.com",
       "emailVerified": true,
+      "firstName": "Admin",
+      "lastName": "Root",
       "credentials": [{ "type": "password", "value": "admin", "temporary": false }],
       "realmRoles": ["rag_admin", "rag_user"]
     }
