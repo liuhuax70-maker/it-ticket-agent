@@ -275,7 +275,7 @@ class OpenSearchStore:
         # 排除子句（当前用于"已废止文档不参与检索"）。
         # 每条 clause 内部是 AND，条与条之间也是 AND——它们都是"必须不命中"的条件。
         # 注意：未写入该字段的文档**不参与 term 匹配**，因此天然通过排除——
-        # 这正是我们要的（存量文档视为有效），不需要任何数据迁移。
+        # 存量文档视为有效，不需要任何数据迁移。
         must_not = filters.get("must_not") or []
         if must_not:
             excludes: list[dict[str, Any]] = []

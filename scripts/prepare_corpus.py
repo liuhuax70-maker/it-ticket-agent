@@ -104,7 +104,7 @@ async def prepare_permissions(tokens: TokenProvider, *, reindex: bool) -> dict[s
 
 
 async def verify_acl(tokens: TokenProvider, doc_ids: dict[str, str]) -> bool:
-    """回读台账，确认 ACL 真的是身份决定的（而不是我们以为的那样）。"""
+    """回读台账，确认 ACL 由身份决定而非其他因素。"""
     async with httpx.AsyncClient(timeout=120.0) as client:
         resp = await client.get(
             f"{GATEWAY}/documents",

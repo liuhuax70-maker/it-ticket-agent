@@ -1,6 +1,6 @@
 # permission-aware-rag
 
-企业级**权限感知** RAG 知识库平台：把「接入文档 → 切分 → 向量化 → 混合检索 → 大模型生成 → 带引用作答」端到端跑通，并把权限过滤、异步通道、评测接缝**预留在正确的位置**，避免后续返工。
+企业级**权限感知** RAG 知识库平台：把「接入文档 → 切分 → 向量化 → 混合检索 → 大模型生成 → 带引用作答」端到端跑通，并把权限过滤、异步通道、评测接缝预留在正确的位置。
 
 技术栈：`FastAPI · LangGraph · Postgres · OpenSearch · Milvus · Redis · Kafka · LiteLLM · RAGAS · Langfuse · Keycloak/OPA · K8s · Terraform`
 语言模型：**DeepSeek**（官方 API 与本地 OpenAI 兼容端点**双模可切换**）
@@ -73,7 +73,7 @@ docker compose up -d          # 核心依赖：Postgres / Redis / OpenSearch / M
 docker compose --profile streaming --profile authz --profile observability --profile monitoring up -d
 ```
 
-> 本机 6379/19530 等端口被占用时，改 `.env` 里的 `REDIS_PORT` / `MILVUS_URI` 即可（compose 按 `.env` 插值）。
+> 本机 6379/19530 等端口被占用时，改 `.env` 里的 `REDIS_PORT` / `MILVUS_URI`（compose 按 `.env` 插值）。
 
 ### 2.3 安装与建表
 
@@ -104,9 +104,7 @@ LOCAL_LLM_THINK=false        # 关闭思考链，见下方说明
 LLM_ANSWER_PROMPT_VERSION=v2
 ```
 
-> **思考型模型必须关掉思考链**：`qwen3` / `deepseek-r1` 这类模型在 OpenAI 兼容接口下会把输出预算
-> 全部消耗在思维链上，最终 `content` 为空，表现为「模型莫名其妙一直拒答」。由于只有 Ollama 原生接口
-> 支持 `think=false`，才提供 `LOCAL_LLM_API_STYLE=ollama`；非思考型模型保持 `openai` 风格即可。
+> **思考型模型必须关掉思考链**：`qwen3` / `deepseek-r1` 在 OpenAI 兼容接口下会把输出预算耗在思维链上，最终 `content` 为空，表现为「一直拒答」。只有 Ollama 原生接口支持 `think=false`，故提供 `LOCAL_LLM_API_STYLE=ollama`；非思考型模型保持 `openai` 即可。
 
 向量化默认用本地 ONNX（`EMBED_BACKEND=fastembed` + `BAAI/bge-small-zh-v1.5`，512 维），无需外部服务；也可切 `litellm` 走远端 embedding 端点。
 
@@ -118,7 +116,7 @@ python scripts/dev_services.py     # 一键前台启动 6 个在线服务（Ctrl
 python -m uvicorn app.main:app --app-dir services/retrieval --port 8002 --reload
 ```
 
-打开 <http://localhost:8000/ui/> 即为问答界面（零构建单页应用）：左侧会话历史，右侧对话区；侧栏可上传文档（`.md/.markdown/.txt/.pdf`，点击或拖拽，也可填服务器路径）与知识库台账（关键字搜索、重建索引、删除）。答案按 Markdown 渲染，`[n]` 变可点击角标，点击高亮并滚动到来源卡片；拒答渲染成中性提示而非报错（拒答是正确行为，不是故障）。支持深色模式、复制、重新生成、停止等待。
+打开 <http://localhost:8000/ui/> 即为问答界面（零构建单页应用）：左侧会话历史，右侧对话区；侧栏可上传文档（`.md/.markdown/.txt/.pdf`，点击或拖拽，也可填服务器路径）与知识库台账（关键字搜索、重建索引、删除）。答案按 Markdown 渲染，`[n]` 变可点击角标，点击高亮并滚动到来源卡片；拒答渲染成中性提示而非报错。支持深色模式、复制、重新生成、停止等待。
 
 > 当前为**服务端一次性返回 + 思考中提示**，不是逐 token 流式输出；真流式需三级 SSE 透传，见第 8 节。
 
@@ -140,7 +138,7 @@ python scripts/verify_loop.py --skip-chat   # 只验服务健康、接入幂等�
 
 ### 2.7 评测与门禁
 
-评测分两层：**L1 用可判定的硬事实，不依赖裁判模型**；L2 才用 RAGAS 打答案质量分。理由见 `docs/adr/0005`。
+评测分两层：**L1 用可判定的硬事实，不依赖裁判模型**；L2 用 RAGAS 打答案质量分。指标定义与取舍见 `docs/adr/0005`。
 
 ```bash
 make corpus           # 准备语料（10 篇通用 + 3 篇权限，回读校验 ACL）
@@ -160,9 +158,7 @@ L1  hit@k 100.0%（95% 区间 92.3%~100.0%）  片段召回 98.0%    引用覆�
 L2  faithfulness 0.979   context_precision 0.917   context_recall 0.958   （12 条分层抽样）
 ```
 
-评测集 70 条的构成：单文档事实题 23、负样本（语料外）19、干扰题 8、权限切片 8（同一问题不同身份期望相反）、改述题 5、跨文档多跳 3、注入回归 2、生命周期 2。其中**权限切片与注入回归的期望值是可判定的硬事实，必须为 0**，不依赖裁判模型。
-
-> 片段召回刻意留在 98% 而不是贴顶：指标全部贴顶时，Rerank 有没有增益、检索参数调没调对都无从判定。评测集要当**测量仪器**用，量程不够就先修仪器。
+评测集含权限切片（同一问题、不同身份、期望相反）与注入回归，其判定是可复现的硬事实，**必须为 0**，不依赖裁判模型。
 
 回归门禁：
 
@@ -173,22 +169,18 @@ make eval-baseline    # 把当前报告冻结为新基线（显式接受现状�
 
 `scripts/check_eval_regression.py` 分两类判定：
 
-- **零容忍不变量**：`leak_count`（越权）、`forbidden_count`（注入得逞）必须为 0，且**字段缺失也算失败**，否则旧版报告缺字段会被当成 0 而绕过门禁；
-- **指标退化**：检索类容差 0（temperature=0 下确定：`hit@k` / `MRR`（引用序）/ `MRR`(检索侧) / `NDCG@5` / 片段召回 / 引用覆盖），拒答类容差 0.05，L2 容差 **0.10**。L2 容差是实测值：同一份答案、同一裁判连打 5 次，faithfulness 落在 0.788~0.840，**极差 0.052**，原设的 0.05 比裁判噪声还小，门禁会随机误报。测试 `test_l2_tolerance_stays_above_measured_judge_noise` 把这一点钉住。
+- **零容忍不变量**：`leak_count`（越权）、`forbidden_count`（注入得逞）必须为 0；字段缺失也算失败，否则旧版报告缺字段会被当成 0 而绕过门禁；
+- **指标退化**：检索类容差 0（temperature=0 下确定：`hit@k` / `MRR`（引用序）/ `MRR`(检索侧) / `NDCG@5` / 片段召回 / 引用覆盖），拒答类容差 0.05，L2 容差 **0.10**。L2 容差取自实测：同一份答案、同一裁判连打 5 次，faithfulness 极差约 0.052。
 
-三个刻意的设计：**样本数不一致时跳过指标对比**（分母不同、比率不可比，否则 CI 的限量子集会让门禁长期误报，然后被人加 `|| true` 绕过）；**基线只有显式更新才会变**（否则每轮自动「接受现状」，门禁退化成打印当前指标）；**基线里没有的指标其规则当前不起作用**，门禁会显式提示跑一次 `--update-baseline`。
+门禁的三条边界行为：样本数不一致时跳过指标对比（分母不同、比率不可比）；基线仅在显式 `--update-baseline` 时变更；基线中不存在的指标其规则不生效，门禁会提示先跑一次 `--update-baseline`。
 
-L1 指标含 `hit@k`（带 Wilson 95% 区间）、`MRR`、片段召回、引用覆盖率、拒答准确率、漏答率、误答率、越权泄露数、禁用内容数，以及检索侧排序指标 `MRR(检索侧)` / `NDCG@5` / `NDCG 样本数`，并给出标签分组与失败样本明细。L2 指标为 `faithfulness`、`context_precision`、`context_recall`（负样本不参与）。
-
-> 两个 MRR 不能混着比：`MRR(引用序)` 量的是**生成侧**模型挑了哪些引用、按什么顺序排列；`MRR(检索侧)` / `NDCG@5` 量的是**检索侧** RRF 融合与重排后的真实名次。采集器单独记录 `retrieved_doc_ids`，且刻意不用引用兜底（缓存命中的响应没有 contexts，那种行应被排除出检索侧分母）。指标定义、分级相关性与折线差异见 `docs/adr/0005`。
->
-> 评测固定传 `ChatRequest.use_cache=false`（生产默认不变）：命中响应没有 contexts 会让检索侧指标的分母随缓存命中浮动；且允许写缓存会把评测流量灌进生产缓存，让下一轮延迟虚低。
+指标命名的两处易混淆处：`MRR(引用序)` 量生成侧（模型挑了哪些引用、按什么顺序排列），`MRR(检索侧)` / `NDCG@5` 量检索侧（RRF 融合与重排后的真实名次），两者不可直接比大小；`NDCG@5` 需与 `NDCG 样本数` 一起看，分母变化后不可比。评测固定传 `ChatRequest.use_cache=false`（生产默认不变），否则命中响应缺 contexts 会让检索侧分母随缓存命中浮动。详见 `docs/adr/0005`。
 
 报告落盘 `eval_data/reports/`（`baseline_latest.json` 供机器比对、`baseline_latest.md` 供人读）。
 
 ### 2.8 权限闭环验收（S7，本项目的主线）
 
-V1~V5 只证明「链路能跑」，且是在**单租户单部门**下跑的。要证明「权限感知」，必须用**真实身份**跑一遍隔离矩阵：
+V1~V5 只覆盖单租户单部门；「权限感知」需用**真实身份**跑隔离矩阵：
 
 ```bash
 docker compose --profile authz up -d   # Keycloak + OPA
@@ -235,36 +227,35 @@ eval_data/      golden.jsonl（黄金评测集）
 data/corpus/    演示语料
 ```
 
-依赖方向铁律：`contracts → common → llms/embeddings/search/vectorstores/retrievers/prompts/security → services → apps`。
-服务之间只通过 `packages/contracts` 的契约通信，**不允许跨服务 import 实现细节**。
+依赖方向铁律：`contracts → common → llms/embeddings/search/vectorstores/retrievers/prompts/security → services → apps`。服务之间只通过 `packages/contracts` 的契约通信，**不允许跨服务 import 实现细节**。
 
 ---
 
-## 4. 关键设计决策
+## 4. 关键设计约束
 
 1. **权限过滤下沉到存储层**：过滤条件编译成 Milvus `expr` 与 OpenSearch `filter`，绝不在应用层裁剪 top_k 结果，否则越权文档会先挤占 top_k，导致有权限的文档检索不到。详见 `docs/adr/0002`。
-2. **检索为空直接拒答，不调用 LLM**：一个在检索为空时仍然编答案的 RAG 接口，比不可用更危险。拒答判定分三层（哨兵标记 → 固定话术 → 短句否定表述），并且**拒答一律清空 citations**。详见 `docs/adr/0003`。
-3. **引用可定位**：`chunk` 自带 `char_start/char_end`，切分器保证 `content[char_start:char_end] == chunk.text`；`/chat` 的 `citations` 原样透传，前端可直接跳原文。
+2. **检索为空直接拒答，不调用 LLM**：检索为空仍编答案比不可用更危险。拒答判定分三层（哨兵标记 → 固定话术 → 短句否定表述），且**拒答一律清空 citations**。详见 `docs/adr/0003`。
+3. **引用可定位**：`chunk` 自带 `char_start/char_end`，切分器保证 `content[char_start:char_end] == chunk.text`；`/chat` 的 `citations` 原样透传。
 4. **混合检索用 RRF 而非分数加权**：BM25 与余弦相似度量纲不可比，RRF 只用排名，免标定。
-5. **最小闭环先同步直连、Kafka 留接口**：`ChunkSink` 抽象让 ingestion→indexing 在「HTTP 直连 / Kafka 事件」之间切换时不用改业务代码。详见 `docs/adr/0001`。
-6. **可选能力默认关闭且显式可观测**：改写、重排、语义缓存默认关闭；关闭时是**显式的透传**（响应里如实返回 `reranker=rrf`），而不是假装做过。
+5. **同步直连优先、Kafka 留接口**：`ChunkSink` 抽象让 ingestion→indexing 在「HTTP 直连 / Kafka 事件」间切换不改业务代码。详见 `docs/adr/0001`。
+6. **可选能力默认关闭且显式可观测**：改写、重排、语义缓存默认关闭；关闭时是显式透传（响应如实返回 `reranker=rrf`），不伪装执行过。
 7. **幂等优先**：`doc_id` 由 `source` 稳定派生（统一 posix 分隔符），Milvus 用 `chunk_id` 作主键、OpenSearch 用 `chunk_id` 作 `_id`，重跑索引不产生重复。
-8. **权限数据的失败必须大声**：`tenant/department/owner` 只能由网关从身份注入，客户端不得指定；`visibility=private` 缺 `owner` 直接 422，不做默认值兜底。权限字段的错误不会抛异常，只会「悄悄搜不到」或「悄悄越权」。详见 `docs/adr/0004`。
-9. **缓存键必须包含身份维度**：查询缓存键为 `(tenant_id, department_id, user_id, mode, top_k, temperature, query)`。早期实现漏了身份维度，同租户内 alice(hr) 与 bob(engineering) 问同一句问题会共用一条缓存，bob 直接收到带 HR 文档引用的答案，检索层 ACL 被整段绕过；且这类缺陷在 `CACHE_ENABLED=false` 时完全不可见。详见 `docs/adr/0006`。
-10. **评测分两层**：L1 用可判定的硬事实（越权、拒答、命中）且不依赖裁判模型，L2 才用 RAGAS 打答案质量分。只做 L2 会慢到没人愿意跑，且分数无法定位到样本。详见 `docs/adr/0005`。
-11. **提示注入：声明 + 转义 + 检测告警，但检测不阻断**。提示词把资料声明为**数据**，送模型前把资料里的 `【参考资料】/【问题】/【回答要求】` 转义（文档不能伪造分节），可疑表达只计数告警、不改变行为，用正则决定是否拒答会把可用性押在正则的精确度上。受控 A/B 实测：v3 + 未转义时被投毒文档**成功劫持模型**，转义或 v4 声明层各自都能挡住。详见 `docs/adr/0007`。
+8. **权限数据的失败必须大声**：`tenant/department/owner` 只能由网关从身份注入，客户端不得指定；`visibility=private` 缺 `owner` 直接 422，不做默认值兜底。权限字段错误不抛异常，只会静默搜不到或静默越权。详见 `docs/adr/0004`。
+9. **缓存键必须包含身份维度**：`(tenant_id, department_id, user_id, mode, top_k, temperature, query)`。缺身份维度会让同租户跨部门共用答案，检索层 ACL 被整段绕过，且该缺陷在 `CACHE_ENABLED=false` 时不可见。详见 `docs/adr/0006`。
+10. **评测分两层**：L1 用可判定的硬事实（越权、拒答、命中），L2 才用 RAGAS 打答案质量分；只做 L2 会慢到没人愿意跑，且无法定位到样本。详见 `docs/adr/0005`。
+11. **提示注入：声明 + 转义 + 检测告警，检测不阻断**：提示词把资料声明为**数据**，送模型前转义 `【参考资料】/【问题】/【回答要求】`（文档不能伪造分节），可疑表达只计数告警、不改变行为（用正则决定是否拒答会把可用性押在正则精确度上）。详见 `docs/adr/0007`。
 
 ---
 
 ## 5. 测试
 
 ```bash
-python scripts/test_all.py            # 全部（按服务分进程；服务各自有名为 app 的包，必须隔离）
+python scripts/test_all.py            # 全部（按服务分进程）
 python -m pytest packages/tests -q    # 只跑共享库
 ruff check .                          # 静态检查
 ```
 
-> 为什么按服务分进程：每个服务都有顶层 `app` 包，同一个 pytest 会话里 `app` 只会绑定到最先导入的那个服务。
+> 必须按服务分进程：每个服务都有顶层 `app` 包，同一 pytest 会话里 `app` 只会绑定到最先导入的服务。
 
 ---
 
@@ -283,7 +274,7 @@ terraform -chdir=infra/terraform/envs/dev init && terraform -chdir=infra/terrafo
 
 ## 7. 监控与告警
 
-9 个服务全部暴露 `GET /metrics`（Prometheus 文本格式）。实现见 `packages/observability/metrics.py`，**没有引 prometheus_client**：需要的只是计数器/仪表/直方图三种原语和一段曝露格式，自己写约 150 行且完全可控。
+9 个服务全部暴露 `GET /metrics`（Prometheus 文本格式，实现见 `packages/observability/metrics.py`）。
 
 | 指标 | 类型 | 标签 | 用途 |
 | --- | --- | --- | --- |
@@ -295,19 +286,19 @@ terraform -chdir=infra/terraform/envs/dev init && terraform -chdir=infra/terrafo
 | `rag_acl_missing_total` | counter | — | **权限下推链路断裂次数，生产必须恒为 0** |
 | `rag_injection_suspected_total` | counter | source=query\|context / rule | 疑似提示注入次数（检测**不阻断**） |
 
-两条设计约定：
+两条约定：
 
-- **标签取路由模板而非实际 URL**（`/documents/{doc_id}` 而不是 `/documents/d_830daea6`），否则每个文档都会生成一条时间序列，几次爬取就能把 Prometheus 打爆。匹配不到路由的一律归到 `<unmatched>`；`/metrics` 自身不计入。
-- **指标中间件放在最外层**（starlette 越晚添加越靠外层）。401/429 这类被拒请求必须计入可用性与错误率，漏掉它们会让错误率偏低，而「错误率偏低」正是监控造假最常见的形式。抛异常的请求同样计为 500。
+- **标签取路由模板而非实际 URL**（`/documents/{doc_id}`），否则每个文档生成一条时间序列。匹配不到路由的归到 `<unmatched>`；`/metrics` 自身不计入。
+- **指标中间件放在最外层**（starlette 越晚添加越靠外层）。401/429 与抛异常的请求都要计入，否则错误率会偏低。
 
-`METRICS_TOKEN` 的行为分两层（实测确认）：
+`METRICS_TOKEN` 的两层行为：
 
-- **token 是全局的**：一旦配置，**所有**服务的 `/metrics` 都要求 `Authorization: Bearer <token>`。配了就统一要求，比「只有网关要」更容易推理；这意味着 prometheus.yml 的**两个 job 都要带凭据**，只给网关带会让内部服务在配好 token 的那一刻集体 403。
-- **网关额外有一层**：它的 `/metrics` 只在配了 token 时才免**用户鉴权**（Prometheus 没有 Keycloak 令牌）；不配 token 则先被身份中间件拦成 401，这是刻意的安全默认。不配 token 时所有服务直接可达。
+- **全局生效**：一旦配置，所有服务的 `/metrics` 都要求 `Authorization: Bearer <token>`。因此 prometheus.yml 的**两个 job 都要带凭据**，只给网关带会让内部服务集体 403。
+- **网关额外一层**：它的 `/metrics` 仅在配了 token 时才免用户鉴权（Prometheus 没有 Keycloak 令牌）；不配 token 则被身份中间件拦成 401。不配 token 时所有服务直接可达。
 
-抓取配置与告警规则在 `infra/monitoring/`。告警的组织原则是**把验收清单里的不变量直接写成表达式**，而不是先看有哪些指标可告；其中 `RagAclMissing`（`increase(rag_acl_missing_total[5m]) > 0`，`for: 0m`）对应「越权/权限下推断裂出现一次就立刻告警」这条绝对不变量。SLO 与阈值的成文记录见 `docs/slo.md`。
+抓取配置与告警规则在 `infra/monitoring/`。`RagAclMissing`（`increase(rag_acl_missing_total[5m]) > 0`，`for: 0m`）对应绝对不变量：越权或权限下推断裂出现一次即告警。SLO 与阈值见 `docs/slo.md`。
 
-> 仓库**不**附带 docker-compose 的 Prometheus 服务：本地应用服务由 `scripts/dev_services.py` 启动并绑定 `127.0.0.1`，容器内既看不到宿主 loopback、也用不通 `host.docker.internal`。与其塞一个跑不通的块，不如把配置写清楚，由部署形态决定怎么跑。
+> 仓库不附带 docker-compose 的 Prometheus 服务：本地应用服务由 `scripts/dev_services.py` 绑定 `127.0.0.1` 启动，容器内无法访问宿主 loopback。
 
 ---
 
@@ -321,32 +312,31 @@ terraform -chdir=infra/terraform/envs/dev init && terraform -chdir=infra/terrafo
 | 鉴权与授权 | 已接入 Keycloak（JWT + JWKS，验签失败自动刷新）与 OPA（默认拒绝白名单），端到端验收通过 | 字段级/文档级授权、令牌静默刷新、生产用 HTTPS + PKCE 回调域名 |
 | 角色白名单可见性 | `allowed_roles` 已入契约但未参与过滤 | 补存储层 schema/expr 与两个入口的字段传递 |
 | 语义缓存 | 当前为精确匹配 | 可升级为 embedding 相似度匹配（须同时保证身份隔离） |
-| 查询规划 | 已实现（plan 节点 + 启发式闸门 + 轮转交织合并，`DECOMPOSE_ENABLED`）；**默认关闭** | 三版迭代实测无净增益（RRF 全量融合把多面向问题打退化、分段配额被 top-k 截断打回原形、轮转交织持平但 NDCG 略降且多一次 LLM 调用）。语料里「指针分块」比被指向的内容分块更好命中，词面不匹配是嵌入层局限 |
-| Reranker | 已实现并接线（中文可用的 bge-reranker-base）；**默认关闭，两轮实测维持关闭** | 在有余量的 70 条难集上真实开启：质量四项分毫不差，P50/P95 852/1070 → 10782/22214 ms（CPU）。翻案条件：更强 reranker/GPU，或评测集出现「RRF 排错、重排能纠」的具体案例 |
+| 查询规划 | 已实现（plan 节点 + 启发式闸门 + 轮转交织合并，`DECOMPOSE_ENABLED`）；**默认关闭** | 三版迭代实测无净增益（RRF 全量融合使多面向问题退化、分段配额被 top-k 截断、轮转交织持平但 NDCG 略降且多一次 LLM 调用） |
+| Reranker | 已实现并接线（bge-reranker-base）；**默认关闭，两轮实测维持关闭** | 在有余量的 70 条难集上开启后质量四项无变化，P50/P95 852/1070 → 10782/22214 ms（CPU）。翻案条件：更强 reranker/GPU |
 | 标准 Recall@K | 仍以 `hit@k` 代替（比分母意义上的 Recall 宽松） | 声明多个期望来源并出现「部分命中」样本后，改为按期望来源计的召回率 |
 | 中文分词 | OpenSearch 用 `standard` 分析器 | 换带 IK 插件的镜像并重建索引 |
 | PDF / Word / HTML | 已支持 Markdown / Txt / PDF（pypdf，无 OCR） | 补 docx / html / OCR |
-| 前端 | `api-gateway` 内置单页应用（问答 + 上传 + 知识库台账 + 深色模式） | `apps/chat-ui`、`apps/admin-console`（Next.js，含评测看板、批量导入、权限配置） |
+| 前端 | `api-gateway` 内置单页应用（问答 + 上传 + 知识库台账 + 深色模式） | `apps/chat-ui`、`apps/admin-console`（Next.js：评测看板、批量导入、权限配置） |
 | 文档管理 | 列表 / 关键字搜索 / 重建索引 / 删除（`GET/DELETE /documents`） | 批量上传任务化、版本历史、失败重试 |
-| 批量上传 | 前端串行逐个上传（避免打满写入路径） | 改走 Kafka 异步通道（`USE_KAFKA=true` 时 ingestion 已支持） |
+| 批量上传 | 前端串行逐个上传 | 改走 Kafka 异步通道（`USE_KAFKA=true` 时 ingestion 已支持） |
 | 流式输出 | 一次性返回 + 思考中提示 | model-gateway → orchestrator → gateway 三级 SSE 透传（LangGraph `astream` 已可提供节点级进度） |
-| 拒答的兜底判定 | 哨兵 + 固定话术 + 短句启发式（阈值 80 字） | 用评测集标定「相关性阈值」，让不可回答的问题在检索阶段就返回空 |
+| 拒答的兜底判定 | 哨兵 + 固定话术 + 短句启发式（阈值 80 字） | 用评测集标定相关性阈值，让不可回答的问题在检索阶段返回空 |
 | 入库吞吐 | 单文档 `/index` 因 Milvus `flush` + OpenSearch `refresh` 约 20s（本机实测） | 大文档改批量写入 + 关闭同步 refresh，用 bulk 参数控制可见性 |
-| 告警通道 | ✅ 已接线：规则 + `alertmanager.yml`（critical/warning 分路）+ compose `monitoring` profile（prometheus+alertmanager 一键起，`scripts/dev_monitoring.ps1`）。webhook 接收器是占位符 | 把占位 webhook 换成钉钉/企微/Slack；Grafana 看板 |
-| 监控看板 | 无 Grafana 看板 | 按第 7 节的指标表建四块面板：P95 / 错误率 / 拒答率 / 缓存命中率 |
-| SLO 阈值 | ✅ 已成文（`docs/slo.md`）：每条 SLO 注明度量手段与对应告警，并列出**不设 SLO 的项**及理由 | 按月复核 SLO 与实测的差距，调整告警阈值 |
-| 服务间身份信任 | 编排与检索从**明文 header** 取身份（网关是唯一鉴权点）——已 fail-closed：缺头即 403，不再静默用默认租户 | mTLS 或服务网格；当前不可达（应用服务不发布端口 + NetworkPolicy），属纵深防御加固 |
-| 提示注入 | 三层已实现（声明 + 结构转义 + 检测告警），并有 2 条常驻回归样本 + 零容忍门禁。残余：检测只覆盖已知表达形式；转义只覆盖当前模板用的三个标记 | 模板改动时同步 `_FORGEABLE_SECTIONS`；`data/corpus/injection_probe.md` 是**故意投毒**的夹具，勿当垃圾清理 |
-| 语料一致性 | 18 条规范值规则 + 引用断链 + 无规则守护的重复句，接入 CI（`make corpus-check`）。已抓出并修掉两例真实冲突（核心工作时间、病假证明）。规则声明在 `configs/corpus/normative_facts.yaml` | 规则覆盖范围仍是人工挑选的；**没有规则守着的事实仍可能互相矛盾**，补规则是持续动作 |
-| 上传内容校验 | 只做大小与非空校验，**无 MIME / 内容类型校验、无投毒检测** | 加类型白名单与内容扫描；投毒目前靠 `RagPromptInjectionInContext` 告警兜住 |
-| 数据失效管理 | ✅ 已实现：声明式生命周期（`configs/corpus/lifecycle.yaml`）+ 库层过滤（`must_not`，见 `compile_filters`），已废止文档不参与检索且台账可见。残余：日期判定在**入库时**，跨失效日不会自动翻转，需重新入库（一致性检查会提醒） | 自动翻转可改为把生效/失效日期建成可比较字段并在查询时注入「今天」；多版本并存与「指向新版」的答案提示 |
-| 成本核算 | ✅ 已折算：`rag_llm_cost_usd_total{model,tenant}` 按模型单价计美元（`LLM_PRICES` 可配），按租户+日累计进 Redis，`GET /admin/quotas/{tenant}` 返回 `cost_today_usd`。单价会漂移，**以供应商账单为准校准** | 对接账单系统；按成本维度做配额 |
+| 告警通道 | ✅ 已接线：规则 + `alertmanager.yml`（critical/warning 分路）+ compose `monitoring` profile（`scripts/dev_monitoring.ps1` 一键起）。webhook 接收器为占位符 | 换成钉钉/企微/Slack；补 Grafana 看板 |
+| 监控看板 | 无 Grafana 看板 | 按第 7 节指标表建四块面板：P95 / 错误率 / 拒答率 / 缓存命中率 |
+| SLO 阈值 | ✅ 已成文（`docs/slo.md`）：每条 SLO 注明度量手段与对应告警，并列出不设 SLO 的项及理由 | 按月复核 SLO 与实测差距，调整阈值 |
+| 服务间身份信任 | 编排与检索从明文 header 取身份（网关是唯一鉴权点）——已 fail-closed：缺头即 403 | mTLS 或服务网格；当前不可达（应用服务不发布端口 + NetworkPolicy） |
+| 提示注入 | 三层已实现（声明 + 结构转义 + 检测告警），含 2 条常驻回归样本 + 零容忍门禁。残余：检测只覆盖已知表达形式，转义只覆盖当前模板用的三个标记 | 模板改动时同步 `_FORGEABLE_SECTIONS`；`data/corpus/injection_probe.md` 是**故意投毒**的夹具，勿当垃圾清理 |
+| 语料一致性 | 18 条规范值规则 + 引用断链 + 无规则守护的重复句，接入 CI（`make corpus-check`）。规则声明在 `configs/corpus/normative_facts.yaml` | 规则覆盖范围仍为人工挑选；没有规则守着的事实仍可能互相矛盾，补规则是持续动作 |
+| 上传内容校验 | 只做大小与非空校验，无 MIME / 内容类型校验、无投毒检测 | 加类型白名单与内容扫描；投毒靠 `RagPromptInjectionInContext` 告警兜住 |
+| 数据失效管理 | ✅ 已实现：声明式生命周期（`configs/corpus/lifecycle.yaml`）+ 库层过滤（`must_not`，见 `compile_filters`），废止文档不参与检索且台账可见。残余：日期判定在入库时，跨失效日需重新入库 | 自动翻转可改为把生效/失效日期建成可比较字段并在查询时注入「今天」；多版本并存与「指向新版」的答案提示 |
+| 成本核算 | ✅ 已折算：`rag_llm_cost_usd_total{model,tenant}` 按模型单价计美元（`LLM_PRICES` 可配），按租户+日累计进 Redis，`GET /admin/quotas/{tenant}` 返回 `cost_today_usd`。单价会漂移，以供应商账单为准校准 | 对接账单系统；按成本维度做配额 |
 | 审计日志 | ✅ 已落库：网关访问审计进 Postgres `audit_logs`（谁/何时/访问什么/结果），`GET /admin/audit` 可按租户与用户检索（需 rag_admin）。队列+批量写，失败丢弃并告警日志，不影响业务请求 | 审计行加保留期与自动归档；记录「访问了哪些文档」需在编排层补 |
 
-> 实测记录（本机 Docker + CPU 推理）：`/chat` 端到端约 2–14s，其中检索 ~0.3s、生成 2.3–12.6s；
-> `/index` 单文档（10 分块）约 20s，瓶颈在 Milvus flush 与 OpenSearch refresh，不在向量化。
+> 实测（本机 Docker + CPU 推理）：`/chat` 端到端约 2–14s，其中检索 ~0.3s、生成 2.3–12.6s；`/index` 单文档（10 分块）约 20s，瓶颈在 Milvus flush 与 OpenSearch refresh，不在向量化。
 
-数据失效管理的两个落地要点：新增 `lifecycle` 字段需**重建 Milvus 集合**（schema 没有 alter，`enable_dynamic_field=False`，存量集合不会自动补列），用 `python scripts/rebuild_index.py`；OpenSearch 侧不用重建，`ensure_index` 会幂等 `put_mapping` 补齐（否则 dynamic mapping 把字符串推断成 text 并分词，term 过滤匹配不上，属静默失效）。另需注意**问已废止标准时系统用现行标准回答而不是拒答**（废止文档不进上下文、引用指向现行制度），是否要显式提示「该版本已废止」是产品决策，待固化。
+数据失效管理的落地要点：新增 `lifecycle` 字段需**重建 Milvus 集合**（schema 无 alter，`enable_dynamic_field=False`，存量集合不会自动补列），用 `python scripts/rebuild_index.py`；OpenSearch 侧不用重建，`ensure_index` 会幂等 `put_mapping` 补齐（否则 dynamic mapping 把字符串推断成 text 并分词，term 过滤匹配不上，属静默失效）。另需注意**问已废止标准时系统用现行标准回答而不是拒答**（废止文档不进上下文、引用指向现行制度），是否显式提示「该版本已废止」是产品决策，待固化。
 
 历史 P0 设计与坑位清单见 `docs/architecture/minimal-loop-v0.md`。
 
@@ -354,7 +344,7 @@ terraform -chdir=infra/terraform/envs/dev init && terraform -chdir=infra/terrafo
 
 ## 9. 代码风格与注释约定
 
-代码可读性为合入的硬性要求，完整规范见 [`CONTRIBUTING.md`](CONTRIBUTING.md)。要点：
+完整规范见 [`CONTRIBUTING.md`](CONTRIBUTING.md)。要点：
 
 - 中文三引号 docstring，放在模块、类、公共函数首行；
 - 写「为什么」与「契约 / 语义」，不翻译代码；
