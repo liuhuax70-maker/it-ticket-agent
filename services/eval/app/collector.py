@@ -304,6 +304,12 @@ def _build_row(
         "expected_doc_ids": sorted(expected),
         "expected_snippets": sample.expected_snippets,
         "forbidden_doc_ids": sorted(forbidden),
+        # 该样本**自己**是否声明了 forbidden_sources（区别于上面那个自动推导的并集）。
+        # 指标层靠它识别"权限类样本"：这类样本的诉求是"不许引用这份文档"，
+        # 已经由 forbidden_doc_ids / leak_count 表达，不该再叠加"必须拒答"的要求。
+        # 少了这个字段就无法在指标层区分两类负样本——曾误用 forbidden_doc_ids
+        # 做判据，而它对**每条**样本都非空（ACL 推导的结果），导致分母被清零。
+        "declared_forbidden": bool(sample.forbidden_sources),
         "must_not_contain": list(sample.must_not_contain),
         "answer": body.get("answer", ""),
         # 作答用的模型名。必须落盘：否则"误答率从 44.4% 降到 x%"无法归因到模型切换，

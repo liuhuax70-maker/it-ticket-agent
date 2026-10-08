@@ -210,11 +210,17 @@ def make_guard_node(model_gateway: ModelGatewayClient, settings: Settings):
             logger.info("回答声明不附引用（寒暄/无资料通用回答），跳过引用兜底")
             errors = add_error(state, "no_cite_marker")
             citations, fallback = [], False
+            # 「模型明确声明本次不附引用」等价于「本次没有资料支撑」——
+            # 必须把���个信号传导成 no_context，否则前端不会显示来源警告。
+            # 漏掉这一步的后果：答案里既没有引用、也没有拒答、也没有降级标记，
+            # 用户看到的是一段 naked 的断言，完全不知道它来自模型常识。
+            no_context = True
         else:
             citations, fallback = build_citations(answer, hits)
             if fallback:
                 logger.warning("答案未标注引用，已兜底附 top1")
                 errors = add_error(state, "citation_fallback_to_top1")
+            no_context = False
 
         # 3) 可选 LLM 合规审核（默认关闭）
         refused = False
@@ -243,6 +249,7 @@ def make_guard_node(model_gateway: ModelGatewayClient, settings: Settings):
             answer=answer,
             citations=citations,
             refused=refused,
+            no_context=no_context,
             errors=errors,
         )
 

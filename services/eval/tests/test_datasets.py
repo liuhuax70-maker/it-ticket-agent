@@ -165,6 +165,7 @@ def _row(
         "citations": citations or [],
         "contexts": contexts or [],
         "expected_doc_ids": expected or [],
+        "declared_forbidden": bool(forbidden),
         "forbidden_doc_ids": forbidden or [],
         "must_not_contain": must_not_contain or [],
         "expected_snippets": snippets or [],
@@ -479,3 +480,41 @@ def test_write_report_creates_json_and_markdown(tmp_path) -> None:
     assert report["l2"]["judge_model"] == "judge-x"
     assert len(report["samples"]) == 2
     assert "L1 确定性指标" in (tmp_path / "baseline_latest.md").read_text(encoding="utf-8")
+
+
+def test_permission_negative_samples_are_excluded_from_refusal_metrics() -> None:
+    """权限类负样本只考核 forbidden_sources，不该被算成误答。
+
+    实测 perm-hr-denied（bob/engineering 问招聘审批）虽然看不到 hr_policy.md，
+    但能从 employee_handbook.md 里读到相关流程——没有越权，也确实答上了。
+    把它记成误答是**重复计缺陷**（forbidden_sources 已经表达了），而且会让
+    "到底该改提示词还是该改 ACL"这个问题无法回答。
+    """
+    rows = [
+        _row("perm-hr-denied", should_refuse=True, forbidden=["hr_policy.md"]),
+        _row("n1", should_refuse=True, refused=True),
+        _row("n2", should_refuse=True, no_context=True),
+    ]
+    report = compute(rows)
+
+    # 权限类被排除：分母只剩 n1/n2 两条可回答类负样本
+    assert report.permission_sample_count == 1
+    assert report.false_answer_rate == 0.0
+    assert report.fallback_rate == pytest.approx(0.5, abs=1e-3)
+    assert any("forbidden_sources" in note for note in report.notes)
+
+
+def test_permission_negative_with_answer_does_not_raise_false_answer_rate() -> None:
+    """权限类样本即使答上了，也不该把误答率拉高。
+
+    越权与否由 leak_count 独立判定（两者是不同的缺陷）；
+    把"没拒答"也算成误答会让一个比率同时反映两件事，数字变差时
+    无法判断该改提示词还是该改 ACL。
+    """
+    rows = [
+        _row("perm-hr-denied", should_refuse=True, forbidden=["hr_policy.md"]),
+        _row("n1", should_refuse=True, refused=True),
+    ]
+    report = compute(rows)
+    assert report.false_answer_rate == 0.0
+    assert report.permission_sample_count == 1

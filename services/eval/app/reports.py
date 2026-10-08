@@ -56,6 +56,17 @@ def summarize(payload: dict[str, Any]) -> dict[str, Any]:
         "refusal_accuracy": l1.refusal_accuracy,
         "false_refusal_rate": l1.false_refusal_rate,
         "false_answer_rate": l1.false_answer_rate,
+        # 降级率与误答数：必须与 false_answer_rate 一起看。
+        # 只看误答率无法区分"拒答"和"声明来源后给了通用知识"这两种完全不同的结果，
+        # 而它们对用户的意义相反（见 ADR 0003 补记）。
+        "fallback_rate": l1.fallback_rate,
+        "ungrounded_answer_count": l1.ungrounded_answer_count,
+        # 权限类负样本条数：说明拒答类指标的分母为什么比负样本总数小
+        "permission_sample_count": l1.permission_sample_count,
+        # notes 必须透出：指标口径的每次变更都在这里说明（哪些样本没计入分母、
+        # 为什么）。不输出的话，读报告的人只能看到数字变化却找不到原因，
+        # 很容易把"口径调整导致的下降"当成"质量提升"。
+        "notes": list(l1.notes),
         "leak_count": l1.leak_count,
         "forbidden_count": l1.forbidden_count,
         "latency_ms_p50": l1.latency_ms_p50,

@@ -66,6 +66,9 @@ class MetricsReport(BaseModel):
     # 负样本里"既没拒答也没降级"的数量：这些才是真正的误答
     #（要么凭空编了答案，要么检索到了本不该命中的资料）。
     ungrounded_answer_count: int = 0
+    # 声明了 forbidden_sources 的负样本数量：它们只考核权限隔离（leak_count），
+    # 不纳入拒答类指标的分母。显式记下来，否则读报告的人会以为漏算了。
+    permission_sample_count: int = 0
 
     leak_rate: float = 0.0
     leak_count: int = 0
@@ -330,7 +333,14 @@ def _apply_refusal_metrics(
     就是期望来源。只做内容断言（如注入的 must_not_contain）、不声明期望来源的样本不计入——
     它们是否拒答是允许的，计入会悄悄改变指标含义。
 
-    负样本的判定分三档（见 ADR 0003 补记：拒答不再是唯一期望行为）：
+    负样本分两类，先按"是否声明了 forbidden_sources"分开：
+
+    **权限类**（声明了 ``forbidden_sources``）—— 诉求是"不许引用这份文档"，
+    该指标由 :func:`_apply_leak` 覆盖。这类样本往往能从**有权查看的其他文档**
+    找到答案（实测如此），所以不要求拒答，也不纳入本函数任何分母。
+
+    **可回答类**（没声明 forbidden_sources）—— 判定分三档
+    （见 ADR 0003 补记：拒答不再是唯一期望行为）：
 
     | 响应 | 判定 | 理由 |
     | --- | --- | --- |
@@ -344,21 +354,43 @@ def _apply_refusal_metrics(
     graded = [row for row in positive if row.get("expected_doc_ids")]
     correct_positive = sum(1 for row in graded if not row.get("refused"))
 
-    refused_negative = sum(1 for row in negative if row.get("refused"))
-    fallback_negative = sum(
-        1 for row in negative if row.get("no_context") and not row.get("refused")
-    )
-    ungrounded = [row for row in negative if not row.get("refused") and not row.get("no_context")]
-    correct_negative = refused_negative + fallback_negative
+    # 权限类负样本只考核"没有引用受限文档"（由 leak_count 覆盖），**不要求拒答**。
+    # 实测这类样本往往能从**有权查看的其他文档**里正常找到答案——例如
+    # perm-hr-denied（bob/engineering 问招聘审批）虽看不到 hr_policy.md，
+    # 但能从 employee_handbook.md 里读到相关流程。此时把"没拒答"记成误答是
+    # 重复计同一个缺陷（forbidden_sources 已经表达了），而且会掩盖真正的越权。
+    #
+    # 判据用 ``declared_forbidden``（样本**自己**声明了 forbidden_sources），
+    # **不能**用 ``forbidden_doc_ids``：后者是"数据集声明 ∪ 按台账 ACL 推导"，
+    # 对每条样本都非空——用它做判据会把全部负样本排掉、分母清零（实测踩过）。
+    perm_like = [row for row in negative if row.get("declared_forbidden")]
+    answerable = [row for row in negative if not row.get("declared_forbidden")]
 
-    # 三个比率的分母口径必须一致：能被判"该不该拒答"的只有 graded 正样本 + 负样本
+    refused_answerable = sum(1 for row in answerable if row.get("refused"))
+    fallback_answerable = sum(
+        1 for row in answerable if row.get("no_context") and not row.get("refused")
+    )
+    ungrounded = [
+        row for row in answerable if not row.get("refused") and not row.get("no_context")
+    ]
+    correct_answerable = refused_answerable + fallback_answerable
+
+    # 分母口径必须一致：能被判"该不该拒答"的只有 graded 正样本 + 可回答类负样本。
+    # 把权限类混进分母，会让这个比率同时反映"拒答能力"和"权限隔离"两件事，
+    # 数字变差时无法判断该改提示词还是该改 ACL。
     report.refusal_accuracy = _rate(
-        correct_positive + correct_negative, len(graded) + len(negative)
+        correct_positive + correct_answerable, len(graded) + len(answerable)
     )
     report.false_refusal_rate = _rate(len(graded) - correct_positive, len(graded))
-    report.false_answer_rate = _rate(len(ungrounded), len(negative))
-    report.fallback_rate = _rate(fallback_negative, len(negative))
+    report.false_answer_rate = _rate(len(ungrounded), len(answerable))
+    report.fallback_rate = _rate(fallback_answerable, len(answerable))
     report.ungrounded_answer_count = len(ungrounded)
+    report.permission_sample_count = len(perm_like)
+    if perm_like:
+        report.notes.append(
+            f"{len(perm_like)} 条负样本声明了 forbidden_sources，只考核"
+            f"「未引用受限文档」（见 leak_count），不纳入拒答类指标分母"
+        )
     if len(graded) + len(negative) < total:
         report.notes.append(
             f"拒答类指标只覆盖 {len(graded) + len(negative)}/{total} 条样本："

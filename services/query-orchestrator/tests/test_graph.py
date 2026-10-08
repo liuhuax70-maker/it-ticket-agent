@@ -281,3 +281,32 @@ async def test_node_names_are_stable() -> None:
     """节点名是图的可观测契约，改名属于破坏性变更。"""
     assert NODE_ROUTE == "route"
     assert NODE_RETRIEVE == "retrieve"
+
+
+async def test_no_cite_marker_marks_answer_as_no_context(make_graph) -> None:
+    """模型声明「本次不附引用」时，必须同时标记 no_context。
+
+    否则会产出最危险的一种回答：没有引用、没有拒答、也没有降级标记，
+    用户看到的是一段 naked 的断言，完全不知道它来自模型常识。
+    实测评测集里 12 条负样本正是这个形态（cites=0 / refused=False / no_context=False）。
+    """
+    from packages.common.constants import NO_CITE_MARKER
+
+    answer = "公司年会一般安排在酒店宴会厅，具体请咨询行政。\n" + NO_CITE_MARKER
+    graph, _, _ = make_graph(hits=[_hit("d_1:4", "差旅管理制度")], answer=answer)
+    final = await graph.ainvoke(_state())
+
+    assert final["refused"] is False
+    assert final["no_context"] is True, "无引用必须等价于标记无资料支撑"
+    assert final["citations"] == []
+    assert NO_CITE_MARKER not in final["answer"]
+
+
+async def test_grounded_answer_is_not_marked_no_context(make_graph) -> None:
+    """正常带引用的回答不能被标成 no_context，否则前端会误报警告。"""
+    graph, _, _ = make_graph(
+        hits=[_hit("d_1:4", "转正后凭发票报销。")], answer=ANSWER_WITH_CITATION
+    )
+    final = await graph.ainvoke(_state())
+    assert final["no_context"] is False
+    assert len(final["citations"]) == 1
