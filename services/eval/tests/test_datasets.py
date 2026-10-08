@@ -87,6 +87,52 @@ def test_default_identity_is_default_tenant() -> None:
     assert identity.describe().startswith("alice@")
 
 
+def test_fallback_is_not_counted_as_false_answer() -> None:
+    """负样本「按策略降级」不算误答。
+
+    产品侧要求知识库不作为回答闸门（ADR 0003 补记），负样本的期望行为从
+    "拒答"变成"拒答**或**降级"。如果把降级算进 false_answer_rate，
+    指标会从 0% 跳到接近 100%——看起来像质量崩了，实际只是口径没跟上。
+    """
+    rows = [
+        _row("n1", should_refuse=True, refused=True),  # 正确拒答
+        _row("n2", should_refuse=True, no_context=True, answer="知识库中没有…"),  # 降级
+        _row("n3", should_refuse=True),  # 真正的误答：凭空作答
+    ]
+    report = compute(rows)
+    # _rate 返回四位小数，所以用绝对容差而不是默认的相对容差
+    assert report.false_answer_rate == pytest.approx(1 / 3, abs=1e-3), "只有 n3 算误答"
+    assert report.fallback_rate == pytest.approx(1 / 3, abs=1e-3), "n2 应计为降级"
+    assert report.ungrounded_answer_count == 1
+
+
+def test_refusal_is_not_counted_as_fallback() -> None:
+    """refused=True 时即使带 no_context 也不算降级。
+
+    拒答是"没答"，降级是"答了但声明无依据"。两者混在一起会让
+    fallback_rate 高估降级程度，进而掩盖真正的凭空作答。
+    """
+    rows = [
+        _row("n1", should_refuse=True, refused=True, no_context=True),
+        _row("n2", should_refuse=True),
+    ]
+    report = compute(rows)
+    assert report.fallback_rate == 0.0
+    assert report.false_answer_rate == pytest.approx(0.5, abs=1e-3)
+
+
+def test_grounded_answer_on_negative_sample_still_counts_as_error() -> None:
+    """负样本若既没拒答也没声明来源（哪怕带着引用），仍算误答。
+
+    这种情况意味着检索捞到了本不该命中的资料，属于召回侧问题，
+    不能因为"有引用看起来有依据"就被放过。
+    """
+    rows = [_row("n1", should_refuse=True, citations=[{"doc_id": "d_1"}])]
+    report = compute(rows)
+    assert report.false_answer_rate == pytest.approx(1.0)
+    assert report.ungrounded_answer_count == 1
+
+
 # ---------------------------------------------------------------- 指标
 
 
@@ -95,6 +141,7 @@ def _row(
     *,
     should_refuse: bool = False,
     refused: bool = False,
+    no_context: bool = False,
     citations: list[dict] | None = None,
     contexts: list[str] | None = None,
     expected: list[str] | None = None,
@@ -114,6 +161,7 @@ def _row(
         else ("" if (should_refuse or error) else "答案文本"),
         "should_refuse": should_refuse,
         "refused": refused,
+        "no_context": no_context,
         "citations": citations or [],
         "contexts": contexts or [],
         "expected_doc_ids": expected or [],
@@ -208,7 +256,7 @@ def test_refusal_metrics_separate_two_error_modes() -> None:
         _row("p1", expected=["d"], citations=[{"doc_id": "d"}]),  # 正确作答
         _row("p2", expected=["d"], refused=True),  # 漏答
         _row("n1", should_refuse=True, refused=True),  # 正确拒答
-        _row("n2", should_refuse=True),  # 误答
+        _row("n2", should_refuse=True),  # 误答（既没拒答也没声明来源）
     ]
     report = compute(rows)
     assert report.false_refusal_rate == pytest.approx(0.5)

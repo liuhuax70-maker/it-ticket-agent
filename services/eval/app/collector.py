@@ -310,6 +310,9 @@ def _build_row(
         # 后人会以为那是提示词或检索的功劳。
         "answer_model": body.get("model"),
         "refused": bool(body.get("refused")),
+        # 「答了但无资料支撑」。必须落盘：否则评测无法把"按策略降级"与
+        # "凭空作答"区分开，false_answer_rate 会把两者都算成误答。
+        "no_context": bool(body.get("no_context")),
         "cached": bool(body.get("cached")),
         "citations": extracted.citations,
         "contexts": extracted.contexts,

@@ -486,6 +486,18 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .act:hover { background: var(--bg-soft); border-color: var(--border); color: var(--text); }
 .act.done { color: var(--ok); }
 
+/* 反馈按钮：已提交后禁用，避免重复点击（后端也会按 trace_id 判重） */
+.fb { min-width: 74px; }
+.fb:disabled { cursor: default; opacity: .75; }
+.fb-thumbs-down.done { color: var(--muted); }
+
+/* 降级回答提示：没有资料支撑，必须比普通提示更醒目 */
+.notice.warn {
+  border-left-color: #d97706;
+  background: #fffbeb;
+  color: #92400e;
+}
+
 .meta {
   margin-top: 8px;
   font-size: 11.5px;

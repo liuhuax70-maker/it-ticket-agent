@@ -55,6 +55,17 @@ class MetricsReport(BaseModel):
     refusal_accuracy: float | None = None
     false_refusal_rate: float | None = None
     false_answer_rate: float | None = None
+    # 负样本中「按策略降级」（声明来源 + 通用知识）的比例。
+    #
+    # 为什么要有这个指标：产品侧要求知识库不作为回答闸门（见 ADR 0003 补记），
+    # 于是负样本的**期望行为**从"拒答"变成"拒答或降级"。但这两种行为的质量差别很大——
+    # 拒答是"没答"，降级是"答了但明确声明无资料支撑"。把它们都算进
+    # false_answer_rate 会让指标从 0% 跳到接近 100%，看起来像质量崩了，
+    # 实际只是口径没跟上。分开统计才能看清真实变化。
+    fallback_rate: float | None = None
+    # 负样本里"既没拒答也没降级"的数量：这些才是真正的误答
+    #（要么凭空编了答案，要么检索到了本不该命中的资料）。
+    ungrounded_answer_count: int = 0
 
     leak_rate: float = 0.0
     leak_count: int = 0
@@ -318,16 +329,36 @@ def _apply_refusal_metrics(
     分母只算声明了期望来源的正样本：漏答的定义是"有答案却拒答"，而"有答案"的证据
     就是期望来源。只做内容断言（如注入的 must_not_contain）、不声明期望来源的样本不计入——
     它们是否拒答是允许的，计入会悄悄改变指标含义。
+
+    负样本的判定分三档（见 ADR 0003 补记：拒答不再是唯一期望行为）：
+
+    | 响应 | 判定 | 理由 |
+    | --- | --- | --- |
+    | ``refused=True`` | 正确拒答 | 没答，符合"库中无此资料" |
+    | ``no_context=True`` | 按策略降级 | 答了但声明无资料支撑、无引用，质量可接受 |
+    | 两者皆非 | **误答** | 既没拒答也没声明来源，等同于凭空作答 |
+
+    把降级单列而不是算进误答，是因为它与"凭空作答"的用户代价完全不同：
+    前者用户知道该去问人，后者用户可能把编的内容当制度执行。
     """
     graded = [row for row in positive if row.get("expected_doc_ids")]
     correct_positive = sum(1 for row in graded if not row.get("refused"))
-    correct_negative = sum(1 for row in negative if row.get("refused"))
+
+    refused_negative = sum(1 for row in negative if row.get("refused"))
+    fallback_negative = sum(
+        1 for row in negative if row.get("no_context") and not row.get("refused")
+    )
+    ungrounded = [row for row in negative if not row.get("refused") and not row.get("no_context")]
+    correct_negative = refused_negative + fallback_negative
+
     # 三个比率的分母口径必须一致：能被判"该不该拒答"的只有 graded 正样本 + 负样本
     report.refusal_accuracy = _rate(
         correct_positive + correct_negative, len(graded) + len(negative)
     )
     report.false_refusal_rate = _rate(len(graded) - correct_positive, len(graded))
-    report.false_answer_rate = _rate(len(negative) - correct_negative, len(negative))
+    report.false_answer_rate = _rate(len(ungrounded), len(negative))
+    report.fallback_rate = _rate(fallback_negative, len(negative))
+    report.ungrounded_answer_count = len(ungrounded)
     if len(graded) + len(negative) < total:
         report.notes.append(
             f"拒答类指标只覆盖 {len(graded) + len(negative)}/{total} 条样本："

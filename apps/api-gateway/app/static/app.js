@@ -413,11 +413,81 @@
     regenBtn.disabled = busy;
     regenBtn.addEventListener('click', function () {
       var lastUser = lastUserQuery();
-      if (lastUser) send(lastUser, { skipAppendUser: true });
+      // use_cache:false —— 否则「重新生成」会直接命中上一次那条缓存，
+      // 拿到一模一样的答案：这个按钮存在的前提就是"再来一次不同的"。
+      if (lastUser) send(lastUser, { skipAppendUser: true, useCache: false });
     });
     wrap.appendChild(regenBtn);
 
+    // 有用 / 没用：反馈是 RAG 的质量信号，也是 bad case 的来源。
+    // 降级回答（no_context）尤其需要它——那类回答没有资料支撑，
+    // 用户点「没用」就是在告诉我们"这条不该被当作制度"。
+    var answered = !message.error && !message.refused && message.content;
+    if (answered) {
+      var up = buildFeedbackButton(message, 1, '有用', 'thumbs-up');
+      var down = buildFeedbackButton(message, -1, '没用', 'thumbs-down');
+      wrap.appendChild(up);
+      wrap.appendChild(down);
+    }
+
     return wrap;
+  }
+
+  // 反馈按钮：点一次即提交，不提供取消。同一 trace_id 重复提交由后端判为 duplicate。
+  function buildFeedbackButton(message, rating, label, kind) {
+    var btn = document.createElement('button');
+    btn.className = 'act fb fb-' + kind;
+    btn.type = 'button';
+    btn.textContent = rating > 0 ? '👍 有用' : '👎 没用';
+
+    var sent = message.feedbackSent;
+    if (sent) {
+      btn.classList.add('done');
+      btn.textContent = rating > 0 ? '👍 已反馈' : '👎 已反馈';
+    }
+
+    btn.addEventListener('click', function () {
+      if (message.feedbackSent) {
+        toast('这条回答已提交过反馈', 'fail');
+        return;
+      }
+      btn.disabled = true;
+      submitFeedback(message, rating)
+        .then(function (ok) {
+          if (!ok) {
+            btn.disabled = false;
+            return;
+          }
+          message.feedbackSent = rating;
+          btn.classList.add('done');
+          btn.textContent = rating > 0 ? '👍 已反馈' : '👎 已反馈';
+          toast('感谢反馈', 'ok');
+        });
+    });
+    return btn;
+  }
+
+  function submitFeedback(message, rating) {
+    var lastUser = lastUserQuery();
+    return authFetch('/feedback', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        query: lastUser || '',
+        answer: message.content || '',
+        rating: rating,
+        trace_id: message.traceId || null
+      })
+    })
+      .then(function (resp) {
+        if (!resp.ok) return false;
+        toast('感谢反馈', 'ok');
+        return true;
+      })
+      .catch(function () {
+        toast('反馈提交失败，请稍后再试', 'fail');
+        return false;
+      });
   }
 
   function buildSources(citations) {
@@ -475,6 +545,7 @@
     var t = message.timings || {};
     var parts = [];
     if (message.cached) parts.push('命中缓存');
+    if (message.no_context) parts.push('无资料支撑');
     if (t.retrieve != null) parts.push('检索 ' + fmtSeconds(t.retrieve));
     if (t.generate != null) parts.push('生成 ' + fmtSeconds(t.generate));
     if (t.total != null) parts.push('总 ' + fmtSeconds(t.total));
@@ -512,6 +583,18 @@
       notice.appendChild(document.createTextNode('已按「无资料即拒答」策略返回，未生成任何推测性内容。'));
       body.appendChild(notice);
     } else {
+      // 降级回答（no_context）：有答案但**没有资料支撑**，必须显式告知来源。
+      // 不加这个提示时，用户会把「模型通用知识」当成公司规定去执行——
+      // 这是本项目是制度问答时最危险的误读。
+      if (message.no_context) {
+        var warn = document.createElement('div');
+        warn.className = 'notice warn no-context';
+        warn.innerHTML = '<strong>本回答不来自知识库</strong>';
+        warn.appendChild(document.createTextNode(
+          '知识库中没有检索到相关资料，以下内容基于大模型通用知识，仅供参考，请勿直接当作公司规定执行。'
+        ));
+        body.appendChild(warn);
+      }
       var content = document.createElement('div');
       content.className = 'content';
       content.innerHTML = renderMarkdown(message.content, message.citations);
@@ -667,13 +750,17 @@
     $('input').disabled = value;
   }
 
-  function buildChatPayload(query) {
+  function buildChatPayload(query, options) {
+    var opts = options || {};
     var payload = { query: query };
 
     // 选了具体模型才下发；留空表示"由网关挑默认模型"。
     // mode / top_k / temperature 一律不传：由后端按 query 自行决定检索策略。
     var model = $('modelSelect').value;
     if (model) payload.model = model;
+
+    // 显式为 false 才下发；不传时后端默认允许读写缓存（「重新生成」需要绕过）
+    if (opts.useCache === false) payload.use_cache = false;
 
     return payload;
   }
@@ -705,7 +792,7 @@
     authFetch('/chat', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(buildChatPayload(query)),
+      body: JSON.stringify(buildChatPayload(query, opts)),
       signal: abortController.signal
     })
       .then(function (resp) {
@@ -726,6 +813,8 @@
           refused: !!data.refused,
           cached: !!data.cached,
           model: data.model || null,
+          no_context: !!data.no_context,
+          trace_id: data.trace_id || null,
           timings: data.timings_ms || {}
         });
         // 不回写 modelSelect：下拉只表达"用户选了什么"，实际生效的模型由消息底部的
