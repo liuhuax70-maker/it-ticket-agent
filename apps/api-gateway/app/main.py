@@ -57,6 +57,19 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         app.state.feedback = FeedbackClient(settings.feedback_url)
         app.state.opa = OpaClient(settings)
         app.state.keycloak = KeycloakClient(settings)
+        # 审计落库：只在配置了数据库 URL 时启用；启动失败不拦服务（合规旁路，
+        # stdout 审计仍在），但要在日志里响亮地说明，不能静默退化。
+        audit_sink = None
+        if settings.audit_enabled and settings.audit_database_url:
+            from app.audit_sink import AuditSink
+
+            audit_sink = AuditSink(settings.audit_database_url)
+            try:
+                await audit_sink.start()
+            except Exception as exc:  # noqa: BLE001
+                logger.error("审计落库初始化失败（本次运行仅 stdout 审计）: %s", exc)
+                audit_sink = None
+        app.state.audit_sink = audit_sink
 
         logger.info(
             "api-gateway 启动 port=%s authz=%s rate_limit=%s",
@@ -72,6 +85,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 if client is not None:
                     await client.aclose()
             await app.state.opa.aclose()
+            if getattr(app.state, "audit_sink", None) is not None:
+                await app.state.audit_sink.aclose()
             await counter.aclose()
 
     app = FastAPI(title="api-gateway", version=VERSION, lifespan=lifespan)

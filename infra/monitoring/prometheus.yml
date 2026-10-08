@@ -17,6 +17,14 @@ global:
 rule_files:
   - /etc/prometheus/alerts.yml
 
+# 告警发送目标。此前缺失：规则会求值、UI 里能看到 pending/firing，
+# 但永远不会有任何东西被发出去——「告警链路断了，而规则页看起来一切正常」。
+# 本机形态 alertmanager 跑在宿主 9093；Docker 形态见 prometheus-docker.yml。
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: ["127.0.0.1:9093"]
+
 scrape_configs:
   # 内部服务。
   #

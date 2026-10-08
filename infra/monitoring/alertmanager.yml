@@ -1,0 +1,45 @@
+# Alertmanager 路由配置。
+#
+# 设计取舍：
+#   * 按 severity 分两条路——critical 立刻、高频次地找值班；warning 合并降噪、工作时间内处理。
+#     （与 alerts.yml 里的两档严重度一一对应：critical=安全不变量/不可用，warning=质量/容量退化。）
+#   * group_by 带 alertname：同一服务的多个告警各自成组，避免"一条恢复消息吞掉其他告警"。
+#   * 接收器用 webhook 占位：真实的通知渠道（钉钉/企微/Slack/邮件）各有各的格式转换，
+#     统一在 webhook 网关侧做，本文件不绑定任何具体 IM。部署时把两个 url 换成真实地址即可。
+#     alertmanager 对 webhook 失败只记日志并按 retry 重试，不会影响其余告警分发。
+#
+# 验证方式（不接真实渠道也能确认链路通）：
+#   curl -XPOST http://127.0.0.1:9093/api/v2/alerts -H 'Content-Type: application/json' \
+#     -d '[{"labels":{"alertname":"TestAlert","severity":"warning"}}]'
+#   然后在 http://127.0.0.1:9093 的 UI 里看到它进入路由。
+
+global:
+  resolve_timeout: 5m
+
+route:
+  receiver: team-rag
+  group_by: ["alertname", "service"]
+  group_wait: 30s
+  group_interval: 5m
+  repeat_interval: 4h
+  routes:
+    # critical：安全不变量被破坏或服务不可用。缩短重发间隔，
+    # 并且不做分组降噪——这类告警每一条都要单独被看到。
+    - matchers:
+        - severity = "critical"
+      receiver: oncall
+      group_wait: 0s
+      group_interval: 5m
+      repeat_interval: 30m
+      continue: false
+
+receivers:
+  - name: team-rag
+    webhook_configs:
+      # 占位接收器：部署时替换为真实的 IM webhook / 工单系统
+      - url: "http://host.docker.internal:8999/alerts"
+        send_resolved: true
+  - name: oncall
+    webhook_configs:
+      - url: "http://host.docker.internal:8999/oncall"
+        send_resolved: true

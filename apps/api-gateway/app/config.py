@@ -31,6 +31,9 @@ class Settings(SecuritySettings):
 
     # ---- 审计 ----
     audit_enabled: bool = True
+    # 审计落库（Postgres）。留空 = 只打 stdout 日志不落库。
+    # 落库失败不影响业务请求（AuditSink 丢弃并告警日志），所以默认开启。
+    audit_database_url: str = "postgresql+asyncpg://rag:rag@localhost:5432/rag"
 
     # ---- 上传 ----
     max_upload_mb: int = 32

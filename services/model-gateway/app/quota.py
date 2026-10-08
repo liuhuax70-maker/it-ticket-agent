@@ -37,6 +37,24 @@ class QuotaGuard:
         today = dt.datetime.now(dt.UTC).strftime("%Y%m%d")
         return f"quota:tokens:{tenant_id}:{today}"
 
+    @staticmethod
+    def _cost_key(tenant_id: str) -> str:
+        today = dt.datetime.now(dt.UTC).strftime("%Y%m%d")
+        return f"quota:cost_usd:{tenant_id}:{today}"
+
+    async def add_cost(self, tenant_id: str | None, cost_usd: float) -> None:
+        """按日累计成本（美元）。失败不影响主流程——成本是旁路统计。"""
+        if not tenant_id or cost_usd <= 0:
+            return
+        try:
+            client = self._client()
+            key = self._cost_key(tenant_id)
+            await client.incrbyfloat(key, cost_usd)
+            if await client.ttl(key) < 0:
+                await client.expire(key, 60 * 60 * 48)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("成本累计失败（忽略）: %s", exc)
+
     async def consume(self, tenant_id: str | None, tokens: int) -> int:
         """累加用量并返回当日累计值。Redis 故障不影响主流程。"""
         if not tenant_id or tokens <= 0:
@@ -58,12 +76,21 @@ class QuotaGuard:
             logger.warning("配额统计失败（忽略）: %s", exc)
             return 0
 
-    async def snapshot(self, tenant_id: str) -> dict[str, int | bool]:
+    async def snapshot(self, tenant_id: str) -> dict[str, int | bool | float]:
         try:
             used = int(await self._client().get(self._key(tenant_id)) or 0)
         except Exception:  # noqa: BLE001
             used = 0
-        return {"used_today": used, "daily_limit": self._daily_limit, "enforced": self.enabled}
+        try:
+            cost = float(await self._client().get(self._cost_key(tenant_id)) or 0)
+        except Exception:  # noqa: BLE001
+            cost = 0.0
+        return {
+            "used_today": used,
+            "cost_today_usd": round(cost, 4),
+            "daily_limit": self._daily_limit,
+            "enforced": self.enabled,
+        }
 
     async def aclose(self) -> None:
         if self._redis is not None:

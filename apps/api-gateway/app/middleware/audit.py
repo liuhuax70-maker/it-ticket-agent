@@ -56,4 +56,9 @@ class AuditMiddleware(BaseHTTPMiddleware):
             "client": request.client.host if request.client else "",
         }
         logger.info(json.dumps(record, ensure_ascii=False))
+        # stdout 之外再落库（可检索、可回溯）。put 是非阻塞的：队列满/写库失败
+        # 由 AuditSink 内部处理并留痕，绝不影响这条请求的返回。
+        sink = getattr(request.app.state, "audit_sink", None)
+        if sink is not None:
+            await sink.put(record)
         return response

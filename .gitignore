@@ -64,3 +64,4 @@ crash.log
 .vscode/
 .DS_Store
 Thumbs.db
+infra/monitoring/metrics_token

@@ -6,6 +6,7 @@ import asyncio
 import time
 
 from app.config import Settings
+from app.cost import parse_prices, usage_cost_usd
 from app.fallback import FallbackPolicy
 from app.quota import QuotaGuard
 from packages.common.constants import REFUSE_MARKER, REFUSE_TEXT
@@ -20,7 +21,7 @@ from packages.contracts import (
 )
 from packages.embeddings import get_embedder
 from packages.llms import LLMClient, ModelTarget, build_target
-from packages.observability.metrics import INJECTION_SUSPECTED_COUNTER
+from packages.observability.metrics import INJECTION_SUSPECTED_COUNTER, LLM_COST_COUNTER
 from packages.prompts import get_prompt_registry
 from packages.security.injection import scan_request, summarize
 
@@ -99,6 +100,7 @@ class ModelRouter:
         self._quota = QuotaGuard(
             settings.redis_url, settings.quota_daily_tokens, settings.quota_enabled
         )
+        self._prices = parse_prices(settings.llm_prices_json)
 
     # ---------------- 目标解析 ----------------
     def targets(self, model_override: str | None = None) -> list[ModelTarget]:
@@ -142,6 +144,13 @@ class ModelRouter:
                 if idx > 0:
                     logger.warning("主模型不可用，已降级到 %s", target.name)
                 await self._quota.consume(tenant_id, result.usage.get("total_tokens", 0))
+                # 成本折算：token 数不等于钱，只有折算成美元才能做预算与降本决策。
+                # 记 0 的情况（本地模型/未配单价）也会如实进指标，不会虚增成本。
+                cost = usage_cost_usd(result.model, result.usage, self._prices)
+                LLM_COST_COUNTER.inc(
+                    {"model": result.model, "tenant": tenant_id or "anonymous"}, cost
+                )
+                await self._quota.add_cost(tenant_id, cost)
                 timings = dict(result.timings_ms)
                 timings["total"] = round((time.perf_counter() - started_total) * 1000, 1)
                 return GenerateResponse(
@@ -201,7 +210,7 @@ class ModelRouter:
         vectors = await embedder.embed(req.texts, kind=req.kind)
         return EmbedResponse(vectors=vectors, dim=embedder.dim, model=embedder.model_name)
 
-    async def quota_snapshot(self, tenant_id: str) -> dict[str, int | bool]:
+    async def quota_snapshot(self, tenant_id: str) -> dict[str, int | bool | float]:
         return await self._quota.snapshot(tenant_id)
 
     async def aclose(self) -> None:

@@ -269,6 +269,36 @@ services:
         condition: service_started
     environment: *langfuse-env
 
+  # ---------------------------------------------------------
+  # monitoring：Prometheus + Alertmanager（抓取宿主上的应用服务并分发告警）
+  #
+  # 先跑 scripts/dev_monitoring.ps1 生成 metrics_token（来自 .env 的 METRICS_TOKEN）
+  # 再 docker compose --profile monitoring up -d。
+  # 只在 Docker Desktop（Win/Mac）下可达宿主 127.0.0.1 绑定的端口；
+  # Linux 引擎请改用宿主进程方式跑 prometheus（见 infra/monitoring/prometheus.yml 头注）。
+  # ---------------------------------------------------------
+  prometheus:
+    image: prom/prometheus:v2.53.0
+    container_name: par-prometheus
+    profiles: ["monitoring"]
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - ./infra/monitoring/prometheus-docker.yml:/etc/prometheus/prometheus.yml:ro
+      - ./infra/monitoring/alerts.yml:/etc/prometheus/alerts.yml:ro
+      - ./infra/monitoring/metrics_token:/etc/prometheus/metrics_token:ro
+    ports:
+      - "127.0.0.1:9090:9090"
+
+  alertmanager:
+    image: prom/alertmanager:v0.27.0
+    container_name: par-alertmanager
+    profiles: ["monitoring"]
+    volumes:
+      - ./infra/monitoring/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+    ports:
+      - "127.0.0.1:9093:9093"
+
 volumes:
   par-postgres-data:
   par-redis-data:

@@ -1,0 +1,47 @@
+# Prometheus 抓取配置 —— Docker Compose 形态（profile: monitoring）。
+#
+# 与 prometheus.yml（宿主进程形态）的差异只有两处：
+#   1. targets 用 host.docker.internal：应用服务在宿主上绑 127.0.0.1，
+#      Docker Desktop（Win/Mac）的 vpnkit 会把 host.docker.internal 转发到宿主回环，
+#      所以容器里能抓到；Linux 引擎需 extra_hosts: host-gateway 且服务绑 0.0.0.0。
+#   2. alertmanager 目标是容器名 alertmanager:9093，凭证文件由 compose 挂载。
+
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+rule_files:
+  - /etc/prometheus/alerts.yml
+
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: ["alertmanager:9093"]
+
+scrape_configs:
+  - job_name: rag-internal
+    metrics_path: /metrics
+    authorization:
+      type: Bearer
+      credentials_file: /etc/prometheus/metrics_token
+    static_configs:
+      - targets:
+          - "host.docker.internal:8001"
+          - "host.docker.internal:8002"
+          - "host.docker.internal:8003"
+          - "host.docker.internal:8004"
+          - "host.docker.internal:8005"
+          - "host.docker.internal:8006"
+          - "host.docker.internal:8007"
+          - "host.docker.internal:8008"
+        labels:
+          tier: internal
+  - job_name: rag-api-gateway
+    metrics_path: /metrics
+    authorization:
+      type: Bearer
+      credentials_file: /etc/prometheus/metrics_token
+    static_configs:
+      - targets: ["host.docker.internal:8000"]
+        labels:
+          tier: edge

@@ -599,14 +599,16 @@ infra/monitoring/prometheus.yml  # 内部服务一组 + 网关一组（带 token
 | 流式输出 | 一次性返回 + 思考中提示 | model-gateway → orchestrator → gateway 三级 SSE 透传（LangGraph `astream` 已可提供节点级进度） |
 | 拒答的兜底判定 | 哨兵 + 固定话术 + 短句启发式（阈值 80 字） | 用评测集标定「相关性阈值」，让不可回答的问题在检索阶段就返回空 |
 | 入库吞吐 | 单文档 `/index` 因 Milvus `flush` + OpenSearch `refresh` 约 20s（本机实测） | 大文档改批量写入 + 关闭同步 refresh，用 bulk 参数控制可见性 |
-| 告警通道 | 规则已给出（`infra/monitoring/alerts.yml`），未接 Alertmanager 与通知渠道 | 接 Alertmanager，按 `severity` 路由（critical 到电话/IM，warning 到工单） |
+| 告警通道 | ✅ 已接线：8 条规则 + `alertmanager.yml`（critical/warning 分路）+ compose `monitoring` profile（prometheus+alertmanager 一键起，`scripts/dev_monitoring.ps1`）。webhook 接收器是占位符，接真实 IM/工单时替换 URL | 把占位 webhook 换成钉钉/企微/Slack；Grafana 看板 |
 | 监控看板 | 无 Grafana 看板 | 按第 7 节的指标表建四块面板：P95 / 错误率 / 拒答率 / 缓存命中率 |
+| SLO 阈值 | ✅ 已成文（`docs/slo.md`）：每条 SLO 都注明度量手段与对应告警；明确列出**不设 SLO 的项**及理由 | 按月复核 SLO 与实测的差距，调整告警阈值 |
 | 服务间身份信任 | 编排与检索从**明文 header** 取身份（网关是唯一鉴权点）——已 fail-closed：缺头即 403，不再静默用默认租户 | mTLS 或服务网格；当前不可达（应用服务不发布端口 + NetworkPolicy），属纵深防御加固 |
 | 提示注入 | 三层已实现（声明 + 结构转义 + 检测告警，见 `docs/adr/0007`），并有 2 条常驻回归样本 + 零容忍门禁。残余风险：检测只覆盖已知表达形式；转义只覆盖当前模板用的那三个标记 | 模板改动时同步 `_FORGEABLE_SECTIONS`；`data/corpus/injection_probe.md` 是**故意投毒**的夹具，勿当垃圾清理 |
 | 语料一致性 | 已有机制：18 条规范值规则 + 引用断链 + 无规则守护的重复句，接入 CI（`make corpus-check`）。已抓出并修掉两例真实冲突（核心工作时间、病假证明） | 规则覆盖范围仍是人工挑选的；**没有规则守着的事实仍可能互相矛盾**，补规则是持续动作 |
 | 上传内容校验 | 只做大小与非空校验，**无 MIME / 内容类型校验、无投毒检测** | 加类型白名单与内容扫描；投毒目前靠 `RagPromptInjectionInContext` 告警兜住 |
 | 数据失效管理 | ✅ 已实现：声明式生命周期（`configs/corpus/lifecycle.yaml`）+ 库层过滤（`must_not`），已废止文档不参与检索且台账可见。残余：日期判定在**入库时**，跨失效日不会自动翻转，需重新入库（一致性检查会提醒） | 自动翻转可改为把生效/失效日期建成可比较字段并在查询时注入"今天"；多版本并存与"指向新版"的答案提示 |
-| 成本核算 | token 用量按租户记 Redis（48h），**不折算金额、不落库** | 加价格表折算金额并落库，用于配额与账单 |
+| 成本核算 | ✅ 已折算：`rag_llm_cost_usd_total{model,tenant}` 按模型单价计美元（`LLM_PRICES` 可配，默认 DeepSeek 官方价），按租户+日累计进 Redis，`GET /admin/quotas/{tenant}` 返回 `cost_today_usd`。单价会漂移，**以供应商账单为准校准** | 对接账单系统；按成本维度做配额 |
+| 审计日志 | ✅ 已落库：网关访问审计进 Postgres `audit_logs`（谁/何时/访问什么/结果），`GET /admin/audit` 可按租户与用户检索（需 rag_admin）。队列+批量写，失败丢弃并告警日志，不影响业务请求 | 审计行加保留期与自动归档；记录"访问了哪些文档"需在编排层补 |
 
 > 实测记录（本机 Docker + CPU 推理）：`/chat` 端到端约 2–14s，其中检索 ~0.3s、生成 2.3–12.6s；
 > `/index` 单文档（10 分块）约 20s，瓶颈在 Milvus flush 与 OpenSearch refresh，不在向量化。

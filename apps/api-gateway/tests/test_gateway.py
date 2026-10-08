@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import app.main as main_module
-import pytest
 from app.config import Settings
 from fastapi.testclient import TestClient
 
@@ -174,24 +173,14 @@ def _build_app(monkeypatch, **overrides):
         rate_limit_per_minute=3,
         serve_ui=False,
         audit_enabled=True,
+        # 测试不连真实 Postgres：audit_database_url 为空 = 仅 stdout 审计
+        audit_database_url="",
         authz_enabled=False,
         cors_origins="",
     )
     defaults.update(overrides)
     app = main_module.create_app(Settings(**defaults))
     return app
-
-
-@pytest.fixture()
-def client(monkeypatch):
-    app = _build_app(monkeypatch)
-    with TestClient(app) as test_client:
-        app.state.orchestrator = FakeOrchestrator()
-        app.state.ingestion = FakeIngestion()
-        app.state.model_gateway = FakeModelGateway()
-        app.state.feedback = FakeFeedback()
-        test_client.app = app
-        yield test_client
 
 
 # ---------------- chat ----------------

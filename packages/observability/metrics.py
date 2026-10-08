@@ -388,6 +388,14 @@ INJECTION_SUSPECTED_COUNTER = REGISTRY.counter(
     ("source", "rule"),
 )
 
+# LLM 成本（美元）。token 数不等于钱：不同模型差一个数量级，
+# 只有折算成金额才能回答"这个功能每天烧多少钱""该不该给它换个便宜模型"。
+LLM_COST_COUNTER = REGISTRY.counter(
+    "rag_llm_cost_usd_total",
+    "LLM 调用累计成本（美元，按模型单价折算）",
+    ("model", "tenant"),
+)
+
 
 def metrics_endpoint(registry: MetricsRegistry | None = None, token: str = ""):
     """构造 ``/metrics`` 端点。

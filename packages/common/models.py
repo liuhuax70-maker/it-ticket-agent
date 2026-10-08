@@ -118,3 +118,30 @@ class Feedback(Base, TimestampMixin):
     rating: Mapped[int | None] = mapped_column(Integer, nullable=True)
     comment: Mapped[str | None] = mapped_column(Text, nullable=True)
     trace_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+
+
+class AuditLog(Base, TimestampMixin):
+    """访问审计（合规留痕）。
+
+    为什么落库而不是只打日志：stdout 日志会随容器重建而消失、无法按租户/用户检索，
+    合规审查要的是「谁在什么时候访问了什么、结果如何」**可回溯**。
+    字段与 AuditMiddleware 组装的 record 一一对应；
+    **不含请求体与答案正文**——审计日志自身不能成为泄密面。
+    """
+
+    __tablename__ = "audit_logs"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    # 事件类型（http_access / ...）。中间件的 record 与这里的字段必须一一对应：
+    # 多出的键会让批量写入整批失败（已实测），sink 会丢弃并告警。
+    event: Mapped[str] = mapped_column(String(32), nullable=False, default="http_access")
+    request_id: Mapped[str] = mapped_column(String(64), nullable=False, default="")
+    method: Mapped[str] = mapped_column(String(8), nullable=False)
+    path: Mapped[str] = mapped_column(String(512), nullable=False)
+    status: Mapped[int] = mapped_column(Integer, nullable=False, index=True)
+    duration_ms: Mapped[float] = mapped_column(nullable=False, default=0.0)
+    tenant_id: Mapped[str] = mapped_column(String(64), nullable=False, default="", index=True)
+    user_id: Mapped[str] = mapped_column(String(64), nullable=False, default="", index=True)
+    client: Mapped[str] = mapped_column(String(64), nullable=False, default="")
+
+    __table_args__ = (Index("ix_audit_created", "created_at"),)

@@ -21,3 +21,8 @@ class Settings(LLMSettings, EmbedSettings):
     # 租户配额（默认关闭，仅统计不影响调用）
     quota_enabled: bool = False
     quota_daily_tokens: int = 2_000_000
+
+    # ---- 成本折算 ----
+    # 单价表（USD / 1M tokens），JSON；键按**最长前缀**匹配响应里的模型名。
+    # 默认价是 2026-10 的 DeepSeek 官方价，会漂移——以供应商账单为准校准。
+    llm_prices_json: str = ""

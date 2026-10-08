@@ -37,3 +37,49 @@ async def models(request: Request, identity: AdminUser) -> list[ModelInfo]:  # n
 async def quota(tenant_id: str, request: Request, identity: AdminUser) -> dict[str, Any]:  # noqa: ARG001
     model_gateway: ModelGatewayClient = request.app.state.model_gateway
     return await model_gateway.quota(tenant_id)
+
+
+@router.get("/audit", summary="访问审计记录（最近的在前）")
+async def audit(
+    request: Request,
+    identity: AdminUser,  # noqa: ARG001 - 仅作权限门槛
+    tenant_id: str | None = None,
+    user_id: str | None = None,
+    limit: int = 50,
+) -> dict[str, Any]:
+    """审计查询。
+
+    只有落库的记录能被查到（stdout 那份只用于实时 tail）；
+    sink 未启用时返回空列表并注明原因，而不是 500——管理面保持可浏览。
+    """
+    sink = getattr(request.app.state, "audit_sink", None)
+    if sink is None:
+        return {"items": [], "note": "审计落库未启用（AUDIT_DATABASE_URL 为空或初始化失败）"}
+    from sqlalchemy import select
+
+    from packages.common.db import session_scope
+    from packages.common.models import AuditLog
+
+    limit = max(1, min(limit, 500))
+    async with session_scope(request.app.state.settings.audit_database_url) as session:
+        stmt = select(AuditLog).order_by(AuditLog.created_at.desc()).limit(limit)
+        if tenant_id:
+            stmt = stmt.where(AuditLog.tenant_id == tenant_id)
+        if user_id:
+            stmt = stmt.where(AuditLog.user_id == user_id)
+        rows = (await session.scalars(stmt)).all()
+        items = [
+            {
+                "request_id": r.request_id,
+                "method": r.method,
+                "path": r.path,
+                "status": r.status,
+                "duration_ms": r.duration_ms,
+                "tenant_id": r.tenant_id,
+                "user_id": r.user_id,
+                "client": r.client,
+                "created_at": r.created_at.isoformat(),
+            }
+            for r in rows
+        ]
+    return {"items": items, "count": len(items)}
