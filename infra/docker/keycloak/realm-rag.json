@@ -181,6 +181,7 @@
       "emailVerified": true,
       "firstName": "Admin",
       "lastName": "Root",
+      "attributes": { "tenant_id": ["default"], "department_id": ["admin"] },
       "credentials": [{ "type": "password", "value": "admin", "temporary": false }],
       "realmRoles": ["rag_admin", "rag_user"]
     }

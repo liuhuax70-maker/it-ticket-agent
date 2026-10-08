@@ -327,9 +327,29 @@
     }
     var claims = claimsOf(token);
     var name = claims.preferred_username || claims.name || claims.sub || '已登录';
-    label.textContent = name + ' · ' + (claims.department_id || '-');
+    label.textContent = [name].concat(authTraits(claims)).join(' · ');
     button.textContent = '退出';
     button.dataset.action = 'logout';
+  }
+
+  // 用户名后面的补充信息：部门，有则显示。
+  //
+  // 为什么不能无条件拼 `name + ' · ' + (department_id || '-')`：admin 这类账号
+  // 在 Keycloak 里没有 department_id 属性，于是侧栏显示成「admin · -」——
+  // 那个 '-' 是纯噪音，而且看起来像渲染出错。
+  //
+  // 补一条规则：没有部门时显示角色（管理员一眼可见），两者都没有就只显示用户名。
+  function authTraits(claims) {
+    var traits = [];
+    if (claims.department_id) {
+      traits.push(claims.department_id);
+    } else {
+      var roles = (claims.realm_access && claims.realm_access.roles) || [];
+      if (roles.indexOf('rag_admin') >= 0) traits.push('管理员');
+      else if (roles.indexOf('rag_writer') >= 0) traits.push('可编辑');
+      else if (roles.length) traits.push('只读');
+    }
+    return traits;
   }
 
   // ---------------- 工具 ----------------
