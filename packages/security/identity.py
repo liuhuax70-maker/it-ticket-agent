@@ -62,21 +62,19 @@ class Unauthorized(RagError):
 # 身份解析
 # --------------------------------------------------------------------------
 
-# 进程级 JWKS 缓存。
+# 进程级 JWKS 缓存，按 jwks_url 分键：同一进程服务多个 realm / 多 Keycloak 实例时
+# 不会串用公钥（否则 A realm 的公钥会被拿去验 B realm 的令牌，多租户验签结果不可信）。
+# {url: {"fetched_at": float, "keys": [...]}}
 #
-# ⚠️ 两个已知限制，改动前务必知道：
-#   1. **没有按 jwks_url 分键**。多 realm / 多 Keycloak 实例共用一个进程时（例如集成测试
-#      同时指向两个 realm），A realm 的公钥会被用来验 B realm 的令牌。
-#      要支持多 realm 需把 keys 改成 {url: (fetched_at, keys)}。
-#   2. 缓存是**进程内**的，多 worker 各存一份；轮换密钥时不同 worker 的刷新时刻不同，
-#      因此下面 decode 失败还会强制刷新一次（见 decode_keycloak_token）。
-_jwks_cache: dict[str, Any] = {"fetched_at": 0.0, "keys": []}
+# ⚠️ 仍是**进程内**缓存，多 worker 各存一份；轮换密钥时不同 worker 的刷新时刻不同，
+# 因此下面 decode 失败还会强制刷新一次（见 decode_keycloak_token）。
+_jwks_cache: dict[str, dict[str, Any]] = {}
 # 短 TTL + 验签失败强制刷新：Keycloak 轮换签名密钥后，长缓存会让所有令牌验签失败
 JWKS_TTL_SECONDS = 300
 
 
 def _fetch_jwks(settings: SecuritySettings, *, force: bool = False) -> list[dict[str, Any]]:
-    """取 JWKS 公钥列表，命中 TTL 内的缓存则直接返回。
+    """取 JWKS 公钥列表，命中同一 ``jwks_url`` 且 TTL 内的缓存则直接返回。
 
     注意这里用的是**同步** httpx，而调用链（``resolve_identity``）是 async：
     缓存未命中时会在事件循环里阻塞最多 5 秒（timeout）。JWKS 每 5 分钟才刷一次，
@@ -87,19 +85,26 @@ def _fetch_jwks(settings: SecuritySettings, *, force: bool = False) -> list[dict
     中间件只捕 RagError，裸的 httpx 异常会把"身份服务不可达"变成
     500 Internal Server Error——监控会把 IdP 故障误判成网关 bug。
     """
+    url = settings.jwks_url()
     now = time.time()
-    if not force and _jwks_cache["keys"] and now - _jwks_cache["fetched_at"] < JWKS_TTL_SECONDS:
-        return _jwks_cache["keys"]
+    entry = _jwks_cache.get(url)
+    if (
+        not force
+        and entry
+        and entry["keys"]
+        and now - entry["fetched_at"] < JWKS_TTL_SECONDS
+    ):
+        return entry["keys"]
     import httpx
 
     try:
-        resp = httpx.get(settings.jwks_url(), timeout=5.0)
+        resp = httpx.get(url, timeout=5.0)
         resp.raise_for_status()
         keys = resp.json().get("keys", [])
     except httpx.HTTPError as exc:
         # 连接失败/超时/5xx：这是依赖故障不是"令牌非法"，语义上属于 503
         raise DependencyUnavailable("keycloak", f"JWKS 拉取失败: {exc}") from exc
-    _jwks_cache.update({"fetched_at": now, "keys": keys})
+    _jwks_cache[url] = {"fetched_at": now, "keys": keys}
     return keys
 
 

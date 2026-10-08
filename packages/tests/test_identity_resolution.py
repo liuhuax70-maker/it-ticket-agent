@@ -115,3 +115,47 @@ def test_bearer_scheme_is_case_insensitive_and_token_is_trimmed(monkeypatch) -> 
         SecuritySettings(authz_enabled=True),
     )
     assert seen["token"] == "spaced.token"
+
+
+def test_jwks_cache_is_keyed_by_url(monkeypatch) -> None:
+    """多 realm 共用进程时，不同 jwks_url 的公钥必须分键缓存、互不覆盖。
+
+    否则 A realm 的公钥会被拿去验 B realm 的令牌，多租户/多 IdP 场景下验签结果不可信。
+    """
+    import httpx
+
+    from packages.security.identity import _fetch_jwks
+
+    calls: dict[str, int] = {}
+
+    class _Resp:
+        def __init__(self, keys: list[dict[str, Any]]) -> None:
+            self._keys = keys
+
+        def raise_for_status(self) -> None:
+            return None
+
+        def json(self) -> dict[str, Any]:
+            return {"keys": self._keys}
+
+    def _fake_get(target_url: str, timeout: float = 5.0) -> _Resp:
+        calls[target_url] = calls.get(target_url, 0) + 1
+        if "realm-a" in target_url:
+            return _Resp([{"kid": "a", "k": "ka"}])
+        return _Resp([{"kid": "b", "k": "kb"}])
+
+    monkeypatch.setattr(httpx, "get", _fake_get)
+
+    settings_a = SecuritySettings(authz_enabled=True, keycloak_realm="realm-a")
+    settings_b = SecuritySettings(authz_enabled=True, keycloak_realm="realm-b")
+
+    keys_a = _fetch_jwks(settings_a)
+    keys_b = _fetch_jwks(settings_b)
+    assert keys_a[0]["kid"] == "a"
+    assert keys_b[0]["kid"] == "b"
+
+    # 二次调用应命中各自缓存，不再发请求（每个 url 仅请求一次）
+    _fetch_jwks(settings_a)
+    _fetch_jwks(settings_b)
+    assert calls[settings_a.jwks_url()] == 1
+    assert calls[settings_b.jwks_url()] == 1
