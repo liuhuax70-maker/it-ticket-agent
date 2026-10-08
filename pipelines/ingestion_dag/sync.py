@@ -109,7 +109,7 @@ async def sync(root: Path, *, reindex: bool, dry_run: bool) -> int:
 
 
 def main() -> int:
-    """CLI 入口：解析语料路径与 dry-run/reindex 开关，异步驱动增量同步。"""
+    """解析语料路径与 dry-run/reindex 开关，异步驱动增量同步。"""
     parser = argparse.ArgumentParser(description="语料增量同步")
     parser.add_argument("--path", default="data/corpus")
     parser.add_argument("--reindex", action="store_true", help="强制重建索引")

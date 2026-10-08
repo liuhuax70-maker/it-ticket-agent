@@ -63,7 +63,7 @@ def check(path: str) -> tuple[bool, str]:
 
 
 def main() -> int:
-    """CLI 入口：逐模块跑 mypy（关键词过滤），任一模块失败即非零退出。"""
+    """逐模块跑 mypy（关键词过滤），任一模块失败即非零退出。"""
     keywords = [arg for arg in sys.argv[1:] if not arg.startswith("-")]
     targets = [
         (label, path)

@@ -35,7 +35,7 @@ TARGETS: list[tuple[str, str]] = [
 
 
 def main(argv: list[str]) -> int:
-    """CLI 入口：按服务分进程跑 pytest（避免多个同名 ``app`` 包冲突），汇总失败。
+    """按服务分进程跑 pytest（避免多个同名 ``app`` 包冲突），汇总失败。
 
     固定 TARGETS 顺序便于对照输出；缺目录只跳过不报错，
     但任一目录测试失败会让整体退出码非零。

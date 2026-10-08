@@ -335,7 +335,7 @@ def run(
 
 
 def main() -> int:
-    """CLI 入口：加载语料/规则/生命周期声明，跑检查并据 error 数控制退出码。"""
+    """加载语料/规则/生命周期声明，跑检查并据 error 数控制退出码。"""
     parser = argparse.ArgumentParser(description="语料一致性检查")
     parser.add_argument("--facts", default=str(DEFAULT_FACTS))
     parser.add_argument("--lifecycle", default=str(DEFAULT_LIFECYCLE))

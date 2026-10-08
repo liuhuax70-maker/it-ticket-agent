@@ -126,7 +126,7 @@ def _update_baseline(report: dict) -> int:
 
 
 def main() -> int:
-    """CLI 入口：先查零容忍不变量，再比指标退化（含样本数可比性防护），控制退出码。"""
+    """先查零容忍不变量，再比指标退化（含样本数可比性防护），控制退出码。"""
     parser = argparse.ArgumentParser(description="评测回归门禁")
     parser.add_argument("--report", default=str(DEFAULT_REPORT))
     parser.add_argument("--baseline", default=str(BASELINE_PATH))

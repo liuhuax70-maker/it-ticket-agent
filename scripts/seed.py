@@ -55,7 +55,7 @@ async def check() -> int:
 
 
 async def main() -> int:
-    """CLI 入口：默认导入语料，``--check`` 时只打印检索侧索引规模。"""
+    """默认导入语料，``--check`` 时只打印检索侧索引规模。"""
     parser = argparse.ArgumentParser(description="导入语料并建立索引")
     parser.add_argument("--path", default="./data/corpus", help="文件或目录路径")
     parser.add_argument("--reindex", action="store_true", help="先清理该文档的旧索引再写入")

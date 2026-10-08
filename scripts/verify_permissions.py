@@ -458,7 +458,7 @@ def _pid_alive(pid: int) -> bool:
 
 
 def main() -> int:
-    """CLI 入口：入口加锁防并发，再编排各阶段；退出码非 0 即验收未通过。"""
+    """入口加锁防并发，再编排各阶段；退出码非 0 即验收未通过。"""
     parser = argparse.ArgumentParser(description="权限闭环验收")
     parser.add_argument(
         "--skip-prepare",

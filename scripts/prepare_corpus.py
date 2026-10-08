@@ -133,7 +133,7 @@ async def verify_acl(tokens: TokenProvider, doc_ids: dict[str, str]) -> bool:
 
 
 async def main() -> int:
-    """CLI 入口：按 --only 决定准备哪些语料；permissions 分支会再回读台账核对 ACL。
+    """按 --only 决定准备哪些语料；permissions 分支会再回读台账核对 ACL。
 
     ACL 核对失败（返回 1）是"硬性失败"——它意味着网关身份注入或下游
     ACL 写入可能与预期不一致，必须拦在评测前，否则权限用例会假绿。

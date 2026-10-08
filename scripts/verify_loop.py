@@ -320,7 +320,7 @@ async def check_chat(client: httpx.AsyncClient) -> None:
 
 
 async def main() -> int:
-    """CLI 入口：依次跑 V1~V3（必要时 V4/V5），汇总失败/警告并控制退出码。
+    """依次跑 V1~V3（必要时 V4/V5），汇总失败/警告并控制退出码。
 
     退出码非 0 即「验收未通过」，可直接接进 CI 门禁。
     """

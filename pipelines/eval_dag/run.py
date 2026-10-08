@@ -138,7 +138,7 @@ async def run(args: argparse.Namespace) -> int:
 
 
 def main() -> int:
-    """CLI 入口：解析评测参数并异步驱动一次评测跑批。"""
+    """解析评测参数并异步驱动一次评测跑批。"""
     parser = argparse.ArgumentParser(description="RAG 评测跑批（L1 确定性 + L2 RAGAS）")
     parser.add_argument("--dataset", default=None, help="评测集路径（默认用服务配置）")
     parser.add_argument("--limit", type=int, default=None, help="样本数上限")

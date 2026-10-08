@@ -621,10 +621,10 @@ infra/monitoring/prometheus.yml  # 内部服务一组 + 网关一组（带 token
 
 ## 9. 代码风格与注释约定
 
-代码可读性为合入的硬性要求，完整规范见 [`CONTRIBUTING.md`](CONTRIBUTING.md)（吸收 Google Python Style Guide、scikit-learn 的 numpydoc 等成熟约定，并叠加本项目权限安全不变量）。要点：
+代码可读性为合入的硬性要求，完整规范见 [`CONTRIBUTING.md`](CONTRIBUTING.md)。要点：
 
-- **中文三引号 docstring**，放在模块 / 类 / 公共函数的首行；
+- 中文三引号 docstring，放在模块、类、公共函数首行；
 - 写「为什么」与「契约 / 语义」，不翻译代码；
-- 涉及鉴权 / 越权 / 限流 / 审计处，显式标注 **fail-closed / fail-open** 的失败走向。
+- 涉及鉴权、越权、限流、审计处，显式标注 fail-closed / fail-open 的失败走向。
 
 测试文件不强制，但鼓励同风格。

@@ -97,7 +97,7 @@ async def run(
 
 
 def main() -> int:
-    """CLI 入口：至少给定 --older-than-days 或 --doc-id，编排 dry-run / 真删。"""
+    """至少给定 --older-than-days 或 --doc-id，编排 dry-run / 真删。"""
     parser = argparse.ArgumentParser(description="文档留存与合规删除")
     parser.add_argument("--older-than-days", type=int, default=None)
     parser.add_argument("--doc-id", action="append", default=[])
