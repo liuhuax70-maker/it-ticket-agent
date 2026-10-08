@@ -717,7 +717,11 @@
           model: data.model || null,
           timings: data.timings_ms || {}
         });
-        if (data.model) setActiveModel(data.model);
+        // 不回写 modelSelect：下拉只表达"用户选了什么"，实际生效的模型由消息底部的
+        // meta 展示（见 buildMeta）。回写会造成两个真实故障——
+        // ① 用户选 B 但命中了 A 的缓存时，下拉被改成 A，用户的选择被静默吞掉；
+        // ② 留空（用网关默认/兜底）时首次响应就把下拉钉死，之后每请求都带 model，
+        //    等于把兜底链绕过去。
       })
       .catch(function (err) {
         if (err && err.name === 'AbortError') {
@@ -1248,27 +1252,8 @@
     loadModels();
   }
 
-  // 把服务端回报的"实际生效模型"同步回下拉。
-  // 注意这**不是**回显用户的选择：请求可能被缓存命中或模型不可用而落到别的模型，
-  // 只有服务端知道真正作答的是哪个。
-  function setActiveModel(name) {
-    var select = $('modelSelect');
-    if (!select || !name) return;
-    for (var i = 0; i < select.options.length; i++) {
-      if (select.options[i].value === name) {
-        select.value = name;
-        return;
-      }
-    }
-    // 服务端用了清单里没有的模型（例如兜底链切到了备用模型）：补进去而不是丢弃，
-    // 否则下拉会停留在一个与实际不符的选项上。
-    var opt = document.createElement('option');
-    opt.value = name;
-    opt.textContent = name;
-    select.appendChild(opt);
-    select.value = name;
-  }
-
+  // 模型下拉只负责"用户选了什么"，不跟随服务端实际生效的模型变化。
+  // 实际作答的模型显示在每条回答底部的 meta 里。
   function loadModels() {
     authFetch('/chat/models')
       .then(function (r) { return r.ok ? r.json() : null; })
