@@ -7,6 +7,11 @@ name = "permission-aware-rag"
 version = "0.1.0"
 description = "企业级权限感知 RAG 知识库平台（FastAPI + LangGraph + Postgres + OpenSearch + Milvus + Redis + Kafka + LiteLLM）"
 requires-python = ">=3.11"
+license = { text = "MIT" }
+classifiers = [
+    "Programming Language :: Python :: 3.11",
+    "License :: OSI Approved :: MIT License",
+]
 dependencies = [
   # --- Web / 契约 ---
   "fastapi>=0.115",

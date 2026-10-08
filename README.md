@@ -104,7 +104,7 @@
 
 ```bash
 cp .env.example .env          # 按需修改端口与模型配置
-docker compose up -d          # Postgres / Redis / OpenSearch / Milvus(+etcd+MinIO)
+docker compose up -d          # Postgres / Redis / OpenSearch / Milvus(+etcd+MinIO)，等价 make infra-up
 # 需要 Kafka / Keycloak+OPA / Langfuse / 监控时：
 docker compose --profile streaming --profile authz --profile observability --profile monitoring up -d
 ```
@@ -134,7 +134,7 @@ LOCAL_LLM_THINK=false        # 思考型模型必须关思考链，见 FAQ
 ### 4. 启动服务
 
 ```bash
-python scripts/dev_services.py     # 一键前台启动 6 个在线服务（Ctrl+C 全部退出）
+python scripts/dev_services.py     # 一键前台启动 6 个在线服务（Ctrl+C 全部退出），等价 make run-all
 # 或按需单独启动
 python -m uvicorn app.main:app --app-dir services/retrieval --port 8002 --reload
 ```
@@ -338,13 +338,22 @@ data/corpus/    演示语料
 
 ## 开发指南
 
+日常入口用 Makefile 目标（与 CI 门禁一致）：
+
 ```bash
-python scripts/test_all.py            # 全量测试（必须按服务分进程：每个服务都有顶层 app 包，同一
-                                      # pytest 会话里 app 只会绑定到最先导入的那个服务）
-python -m pytest packages/tests -q    # 只跑共享库
-python scripts/type_check.py          # mypy 逐服务（逐模块跑，一次跑全仓会因同名 app 包歧义）
-ruff check .                          # 静态检查
+make install          # 安装依赖（含 dev）
+make test             # 全量测试（按服务分进程）
+make test-packages    # 只跑共享库测试
+make lint             # 静态检查（ruff）
+make type-check       # 类型检查（mypy 逐模块跑，一次跑全仓会因同名 app 包歧义）
+make fmt              # 统一格式
+make fmt-check        # 格式检查
+make verify           # 端到端闭环验收
 ```
+
+其中 `lint`、`type-check`、`fmt-check`、`corpus-check` 是 CI 门禁项。
+
+测试必须分进程：每个服务都有顶层 `app` 包，同一个 pytest 会话里 `app` 只会绑定到最先导入的那个服务。用 `make test`（等价 `python scripts/test_all.py`）。
 
 评测与回归门禁：
 
@@ -461,4 +470,4 @@ Milvus schema 没有 alter（`enable_dynamic_field=False`），存量集合不�
 
 ## 许可证
 
-**本项目尚未添加 LICENSE 文件**（`pyproject.toml` 也无 `license` 字段）。如需明确授权边界，请补充 `LICENSE` 并同步 `pyproject.toml` 的 `license` 字段。
+[MIT](LICENSE)。Copyright (c) 2026 吴兴龙。
