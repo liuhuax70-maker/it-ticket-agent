@@ -70,7 +70,7 @@ async def submit(req: FeedbackRequest, request: Request) -> FeedbackResponse:
     """POST /feedback：提交一条反馈（租户/用户从网关头注入），返回记录 id。"""
     tenant_id = request.headers.get("x-tenant-id") or "default"
     user_id = request.headers.get("x-user-id") or ""
-    feedback_id = await _store(request).add(
+    feedback_id, duplicate = await _store(request).add(
         tenant_id=tenant_id,
         user_id=user_id,
         query=req.query,
@@ -79,7 +79,9 @@ async def submit(req: FeedbackRequest, request: Request) -> FeedbackResponse:
         comment=req.comment,
         trace_id=req.trace_id,
     )
-    return FeedbackResponse(id=feedback_id)
+    return FeedbackResponse(
+        id=feedback_id, status="duplicate" if duplicate else "accepted"
+    )
 
 
 @router.get("", summary="最近反馈")

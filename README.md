@@ -135,11 +135,25 @@ LOCAL_LLM_THINK=false        # 思考型模型必须关思考链，见 FAQ
 
 ```bash
 python scripts/dev_services.py     # 一键前台启动 6 个在线服务（Ctrl+C 全部退出），等价 make run-all
-# 或按需单独启动
+# 或按需单独启动（**务必用装了依赖的解释器**，见下）
 python -m uvicorn app.main:app --app-dir services/retrieval --port 8002 --reload
 ```
 
+> **必须用 `.venv` 的解释器启动**：`model-gateway` 依赖 `litellm`，它只装在项目虚拟环境里。
+> 用系统 Python 启动会得到 `No module named 'litellm'`，进而所有 `/chat` 返回 502，
+> 症状是"检索正常但生成失败"，很容易误判成模型问题。虚拟环境不存在时先 `make install`。
+>
+> ```bash
+> # Windows（PowerShell）
+> .venv\Scripts\python.exe -m uvicorn app.main:app --app-dir services/model-gateway --port 8003
+> # macOS / Linux
+> .venv/bin/python -m uvicorn app.main:app --app-dir services/model-gateway --port 8003
+> ```
+
 打开 <http://localhost:8000/ui/> 即为问答界面（零构建单页应用）。
+
+前端所需的 OIDC 参数（issuer / client_id）由后端 `GET /ui-config` 在运行时下发，
+**不要**在前端代码里硬编码——换部署环境时改 `KEYCLOAK_URL` / `KEYCLOAK_UI_CLIENT_ID` 即可。
 
 ### 5. 导入语料并验收
 
@@ -440,7 +454,14 @@ helm template api-gateway infra/k8s/helm/rag-service -f infra/k8s/helm/values/ap
 思考型模型（`qwen3`、`deepseek-r1`）在 OpenAI 兼容接口下会把输出预算耗在思维链上，最终 `content` 为空。改用 `LOCAL_LLM_API_STYLE=ollama` + `LOCAL_LLM_THINK=false`（仅 Ollama 原生接口支持关闭思考链）。非思考型模型保持 `openai` 即可。
 
 **Q：改了代码但答案没变？**
-查询缓存。缓存键里放不下模型名，改动影响答案内容的配置（换模型、改提示词、改切分参数）后须调大 `CACHE_VERSION`，或临时置 `CACHE_ENABLED=false`。
+查询缓存。改动影响答案内容的配置（换作答模型、改提示词、改切分参数）后须调大 `CACHE_VERSION`，或临时置 `CACHE_ENABLED=false`。
+例外：**作答模型已可逐请求指定**（`ChatRequest.model`），这类变化由缓存键里的 `model` 分量直接区分，不需要也不应该动 `CACHE_VERSION`。
+
+**Q：问「你好」却列出一堆制度切片？**
+`MIN_SCORE` 相关性阈值被改小或关掉了。无关提问与真实提问的向量分数实测分离在 `0.4077 / 0.4521` 之间（见 [ADR 0008](docs/adr/0008-relevance-threshold.md)），阈值 0.43 是这份语料上的最优切点。**换语料或换嵌入模型必须重新标定**，否则会静默误杀或静默失效。
+
+**Q：问「请假什么流程？」说没资料，但问「请假」就有？**
+已修（提示词 v6）。原因不是检索——两者命中的是同一批文档。v5 的判据是「资料里有没有*这个答案*」，而完整答案常需跨分节整合、且用户用词与文档用词不同（问「请假」而文档写「病假/事假/年假」），于是被误判成「资料没写」。v6 改为「有没有*可用事实*」。
 
 **Q：新增了 `lifecycle` 字段但检索行为没变？**
 Milvus schema 没有 alter（`enable_dynamic_field=False`），存量集合不会自动补列，须用 `python scripts/rebuild_index.py` 重建。OpenSearch 侧不用重建，`ensure_index` 会幂等 `put_mapping` 补齐。

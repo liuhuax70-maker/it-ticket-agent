@@ -26,6 +26,7 @@ async def consume_feedback_events(store: FeedbackStore, settings: Settings) -> N
         settings.kafka_bootstrap, settings.kafka_topic_feedback, settings.kafka_consumer_group
     ):
         try:
+            # 返回 (id, is_duplicate)；消费侧不关心重复，忽略即可
             await store.add(
                 tenant_id=payload.get("tenant_id", "default"),
                 user_id=payload.get("user_id", ""),
