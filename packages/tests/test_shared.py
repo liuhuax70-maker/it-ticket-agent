@@ -125,6 +125,20 @@ def test_metrics_path_is_exempt_only_when_token_configured() -> None:
     assert "/health" in SecuritySettings(metrics_token="s3cret").authz_exempt()
 
 
+def test_root_path_is_always_exempt() -> None:
+    """根路径必须免鉴权：它只做一次 302 跳到 /ui/，自身不返回数据。
+
+    不放行的后果是「开启鉴权后无法登录」：登录页在 /ui，浏览器访问网关根地址
+    先被身份中间件拦成 401 JSON，永远到不了登录页。
+    """
+    from packages.security.config import SecuritySettings
+
+    # 显式传一个**不含 "/"** 的名单，证明这是代码兜底而不是配置默认值——
+    # 已部署环境的 .env 早已显式配好列表，只改默认值对他们无效。
+    settings = SecuritySettings(authz_exempt_paths="/health,/openapi.json,/docs,/redoc,/ui")
+    assert "/" in settings.authz_exempt()
+
+
 # ---------------- 提示注册表 ----------------
 
 
@@ -303,9 +317,17 @@ def test_chunk_round_trip_keeps_offsets() -> None:
     assert restored.acl.visibility is Visibility.internal
 
 
-def test_settings_env_prefix_free_contract() -> None:
-    """字段名即环境变量名（大小写不敏感），这是 .env.example 的契约。"""
-    settings = BaseAppSettings(LOG_LEVEL="DEBUG")  # type: ignore[call-arg]  # 故意用未声明的字段名验证环境变量映射
+def test_settings_env_prefix_free_contract(monkeypatch) -> None:
+    """字段名即环境变量名（大小写不敏感），这是 .env.example 的契约。
+
+    必须通过**环境变量**验证，不能用构造参数 ``BaseAppSettings(LOG_LEVEL=...)``：
+    大小写不敏感匹配（``case_sensitive=False``）只作用于**环境变量读取**那条路径；
+    构造参数走的是字段名 ``log_level``，传 ``LOG_LEVEL`` 会被 ``extra="ignore"``
+    静默丢弃，于是断言读到的是 .env 或默认值——测到的是别的东西，
+    在有 .env 的机器上必然失败、在没有 .env 的机器上也必然失败（默认值是 INFO）。
+    """
+    monkeypatch.setenv("LOG_LEVEL", "DEBUG")
+    settings = BaseAppSettings()
     assert settings.log_level == "DEBUG"
 
 

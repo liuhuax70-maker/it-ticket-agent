@@ -212,6 +212,74 @@ def test_invalid_body_is_422(client) -> None:
     assert client.post("/chat", json={}).status_code == 422
 
 
+def test_chat_models_lists_models_for_chat_users(client) -> None:
+    """模型清单挂在 /chat 下（chat 权限），普通聊天用户能直接拿到下拉选项。
+
+    刻意不走 /admin/models：那条要 rag_admin 角色，普通用户会 403，
+    前端拿不到清单就静默退化成"只有一个模型"，用户无从判断原因。
+    """
+    resp = client.get("/chat/models")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert [m["name"] for m in body] == ["deepseek-chat"]
+    assert body[0]["kind"] == "chat"
+
+
+def test_chat_models_rejects_user_without_chat_permission(monkeypatch) -> None:
+    """开启了鉴权时，无 token 必须被拦下——清单不能绕过 chat 权限。"""
+    app = _build_app(monkeypatch, authz_enabled=True, keycloak_url="http://localhost:8180")
+    with TestClient(app) as test_client:
+        resp = test_client.get("/chat/models")
+    assert resp.status_code == 401
+
+
+def test_exempt_root_does_not_open_the_rest(monkeypatch) -> None:
+    """放行根路径不能变成"全放行"。
+
+    中间件按 ``path == item or path.startswith(item + "/")`` 匹配豁免项，
+    item 为 "/" 时前缀是 "//"——只有精确的 "/" 命中，/chat 之类仍必须 401。
+    这条测试守的就是这个前提：一旦有人把匹配改成裸 startswith(item)，
+    整个网关会静默失去鉴权，而所有"未登录返回 401"的测试仍然通过。
+    """
+    app = _build_app(monkeypatch, authz_enabled=True, keycloak_url="http://localhost:8180")
+    with TestClient(app) as test_client:
+        # serve_ui=False 时根路径没有注册路由：豁免生效的话是 404，而不是被拦成 401
+        assert test_client.get("/").status_code == 404
+        assert test_client.post("/chat", json={"query": "x"}).status_code == 401
+        assert test_client.get("/chat/models").status_code == 401
+
+
+def test_root_redirects_to_ui_when_served(monkeypatch) -> None:
+    """开启 UI 时，根路径必须能走到登录页（这是修复前真实存在的死锁）。"""
+    app = _build_app(
+        monkeypatch, authz_enabled=True, keycloak_url="http://localhost:8180", serve_ui=True
+    )
+    with TestClient(app) as test_client:
+        root = test_client.get("/", follow_redirects=False)
+        ui = test_client.get("/ui/", follow_redirects=False)
+    assert root.status_code in (302, 307)
+    assert root.headers["location"] == "/ui/"
+    # 登录页本身必须能匿名访问，否则还是到不了
+    assert ui.status_code == 200
+
+
+def test_chat_forwards_selected_model_downstream(client) -> None:
+    """选了模型就必须原样传到编排层，否则下拉是个摆设。"""
+    client.post("/chat", json={"query": "x", "model": "deepseek-chat"})
+    req, _ = client.app.state.orchestrator.calls[0]
+    assert req.model == "deepseek-chat"
+
+
+def test_chat_without_model_leaves_it_unset(client) -> None:
+    """留空表示"由网关挑默认模型"，不能塞一个具体模型名下去。
+
+    塞了就等于绕过 model-gateway 的兜底链（首个模型不可用时本该自动降级）。
+    """
+    client.post("/chat", json={"query": "x"})
+    req, _ = client.app.state.orchestrator.calls[0]
+    assert req.model is None
+
+
 # ---------------- 限流 ----------------
 
 
