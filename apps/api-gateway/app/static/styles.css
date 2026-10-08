@@ -236,46 +236,6 @@ button { font: inherit; color: inherit; cursor: pointer; }
 }
 .model-picker:focus-within { border-color: var(--accent); }
 
-/* 「召回原文」区：折叠展示本次检索到的正文片段 */
-.contexts {
-  margin: 10px 0 2px;
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  background: var(--code-bg);
-  overflow: hidden;
-}
-.contexts > summary {
-  padding: 9px 13px;
-  cursor: pointer;
-  color: var(--muted);
-  font-size: 12.5px;
-  user-select: none;
-}
-.contexts > summary:hover { color: var(--accent); }
-
-.context-item {
-  padding: 10px 13px;
-  border-top: 1px solid var(--border);
-}
-.context-head {
-  display: flex; align-items: baseline; gap: 7px;
-  margin-bottom: 5px;
-  font-size: 12px;
-}
-.context-idx { color: var(--accent); font-weight: 600; flex: 0 0 auto; }
-.context-title {
-  color: var(--muted);
-  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-}
-.context-text {
-  margin: 0;
-  max-height: 190px; overflow-y: auto;
-  white-space: pre-wrap; word-break: break-word;
-  color: var(--text);
-  font: inherit;
-  font-size: 12.5px; line-height: 1.65;
-}
-
 .icon-btn {
   display: grid; place-items: center;
   width: 32px; height: 32px;
@@ -542,34 +502,6 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .composer-area {
   padding: 12px 20px 18px;
   background: linear-gradient(to top, var(--bg) 70%, transparent);
-}
-
-/* 输入框上方的功能开关药丸（DeepSeek：深度思考 / 联网搜索） */
-.composer-tools {
-  max-width: 820px;
-  margin: 0 auto 9px;
-  display: flex;
-  gap: 8px;
-}
-
-.tool-toggle {
-  padding: 5px 12px;
-  border: 1px solid var(--border-strong);
-  border-radius: 999px;
-  background: var(--panel);
-  color: var(--muted);
-  font: inherit;
-  font-size: 12.5px;
-  line-height: 1.5;
-  cursor: pointer;
-  transition: border-color .15s, color .15s, background .15s;
-}
-.tool-toggle:hover { border-color: var(--accent); color: var(--accent); }
-.tool-toggle.active {
-  border-color: var(--accent);
-  background: var(--accent-soft);
-  color: var(--accent);
-  font-weight: 500;
 }
 
 .composer {

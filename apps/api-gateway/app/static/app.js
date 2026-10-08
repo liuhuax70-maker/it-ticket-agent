@@ -513,11 +513,6 @@
       body.appendChild(buildSources(message.citations));
     }
 
-    // 「召回原文」开关打开时，后端才会回传 contexts（默认不传，避免无谓的正文暴露）
-    if (message.contexts && message.contexts.length) {
-      body.appendChild(buildContexts(message.contexts));
-    }
-
     body.appendChild(buildActions(message));
     var meta = buildMeta(message);
     if (meta) body.appendChild(meta);
@@ -663,65 +658,15 @@
     $('input').disabled = value;
   }
 
-  // 深度思考开启时使用的召回条数。5 是编排层默认 top_k，这里加倍换召回覆盖。
-  var DEEP_TOP_K = 10;
-
   function buildChatPayload(query) {
     var payload = { query: query };
 
-    // 「深度思考」：强制 hybrid 并加大召回。
-    // 关闭时两个字段都不传——由后端 resolve_mode 按 query 自行决定模式、top_k 用默认值。
-    if ($('toggleReason').classList.contains('active')) {
-      payload.mode = 'hybrid';
-      payload.top_k = DEEP_TOP_K;
-    }
-
-    // 「召回原文」：让后端回传本次检索到的正文片段
-    if ($('toggleSearch').classList.contains('active')) {
-      payload.include_contexts = true;
-    }
-
-    // 选了具体模型才下发；留空表示"由网关挑默认模型"
+    // 选了具体模型才下发；留空表示"由网关挑默认模型"。
+    // mode / top_k / temperature 一律不传：由后端按 query 自行决定检索策略。
     var model = $('modelSelect').value;
     if (model) payload.model = model;
 
     return payload;
-  }
-
-  function buildContexts(contexts) {
-    var wrap = document.createElement('details');
-    wrap.className = 'contexts';
-
-    var sum = document.createElement('summary');
-    sum.textContent = '召回原文（' + contexts.length + ' 段）';
-    wrap.appendChild(sum);
-
-    contexts.forEach(function (ctx) {
-      var item = document.createElement('div');
-      item.className = 'context-item';
-
-      var head = document.createElement('div');
-      head.className = 'context-head';
-      var idx = document.createElement('span');
-      idx.className = 'context-idx';
-      idx.textContent = '[' + (ctx.index != null ? ctx.index + 1 : '?') + ']';
-      var title = document.createElement('span');
-      title.className = 'context-title';
-      // section_path 形如 "章节 > 小节"，比只给标题更利于定位
-      title.textContent = ctx.section_path || ctx.doc_title || ctx.doc_id || '';
-      head.appendChild(idx);
-      head.appendChild(title);
-      item.appendChild(head);
-
-      var text = document.createElement('pre');
-      text.className = 'context-text';
-      text.textContent = ctx.text || '';
-      item.appendChild(text);
-
-      wrap.appendChild(item);
-    });
-
-    return wrap;
   }
 
   function send(rawQuery, options) {
@@ -770,7 +715,6 @@
           refused: !!data.refused,
           cached: !!data.cached,
           model: data.model || null,
-          contexts: data.contexts || null,
           timings: data.timings_ms || {}
         });
         if (data.model) setActiveModel(data.model);
@@ -833,14 +777,6 @@
     // 药丸内左侧「+」：复用上传弹窗
     $('composerAttach').addEventListener('click', function () {
       openModal('uploadModal');
-    });
-    // 「深度思考 / 联网搜索」开关药丸：仅切换视觉激活态
-    ['toggleReason', 'toggleSearch'].forEach(function (id) {
-      var chip = $(id);
-      chip.addEventListener('click', function () {
-        var on = chip.classList.toggle('active');
-        chip.setAttribute('aria-pressed', on ? 'true' : 'false');
-      });
     });
   }
 
