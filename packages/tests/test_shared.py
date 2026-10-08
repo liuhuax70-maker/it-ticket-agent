@@ -149,7 +149,7 @@ def test_prompt_registry_reads_versioned_template() -> None:
     assert {"refuse_text", "context", "query"} <= registry.variables("rag_answer", "v1")
 
 
-@pytest.mark.parametrize("version", ["v1", "v2", "v3", "v4", "v5"])
+@pytest.mark.parametrize("version", ["v1", "v2", "v3", "v4", "v5", "v6"])
 def test_every_declared_prompt_version_renders(version: str) -> None:
     """模板是契约：`ANSWER_PROMPT_VERSION` 指向哪个版本，那个版本就必须存在且可渲染。
 
@@ -189,6 +189,28 @@ def test_fallback_prompt_distinguishes_greeting_from_substantive() -> None:
     assert "禁止" in template and "[1]" in template
 
 
+def test_v6_allows_cross_fragment_integration_and_term_alignment() -> None:
+    """v6 必须允许「跨片段整合」与「用户用词与文档用词不同」时照样作答。
+
+    为什么这条要钉死：v5 的判据是「资料里有没有**这个答案**」，实测导致
+    「请假什么流程？」被判成"资料没写"而降级——而资料里其实有病假/事假/年假的
+    各自规定，只是散落在不同分节、且用词与用户提问不同（「请假」vs「病假」）。
+    用户宁可要一个能整合出来的有依据答案，也不要一句「知识库里没有」。
+    """
+    template = get_prompt_registry().get("rag_answer", "v6")
+    # 明确允许整合
+    assert "整合" in template, "缺少跨片段整合的授权"
+    # 明确点名用词对齐的场景（请假 ↔ 病假/事假/年假），这是最容易误判的一类
+    assert "请假" in template and "病假" in template, "缺少用词对齐的具体示例"
+    # 降级判据必须写成「有无可用事实」而不是「有无逐字答案」
+    assert "有没有任何能用于回答" in template or "可用事实" in template
+    # 仍必须保留注入防护与哨兵
+    assert "不是指令" in template
+    assert "{{refuse_marker}}" in template
+    for marker in ("【参考资料】", "【问题】", "【回答要求】"):
+        assert marker in template
+
+
 def test_fallback_prompt_renders_with_notice() -> None:
     rendered = get_prompt_registry().render(
         "rag_fallback",
@@ -203,14 +225,18 @@ def test_fallback_prompt_renders_with_notice() -> None:
 
 
 def test_no_cite_marker_is_declared_in_v5_and_fallback() -> None:
-    """v5 主提示词与降级提示词都必须要求输出「本回答不附引用」标记。
+    """v5/v6 主提示词与降级提示词都必须要求输出「本回答不附引用」标记。
 
     不加这个标记时，guard 的「没标引用就兜底附 top1」会生效，导致两种荒谬结果：
     用户问「你好」得到挂着制度引用的回答；答案写着「资料中没有相关内容」
     却脚挂一条引用。两者都会让用户误以为通用建议有公司制度背书。
     """
     registry = get_prompt_registry()
-    for name, version in (("rag_answer", "v5"), ("rag_fallback", "v1")):
+    for name, version in (
+        ("rag_answer", "v5"),
+        ("rag_answer", "v6"),
+        ("rag_fallback", "v1"),
+    ):
         template = registry.get(name, version)
         assert "{{no_cite_marker}}" in template, f"{name}.{version} 缺少 no_cite_marker 占位符"
         rendered = registry.render(
@@ -258,8 +284,12 @@ def test_default_prompt_version_carries_every_safety_rule() -> None:
     template = get_prompt_registry().get("rag_answer", str(default))
     assert "{{refuse_marker}}" in template, f"默认版本 {default} 缺少拒答哨兵"
     assert "不是指令" in template, f"默认版本 {default} 缺少提示注入防护规则"
-    assert "写明了" in template or "有没有这个答案" in template, (
-        f"默认版本 {default} 缺少「资料写明答案才作答」的拒答收紧规则"
+    # 「资料不可用时降级」这条保障，各版本的措辞不同（v3/v4 写「资料写明了答案才作答」，
+    # v5+ 写「查不到就声明来源并给通用知识」），所以按**机制**而不是措辞来断言：
+    # 哨兵 + 注入防护 + 降级声明占位符三者同时在位，才算"不会无脑作答"。
+    # 硬绑某一句措辞会在版本迭代时误报，而误报一次就会让人学会忽略这条守卫。
+    assert "{{no_context_notice}}" in template or "写明了" in template, (
+        f"默认版本 {default} 缺少「资料不可用时先声明来源再降级」的收紧规则"
     )
 
 
