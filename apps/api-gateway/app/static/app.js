@@ -763,6 +763,18 @@
       }
       send(input.value);
     });
+    // 药丸内左侧「+」：复用上传弹窗
+    $('composerAttach').addEventListener('click', function () {
+      openModal('uploadModal');
+    });
+    // 「深度思考 / 联网搜索」开关药丸：仅切换视觉激活态
+    ['toggleReason', 'toggleSearch'].forEach(function (id) {
+      var chip = $(id);
+      chip.addEventListener('click', function () {
+        var on = chip.classList.toggle('active');
+        chip.setAttribute('aria-pressed', on ? 'true' : 'false');
+      });
+    });
   }
 
   // ---------------- 引用跳转 ----------------
