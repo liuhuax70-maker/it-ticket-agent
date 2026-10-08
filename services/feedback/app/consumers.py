@@ -14,6 +14,7 @@ logger = get_logger("feedback.consumers")
 
 
 async def consume_feedback_events(store: FeedbackStore, settings: Settings) -> None:
+    """消费 ``feedback-events`` 写库；``USE_KAFKA=false`` 时直接返回（走 HTTP 提交）。"""
     if not settings.use_kafka:
         logger.info("USE_KAFKA=false，feedback 以 HTTP 写入模式工作，Kafka 消费者未启动")
         return

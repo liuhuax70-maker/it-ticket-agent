@@ -19,6 +19,10 @@ logger = get_logger("orchestrator.node.generate")
 
 
 def make_generate_node(model_gateway: ModelGatewayClient, settings: Settings):  # noqa: ARG001
+    """构造生成节点：调用 model-gateway 生成答案。
+
+    ⚠️ 送给模型的是**用户原问题**，不是改写后的查询——改写只服务于检索。
+    """
     async def generate(state: RAGState) -> dict:
         started = time.perf_counter()
         req = GenerateRequest(

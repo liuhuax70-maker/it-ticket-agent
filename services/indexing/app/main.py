@@ -24,6 +24,7 @@ settings: Settings = load_settings(Settings)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    """应用生命周期：初始化日志/OTel，构造 ``IndexService``；``use_kafka`` 时启动消费者，退出时回收。"""
     setup_logging(settings.service_name, settings.log_level)
     logger = get_logger(settings.service_name)
     init_otel(settings.service_name, settings.otel_endpoint, settings.otel_enabled)
@@ -59,17 +60,20 @@ def _service() -> IndexService:
 
 @app.post("/index", response_model=IndexResponse)
 async def index(req: IndexRequest) -> IndexResponse:
+    """POST /index：批量入库（向量化→写 Milvus→写 OpenSearch），返回 ``IndexResponse``。"""
     return await _service().index(req)
 
 
 @app.post("/documents/{doc_id}/delete")
 async def delete_document(doc_id: str) -> dict[str, object]:
+    """POST /documents/{doc_id}/delete：删除文档在两处索引的向量，返回各存储删除条数。"""
     counts = await _service().delete_document(doc_id)
     return {"doc_id": doc_id, "deleted": counts}
 
 
 @app.get("/health", response_model=HealthResponse)
 async def health() -> HealthResponse:
+    """GET /health：聚合 Milvus/OpenSearch 与嵌入模型健康，返回 ``HealthResponse``。"""
     details = await _service().health()
     status = details.pop("status")
     return HealthResponse(
@@ -81,6 +85,7 @@ async def health() -> HealthResponse:
 
 
 def run() -> None:  # pragma: no cover
+    """本地启动入口（uvicorn）。"""
     import uvicorn
 
     uvicorn.run("app.main:app", host=settings.host, port=settings.port, reload=False)

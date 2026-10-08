@@ -12,6 +12,12 @@ from packages.contracts import RetrieveMode
 
 
 class Settings(BaseAppSettings):
+    """编排服务配置：只依赖两跳下游（retrieval / model-gateway），不含任何存储字段。
+
+    含各**可选节点开关**（改写/规划/重排/守卫/缓存，默认全关以保证最小可解释链路）、
+    缓存版本号（换配置后必须调大）与身份默认值（鉴权开启后由网关透传真实身份）。
+    """
+
     service_name: str = SERVICE_QUERY_ORCHESTRATOR
     host: str = "0.0.0.0"
     port: int = 8001

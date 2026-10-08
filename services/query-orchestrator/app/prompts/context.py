@@ -11,6 +11,11 @@ from packages.contracts import ContextItem, SearchHit
 
 
 def build_context_items(hits: list[SearchHit]) -> list[ContextItem]:
+    """把检索结果转为带编号的 ``ContextItem`` 列表。
+
+    编号 ``index`` 从 1 递增，即后续送进 prompt 的顺序，也是 ``citations.index`` 的唯一来源
+    （与 guard 节点派生引用共用同一列表，避免张冠李戴）。
+    """
     return [
         ContextItem(
             index=index,

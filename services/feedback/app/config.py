@@ -7,6 +7,8 @@ from packages.common.settings import BaseAppSettings
 
 
 class Settings(BaseAppSettings):
+    """feedback 配置：Postgres、坏例导出目录、Kafka 反馈通道（默认同步直连写库）。"""
+
     service_name: str = SERVICE_FEEDBACK
     host: str = "0.0.0.0"
     port: int = 8007

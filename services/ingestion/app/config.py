@@ -7,6 +7,12 @@ from packages.common.settings import BaseAppSettings
 
 
 class Settings(BaseAppSettings):
+    """ingestion 配置：元数据库、语料/切分参数、生命周期声明路径、下游 indexing 地址、
+
+    ACL 默认值与 Kafka 通道开关（``use_kafka=False`` 时走同步直连，入库失败默认 fail-fast
+    以保证 PG 与索引一致）。
+    """
+
     service_name: str = SERVICE_INGESTION
     host: str = "0.0.0.0"
     port: int = 8004

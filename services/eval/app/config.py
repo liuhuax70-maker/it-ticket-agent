@@ -15,6 +15,12 @@ from packages.security.config import SecuritySettings
 
 
 class Settings(LLMSettings, SecuritySettings):
+    """eval 配置：复用 LLM（裁判模型）与安全（真实身份令牌）两套配置，避免重复踩坑。
+
+    参数覆盖被测系统入口、数据集与报告目录、采集阈值（top_k / 温度 / 台账身份）、
+    L2 裁判开关（RAGAS）与并发/超时。温度默认 0 以保证评测可比性（见模块 docstring）。
+    """
+
     service_name: str = SERVICE_EVAL
     host: str = "0.0.0.0"
     port: int = 8006

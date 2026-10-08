@@ -16,6 +16,11 @@ from packages.common.errors import ValidationError
 
 
 class PdfParser(BaseParser):
+    """PDF 解析器（pypdf 抽文本，不含 OCR）。
+
+    扫描件抽取结果为空时给出可读失败原因（提示需接入 OCR），而非静默产出空文档。
+    """
+
     extensions = (".pdf",)
 
     def parse(self, path: Path) -> ParsedDocument:

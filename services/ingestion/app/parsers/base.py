@@ -15,6 +15,8 @@ from packages.common.errors import ValidationError
 
 @dataclass
 class ParsedDocument:
+    """解析结果：来源路径、标题与正文文本（坐标系须与 ``char_start/end`` 一致）。"""
+
     source: str
     title: str
     text: str
@@ -37,12 +39,14 @@ _REGISTRY: dict[str, BaseParser] = {}
 
 
 def register(parser: BaseParser) -> BaseParser:
+    """按扩展名把解析器注册到全局表（幂等，重复注册覆盖）。"""
     for ext in parser.extensions:
         _REGISTRY[ext.lower()] = parser
     return parser
 
 
 def get_parser(path: Path) -> BaseParser:
+    """按扩展名取解析器；未注册扩展名抛 ``ValidationError``（提示已支持列表）。"""
     ext = path.suffix.lower()
     parser = _REGISTRY.get(ext)
     if parser is None:
@@ -51,8 +55,10 @@ def get_parser(path: Path) -> BaseParser:
 
 
 def supported_extensions() -> list[str]:
+    """返回已注册扩展名（升序），供前端上传校验提示。"""
     return sorted(_REGISTRY)
 
 
 def all_extensions() -> set[str]:
+    """返回已注册扩展名集合。"""
     return set(_REGISTRY)

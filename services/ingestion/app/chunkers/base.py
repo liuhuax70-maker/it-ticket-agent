@@ -23,6 +23,11 @@ def estimate_tokens(text: str) -> int:
 
 @dataclass(frozen=True)
 class ChunkingConfig:
+    """切分参数：单块目标字符数、块间重叠、最小块阈值。
+
+    重叠越界会自动收窄到一半（避免切分原地打转）；仅用于观测估算，不参与计费。
+    """
+
     chunk_size: int = 500
     chunk_overlap: int = 80
     min_chunk_size: int = 40
@@ -45,4 +50,9 @@ class BaseChunker(ABC):
     """
 
     @abstractmethod
-    def chunk(self, doc: Document) -> list[Chunk]: ...
+    def chunk(self, doc: Document) -> list[Chunk]:
+        """将文档切分为带精确字符区间的 chunk（子类必须实现）。
+
+        不变量：``content[char_start:char_end] == text``，否则「引用精确定位原文」不成立。
+        """
+        ...

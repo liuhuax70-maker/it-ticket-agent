@@ -16,6 +16,11 @@ from packages.retrievers.base import FilterDict
 
 
 def build_filters(acl: ACL | None, doc_ids: list[str] | None = None) -> FilterDict | None:
+    """把上游 ACL + 可选 doc_ids 白名单编译为过滤契约。
+
+    缺 ACL 时返回 ``None``——这是**有意的**：由 ``RetrievalService.search`` 决定走
+    fail-closed 拒绝还是放行（安全开关），而不是在这里偷偷放行。
+    """
     return compile_filters(acl, doc_ids)
 
 

@@ -8,6 +8,11 @@ from packages.llms.config import LLMSettings
 
 
 class Settings(LLMSettings, EmbedSettings):
+    """model-gateway 配置：继承 LLM / Embed 配置，含 LiteLLM 模型清单路径、兜底冷却、
+
+    配额开关/上限（默认只统计不拦截）与成本单价表（按**最长前缀**匹配模型名）。
+    """
+
     service_name: str = SERVICE_MODEL_GATEWAY
     host: str = "0.0.0.0"
     port: int = 8003

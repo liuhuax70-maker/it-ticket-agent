@@ -45,6 +45,12 @@ class EvalIdentity(BaseModel):
 
 
 class GoldenSample(BaseModel):
+    """评测样本（黄金集/坏例集的基本单元）。
+
+    比普通 QA 集多三组字段：``expected_sources``（精确命中，确定性不花钱）、
+    ``expected_snippets``（宽容召回，抗切分参数）、``identity``（权限维度，本项目评测核心差别）。
+    """
+
     id: str
     question: str
     reference: str | None = None

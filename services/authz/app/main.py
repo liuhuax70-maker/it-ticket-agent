@@ -33,6 +33,8 @@ _RULE = re.compile(r"^(?:default\s+)?([a-z_][a-zA-Z0-9_]*)\s*(?:\(|=|\{|if\b)", 
 
 
 class DecisionRequest(BaseModel):
+    """OPA 决策请求：动作 + 用户/资源声明 + 租户；转发给 OPA 评估 allow/reason。"""
+
     action: str
     user: dict[str, Any] = Field(default_factory=dict)
     resource: dict[str, Any] = Field(default_factory=dict)
@@ -40,6 +42,7 @@ class DecisionRequest(BaseModel):
 
 
 def policy_files() -> list[Path]:
+    """列出策略包目录下所有 ``.rego`` 文件（目录不存在返回空）。"""
     directory = Path(settings.policies_dir)
     if not directory.exists():
         return []
@@ -75,6 +78,7 @@ def inspect_policies() -> list[dict[str, Any]]:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    """应用生命周期：初始化日志/OTel，挂入 settings。"""
     setup_logging(settings.service_name, settings.log_level)
     logger = get_logger(settings.service_name)
     init_otel(settings.service_name, settings.otel_endpoint, settings.otel_enabled)
@@ -95,6 +99,7 @@ install_metrics(app, SERVICE_AUTHZ, settings=settings)
 
 @app.get("/policies")
 async def policies() -> dict[str, Any]:
+    """GET /policies：返回策略包清单（文件名 / 摘要 / 顶层规则名）。"""
     return {"count": len(policy_files()), "policies": inspect_policies()}
 
 
@@ -129,6 +134,7 @@ async def decision(req: DecisionRequest) -> dict[str, Any]:
 
 @app.get("/health", response_model=HealthResponse)
 async def health(request: Request) -> HealthResponse:
+    """GET /health：聚合 OPA 可达性与策略包状态，返回 ``HealthResponse``。"""
     details: dict[str, str] = {
         "policies": str(len(policy_files())),
         "opa_url": settings.opa_url,
@@ -151,6 +157,7 @@ async def health(request: Request) -> HealthResponse:
 
 
 def run() -> None:  # pragma: no cover
+    """本地启动入口（uvicorn）。"""
     import uvicorn
 
     uvicorn.run("app.main:app", host=settings.host, port=settings.port, reload=False)

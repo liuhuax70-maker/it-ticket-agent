@@ -25,6 +25,12 @@ def _ms(started: float) -> float:
 
 
 class HybridRetriever:
+    """BM25 + 向量混合检索器：两路并发、单路故障降级、RRF 融合（量纲无关）。
+
+    过滤条件在两路都生效（保证降级不改变权限边界）；``min_score`` 只在单路生效，
+    因为融合后的 RRF 分数阈值语义不同。
+    """
+
     def __init__(
         self,
         vector: Retriever,

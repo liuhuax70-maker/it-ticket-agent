@@ -18,6 +18,7 @@ logger = get_logger("orchestrator.langfuse")
 
 
 def build_tracer(*, host: str, public_key: str, secret_key: str, service: str) -> Tracer:
+    """构造编排层 Langfuse ``Tracer``（缺配或 SDK 缺失时降级 no-op）。"""
     return Tracer(host=host, public_key=public_key, secret_key=secret_key, service=service)
 
 
@@ -32,6 +33,7 @@ def trace_chat(
     top_k: int,
     trace_id: str | None = None,
 ) -> Iterator[Any]:
+    """包裹一次 ``/chat`` 调用为 trace；``query`` 经 ``truncate`` 截断后上报，避免外泄知识库原文。"""
     with tracer.trace(
         "chat",
         user_id=user_id,

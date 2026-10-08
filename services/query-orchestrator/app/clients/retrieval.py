@@ -12,6 +12,8 @@ from packages.contracts import (
 
 
 class RetrievalClient:
+    """retrieval 服务客户端：封装 ``/search``（召回融合）与 ``/rerank``（重排）。"""
+
     def __init__(self, base_url: str, timeout: float = 60.0) -> None:
         self._client = ServiceClient(base_url, name="retrieval", timeout=timeout)
 

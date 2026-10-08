@@ -7,6 +7,11 @@ from packages.security import SecuritySettings
 
 
 class Settings(SecuritySettings):
+    """authz 配置（控制面）：继承安全配置，含 OPA 策略目录与决策路径。
+
+    本服务不参与请求链路（策略执行点在 api-gateway），挂掉不影响问答可用性。
+    """
+
     service_name: str = SERVICE_AUTHZ
     host: str = "0.0.0.0"
     port: int = 8008

@@ -21,6 +21,12 @@ logger = get_logger("orchestrator.service")
 
 
 class OrchestratorService:
+    """编排服务：装配下游客户端与缓存、编译 RAG 图、跑图并组装 ``ChatResponse``。
+
+    负责统计拒答/错误率（``ANSWER_COUNTER``）与可观测埋点；``health`` 只认下游探针
+    ``"ok"`` 为健康，不可达/异常均判 degraded。
+    """
+
     def __init__(self, settings: Settings) -> None:
         self.settings = settings
         self.retrieval = RetrievalClient(settings.retrieval_url, settings.request_timeout)

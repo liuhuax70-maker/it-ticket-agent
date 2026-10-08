@@ -52,6 +52,14 @@ def load_retriever_overrides(path: str | Path) -> dict:
 
 
 class Settings(EmbedSettings, MilvusSettings, OpenSearchSettings):
+    """检索服务配置。
+
+    继承三套配置（嵌入/向量库/索引库），各自负责连接与超时；本类只定义检索策略与安全开关。
+    配置分两层：**env**（连接串、端口、``allow_unfiltered_search`` 等环境/安全项）
+    与 **configs/retrievers/*.yaml**（权重、条数、阈值等策略微调，文件优先、需重启生效）。
+    白名单外的 yaml 键一律忽略（见 ``TUNABLE_KEYS``）。
+    """
+
     service_name: str = SERVICE_RETRIEVAL
     host: str = "0.0.0.0"
     port: int = 8002

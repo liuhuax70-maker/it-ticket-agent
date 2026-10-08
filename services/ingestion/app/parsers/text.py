@@ -8,6 +8,8 @@ from app.parsers.base import BaseParser, ParsedDocument, register
 
 
 class TextParser(BaseParser):
+    """纯文本解析器：内容即原文，首行作标题（缺则回退文件名）。"""
+
     extensions = (".txt",)
 
     def parse(self, path: Path) -> ParsedDocument:

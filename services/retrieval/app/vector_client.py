@@ -13,6 +13,11 @@ logger = get_logger("retrieval.vector")
 
 
 class VectorRetriever:
+    """向量检索器：查询侧向量化 + Milvus 检索（实现 ``Retriever`` 协议，向量一路）。
+
+    ⚠️ 查询侧必须使用与入库时**同一嵌入模型**，否则向量空间错位、召回静默变差。
+    """
+
     name = RETRIEVER_VECTOR
 
     def __init__(self, settings: MilvusSettings, embed_settings: EmbedSettings) -> None:

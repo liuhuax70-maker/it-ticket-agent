@@ -28,6 +28,8 @@ def _clean(text: str) -> str:
 
 
 def make_rewrite_node(model_gateway: ModelGatewayClient, settings: Settings):
+    """构造查询改写节点：默认关闭，开启时用模型改写查询（服务于检索），失败/不可用回退原查询。"""
+
     async def rewrite(state: RAGState) -> dict:
         started = time.perf_counter()
         query = state.get("query", "")

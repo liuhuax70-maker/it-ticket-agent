@@ -145,6 +145,10 @@ async def _llm_grounded(
 
 
 def make_guard_node(model_gateway: ModelGatewayClient, settings: Settings):
+    """构造守卫节点：拒答识别 + 引用映射（顺序来自重排后 hits）+ 可选 LLM 合规审核。
+
+    引用必须**只从** ``state["hits"]`` 派生，绝不对 hits 再排序——否则编号与文档错位。
+    """
     async def guard(state: RAGState) -> dict:
         started = time.perf_counter()
         answer = (state.get("answer") or "").strip()

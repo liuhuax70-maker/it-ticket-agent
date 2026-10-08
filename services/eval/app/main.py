@@ -60,6 +60,7 @@ class EvalScoreRequest(BaseModel):
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    """应用生命周期：初始化日志/OTel，挂入 settings。"""
     setup_logging(settings.service_name, settings.log_level)
     logger = get_logger(settings.service_name)
     init_otel(settings.service_name, settings.otel_endpoint, settings.otel_enabled)
@@ -81,6 +82,7 @@ install_metrics(app, SERVICE_EVAL, settings=settings)
 
 @app.get("/eval/datasets")
 async def datasets() -> dict[str, Any]:
+    """GET /eval/datasets：返回评测集规模、身份与标签分布、启用的 L2 指标。"""
     samples = load_samples(settings.dataset_path)
     return {
         "path": settings.dataset_path,
@@ -95,12 +97,14 @@ async def datasets() -> dict[str, Any]:
 
 @app.post("/eval/preflight")
 async def eval_preflight(req: PreflightRequest) -> dict[str, Any]:
+    """POST /eval/preflight：仅做前置检查（语料入库、鉴权可用），不调模型、秒级返回。"""
     samples = load_samples(req.dataset_path or settings.dataset_path, limit=req.limit)
     return await preflight(samples, settings)
 
 
 @app.post("/eval/run")
 async def eval_run(req: EvalRunRequest, request: Request) -> dict[str, Any]:  # noqa: ARG001
+    """POST /eval/run：完整评测（采集→L1→可选 L2），产出摘要与报告路径。"""
     dataset_path = req.dataset_path or settings.dataset_path
     limit = min(req.limit or settings.max_samples, settings.max_samples)
     samples = load_samples(dataset_path, limit=limit)
@@ -164,6 +168,7 @@ async def eval_score(req: EvalScoreRequest) -> dict[str, Any]:
 
 @app.get("/health", response_model=HealthResponse)
 async def health() -> HealthResponse:
+    """GET /health：聚合数据集/网关/裁判适配器状态；ragas 缺失时降级 degraded（L1 仍可用）。"""
     details = {
         "dataset": settings.dataset_path,
         "reports_dir": settings.reports_dir,
@@ -194,6 +199,7 @@ async def health() -> HealthResponse:
 
 
 def run_server() -> None:  # pragma: no cover
+    """本地启动入口（uvicorn）。"""
     import uvicorn
 
     uvicorn.run("app.main:app", host=settings.host, port=settings.port, reload=False)

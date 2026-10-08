@@ -29,6 +29,12 @@ def _ms(started: float) -> float:
 
 
 class IndexService:
+    """入库编排：向量化 → 写 Milvus → 写 OpenSearch（幂等）。
+
+    ``reindex=True`` 时先 purge 两处索引再写（purge 必须排在 embed 之前，否则 chunk_id 错位
+    导致新旧 chunk 共存）；以 embedder 实际维度建表，避免 EMBED_DIM 与实际模型不一致。
+    """
+
     def __init__(self, settings: Settings) -> None:
         self._settings = settings
         self._embedder = EmbeddingPipeline(settings)

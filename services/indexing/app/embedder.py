@@ -16,6 +16,12 @@ logger = get_logger("indexing.embedder")
 
 
 class EmbeddingPipeline:
+    """向量化流水线：批量 + 可选 Redis 缓存。
+
+    缓存按 (文本, 模型) 命中，只省算力；是否重建索引由 ingestion 的 ``reindex`` 决定
+    （与缓存是两件事）。写回缓存的向量列表必须与文本**严格同长同序**，否则错配。
+    """
+
     def __init__(self, settings: EmbedSettings) -> None:
         self._settings = settings
         self._embedder: Embedder = get_embedder(settings)

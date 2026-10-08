@@ -74,6 +74,10 @@ def format_context(req: GenerateRequest) -> str:
 def build_messages(
     req: GenerateRequest, prompt_version: str = DEFAULT_PROMPT_VERSION
 ) -> list[dict[str, str]]:
+    """把 (context+query) 渲染为模型消息：``system`` 前置，用户消息注入分节标记与拒答哨兵/话术。
+
+    ``prompt_version`` 可切换（v1 用话术、v4 用哨兵），便于灰度。
+    """
     registry = get_prompt_registry()
     # 两个变量都传：v1 用 refuse_text，v2 用 refuse_marker，便于版本切换时互不影响
     user_content = registry.render(
@@ -212,12 +216,15 @@ class ModelRouter:
         )
 
     async def embed(self, req: EmbedRequest) -> EmbedResponse:
+        """向量化：取 embedding 后端对 ``texts`` 计算向量，返回维度与模型名。"""
         embedder = get_embedder(self._settings)
         vectors = await embedder.embed(req.texts, kind=req.kind)
         return EmbedResponse(vectors=vectors, dim=embedder.dim, model=embedder.model_name)
 
     async def quota_snapshot(self, tenant_id: str) -> dict[str, int | bool | float]:
+        """返回租户当日配额/成本快照（供 /admin 或调试查看）。"""
         return await self._quota.snapshot(tenant_id)
 
     async def aclose(self) -> None:
+        """释放配额 Redis 连接。"""
         await self._quota.aclose()

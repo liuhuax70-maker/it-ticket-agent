@@ -19,6 +19,8 @@ logger = get_logger("ingestion.producers")
 
 
 class ChunkSink(Protocol):
+    """分块产出通道协议：批量入库、删除文档、探活与释放连接。"""
+
     async def send(self, chunks: list[Chunk], *, reindex: bool) -> IndexResponse: ...
 
     async def delete_document(self, doc_id: str) -> dict[str, int]: ...
@@ -29,12 +31,13 @@ class ChunkSink(Protocol):
 
 
 class HttpChunkSink:
-    """同步直连 indexing。"""
+    """同步直连 indexing（最小闭环默认）。"""
 
     def __init__(self, base_url: str, timeout: float = 300.0) -> None:
         self._client = ServiceClient(base_url, name="indexing", timeout=timeout)
 
     async def send(self, chunks: list[Chunk], *, reindex: bool) -> IndexResponse:
+        """批量入库到 indexing ``/index``：返回前索引已写完（保证 status=indexed 不变量）。"""
         return await self._client.post(
             "/index",
             IndexRequest(chunks=chunks, reindex=reindex),
@@ -42,15 +45,18 @@ class HttpChunkSink:
         )
 
     async def delete_document(self, doc_id: str) -> dict[str, int]:
+        """同步删除检索索引；返回各存储删除条数。"""
         resp = await self._client.post(f"/documents/{doc_id}/delete")
         deleted = (resp or {}).get("deleted", {}) or {}
         return {k: int(v) for k, v in deleted.items()}
 
     async def ping(self) -> tuple[bool, str]:
+        """探测 indexing 健康。"""
         ok = await self._client.ping("/health")
         return ok, f"http {self._client.base_url}" if ok else f"unreachable {self._client.base_url}"
 
     async def aclose(self) -> None:
+        """关闭 HTTP 客户端。"""
         await self._client.aclose()
 
 
@@ -66,9 +72,11 @@ class KafkaChunkSink:
         self.topic = topic
 
     async def start(self) -> None:
+        """启动 Kafka 生产者。"""
         await self._publisher.start()
 
     async def send(self, chunks: list[Chunk], *, reindex: bool) -> IndexResponse:
+        """只投递 chunk-events 事件（``key=doc_id`` 保序），**不等待索引写入**。"""
         payload = {
             "reindex": reindex,
             "chunks": [c.model_dump(mode="json") for c in chunks],
@@ -96,17 +104,19 @@ class KafkaChunkSink:
         return {"milvus": 0, "opensearch": 0}
 
     async def ping(self) -> tuple[bool, str]:
-        # 生产者未启动时不报错：Kafka 是异步通道，未启用时不应拉低健康分
+        """生产者已启动即健康（异步通道不拉低健康分）。"""
         ready = self._publisher._producer is not None  # noqa: SLF001
         return ready, f"kafka {self.topic} started={ready}"
 
     async def aclose(self) -> None:
+        """停止 Kafka 生产者。"""
         await self._publisher.stop()
 
 
 def build_sink(
     *, use_kafka: bool, indexing_url: str, timeout: float, bootstrap: str, topic: str
 ) -> ChunkSink:
+    """按 ``use_kafka`` 选择通道实现（HTTP 同步直连 / Kafka 异步占位）。"""
     if use_kafka:
         logger.info("ChunkSink=Kafka topic=%s", topic)
         return KafkaChunkSink(bootstrap, topic)

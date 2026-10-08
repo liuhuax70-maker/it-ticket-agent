@@ -33,6 +33,11 @@ def _cache_key(
 
 
 def make_cache_lookup_node(cache: QueryCache, settings: Settings):
+    """构造缓存查询节点：命中即短路返回缓存答案；跳过/未命中/命中分别计入 ``CACHE_LOOKUP_COUNTER``。
+
+    跳过（缓存未开或 ``use_cache=False``）与未命中必须分开计数——把"没开"算成未命中
+    会让命中率看起来永远很低。
+    """
     async def cache_lookup(state: RAGState) -> dict:
         started = time.perf_counter()
         if not cache.enabled or not state.get("use_cache", True):
@@ -76,6 +81,11 @@ def make_cache_lookup_node(cache: QueryCache, settings: Settings):
 
 
 def make_cache_store_node(cache: QueryCache, settings: Settings):
+    """构造缓存写入节点：链路末端回填缓存。
+
+    拒答与 ``use_cache=False`` 不写：拒答固化会污染后续正确回答，评测流量写缓存
+    会让下一轮评测拿到命中、改变检索侧指标的样本分母。
+    """
     async def cache_store(state: RAGState) -> dict:
         started = time.perf_counter()
         # use_cache=False 的请求**既不读也不写**：让评测流量灌进生产缓存，

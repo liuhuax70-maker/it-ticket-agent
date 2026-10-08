@@ -31,6 +31,11 @@ settings: Settings = load_settings(Settings)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    """应用生命周期：初始化日志/OTel、构造 ``ModelRouter``，退出时释放连接。
+
+    ⚠️ 本服务 ``init_otel`` 只传了 ``service_name``，OTel 实际关闭（见行内注释）；
+    其余服务均传完整三参。要开启请补 endpoint/enabled。
+    """
     setup_logging(settings.service_name, settings.log_level)
     logger = get_logger(settings.service_name)
     # ⚠️ 只传了 service_name：init_otel 的 endpoint/enabled 有默认值（enabled=False），
@@ -72,6 +77,7 @@ def _router() -> ModelRouter:
 
 @app.post("/generate", response_model=GenerateResponse)
 async def generate(req: GenerateRequest) -> GenerateResponse:
+    """POST /generate：RAG 生成（context + 引用约束提示词，含注入检测与成本/配额统计）。"""
     return await _router().generate(req)
 
 
@@ -83,6 +89,7 @@ async def complete(req: CompletionRequest) -> GenerateResponse:
 
 @app.post("/embed", response_model=EmbedResponse)
 async def embed(req: EmbedRequest) -> EmbedResponse:
+    """POST /embed：批量向量化，返回向量列表与维度。"""
     return await _router().embed(req)
 
 
@@ -95,6 +102,7 @@ async def quota(tenant_id: str) -> dict[str, object]:
 
 @app.get("/models", response_model=list[ModelInfo])
 async def models() -> list[ModelInfo]:
+    """GET /models：返回当前生效（主+兜底）模型，并补齐 LiteLLM 清单中声明的其余模型信息。"""
     router = _router()
     active = [
         ModelInfo(
@@ -113,6 +121,7 @@ async def models() -> list[ModelInfo]:
 
 @app.get("/health", response_model=HealthResponse)
 async def health() -> HealthResponse:
+    """GET /health：返回模型链（主/兜底）、嵌入后端与配额执行状态。"""
     details: dict[str, str] = {}
     status: Literal["ok", "degraded", "error"] = "ok"
     try:
@@ -131,6 +140,7 @@ async def health() -> HealthResponse:
 
 
 def run() -> None:  # pragma: no cover - 手工启动
+    """本地启动入口（uvicorn）。"""
     import uvicorn
 
     uvicorn.run("app.main:app", host=settings.host, port=settings.port, reload=False)

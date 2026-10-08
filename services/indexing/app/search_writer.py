@@ -10,6 +10,8 @@ logger = get_logger("indexing.search_writer")
 
 
 class SearchWriter:
+    """全文索引写入器：委托 ``OpenSearchStore`` 实现 ensure/write/delete/count/health。"""
+
     def __init__(self, settings: OpenSearchSettings) -> None:
         self._store = OpenSearchStore(settings)
 

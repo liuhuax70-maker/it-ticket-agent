@@ -91,6 +91,7 @@ class ProjectLLMJudge(BaseRagasLLM):
 
     @property
     def usage(self) -> dict[str, int]:
+        """本轮裁判累计 token 用量（prompt/completion），用于成本归因。"""
         return {"prompt": self._prompt_tokens, "completion": self._completion_tokens}
 
     @staticmethod
@@ -109,6 +110,7 @@ class ProjectLLMJudge(BaseRagasLLM):
         stop: list[str] | None = None,
         callbacks: Any = None,
     ) -> LLMResult:
+        """异步生成裁判文本：逐条调用项目 ``LLMClient``，累计 token 并归因实际服务模型名。"""
         text = self._prompt_text(prompt)
         generations: list[Generation] = []
         for _ in range(max(1, n)):
@@ -134,6 +136,7 @@ class ProjectLLMJudge(BaseRagasLLM):
         stop: list[str] | None = None,
         callbacks: Any = None,
     ) -> LLMResult:
+        """同步包装：在同步上下文跑 ``agenerate_text``（RAGAS 同步路径调用）。"""
         return _run_sync(
             self.agenerate_text(
                 prompt, n=n, temperature=temperature, stop=stop, callbacks=callbacks

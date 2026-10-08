@@ -23,6 +23,11 @@ _QUOTED = re.compile(r'["“”「」\']')
 
 
 def make_route_node(settings: Settings):
+    """构造路由节点：决定检索模式并从身份编译 ACL（**权限下推起点**）。
+
+    精确术语短查询（带引号、≤16 字）改走 BM25——短术语向量检索易漂移。
+    """
+
     async def route(state: RAGState) -> dict:
         started = time.perf_counter()
         query = state.get("rewritten_query") or state.get("query", "")

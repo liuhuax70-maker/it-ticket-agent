@@ -9,6 +9,8 @@ from packages.vectorstores.config import MilvusSettings
 
 
 class Settings(EmbedSettings, MilvusSettings, OpenSearchSettings):
+    """indexing 配置：继承向量化 / 向量库 / 全文索引配置，含 Kafka 通道开关（默认同步直连）。"""
+
     service_name: str = SERVICE_INDEXING
     host: str = "0.0.0.0"
     port: int = 8005

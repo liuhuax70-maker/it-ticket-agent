@@ -27,6 +27,7 @@ settings: Settings = load_settings(Settings)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    """应用生命周期：初始化日志/OTel，构造并启动 ``RetrievalService``，退出时释放连接。"""
     setup_logging(settings.service_name, settings.log_level)
     logger = get_logger(settings.service_name)
     init_otel(settings.service_name, settings.otel_endpoint, settings.otel_enabled)
@@ -55,16 +56,19 @@ def _service() -> RetrievalService:
 
 @app.post("/search", response_model=SearchResponse)
 async def search(req: SearchRequest) -> SearchResponse:
+    """POST /search：召回 + 融合（可选重排），返回 ``SearchResponse``。"""
     return await _service().search(req)
 
 
 @app.post("/rerank", response_model=RerankResponse)
 async def rerank(req: RerankRequest) -> RerankResponse:
+    """POST /rerank：对给定命中列表按 query 重排，返回 ``RerankResponse``。"""
     return await _service().rerank(req)
 
 
 @app.get("/health", response_model=HealthResponse)
 async def health() -> HealthResponse:
+    """GET /health：聚合 Milvus/OpenSearch 健康与行数，返回 ``HealthResponse``。"""
     details = await _service().health()
     status = details.pop("status")
     return HealthResponse(
@@ -76,6 +80,7 @@ async def health() -> HealthResponse:
 
 
 def run() -> None:  # pragma: no cover
+    """本地启动入口（uvicorn）。"""
     import uvicorn
 
     uvicorn.run("app.main:app", host=settings.host, port=settings.port, reload=False)

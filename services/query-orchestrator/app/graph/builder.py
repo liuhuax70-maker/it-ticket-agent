@@ -59,6 +59,11 @@ def build_graph(
     cache: QueryCache,
     settings: Settings,
 ):
+    """按拓扑组装 LangGraph 并编译：缓存查询 → 改写 → 规划 → 路由 → 检索 → 重排 → 生成 → 守卫 → 缓存写入。
+
+    节点只做一件事，分支判断在 ``edges.py``；新增能力（多轮/反思/GraphRAG）只在图上挂节点，不动已有节点。
+    """
+
     graph = StateGraph(RAGState)
 
     graph.add_node(NODE_CACHE_LOOKUP, make_cache_lookup_node(cache, settings))

@@ -10,6 +10,8 @@ logger = get_logger("indexing.vector_writer")
 
 
 class VectorWriter:
+    """向量写入器：委托 ``MilvusStore`` 实现 ensure/write/delete/count/health。"""
+
     def __init__(self, settings: MilvusSettings, dim: int) -> None:
         self._store = MilvusStore(settings, dim=dim)
 

@@ -23,6 +23,12 @@ logger = get_logger("retrieval.service")
 
 
 class RetrievalService:
+    """检索服务编排：编译 ACL 鉴权、调用混合检索、可选重排。
+
+    权限下推的唯一入口是 :meth:`compile_filters`；未携带 ACL 时 fail-closed 拒绝
+    （除非显式打开 ``allow_unfiltered_search`` 仅限内部调试），防止全库召回泄露他租户文档。
+    """
+
     def __init__(self, settings: Settings) -> None:
         # 调参文件（configs/retrievers/*.yaml）优先于 .env，便于按环境/域微调召回策略
         settings = settings.with_overrides()

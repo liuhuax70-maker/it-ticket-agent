@@ -42,6 +42,12 @@ def _ms(started: float) -> float:
 
 
 class IngestionService:
+    """接入编排：解析→切分→落元数据→同步直连入库。
+
+    核心不变量（见模块 docstring）：直连模式下 ``status=indexed`` 意味着索引已真实写入；
+    Kafka 模式下它只表示「已投递」，检索可见性最终一致。
+    """
+
     def __init__(self, settings: Settings) -> None:
         self._settings = settings
         self._chunker = RecursiveChunker(

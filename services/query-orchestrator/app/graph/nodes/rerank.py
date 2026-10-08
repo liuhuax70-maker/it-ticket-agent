@@ -20,6 +20,8 @@ logger = get_logger("orchestrator.node.rerank")
 
 
 def make_rerank_node(retrieval: RetrievalClient, settings: Settings):
+    """构造重排节点：可选 cross-encoder 重排并构造 contexts（**引用编号诞生地**），失败回退融合顺序。"""
+
     async def rerank(state: RAGState) -> dict:
         started = time.perf_counter()
         hits = list(state.get("hits") or [])

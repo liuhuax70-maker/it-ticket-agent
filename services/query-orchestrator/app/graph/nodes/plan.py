@@ -62,6 +62,8 @@ def parse_sub_queries(raw: str, original: str, max_queries: int) -> list[str]:
 
 
 def make_plan_node(model_gateway: ModelGatewayClient, settings: Settings):
+    """构造查询规划节点：复合问题拆子查询，单信息点透传（不花 LLM 调用），失败回退原查询。"""
+
     async def plan(state: RAGState) -> dict:
         started = time.perf_counter()
         query = state.get("query", "")

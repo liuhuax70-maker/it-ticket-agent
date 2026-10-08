@@ -14,6 +14,8 @@ logger = get_logger("feedback.store")
 
 
 class FeedbackStore:
+    """反馈落库与坏例查询：Postgres 单表，按租户/时间排序；坏例即点踩记录。"""
+
     def __init__(self, database_url: str) -> None:
         self._url = database_url
 
@@ -28,6 +30,7 @@ class FeedbackStore:
         comment: str | None,
         trace_id: str | None,
     ) -> str:
+        """写入一条反馈，返回主键 id。"""
         async with session_scope(self._url) as session:
             row = Feedback(
                 tenant_id=tenant_id,
@@ -47,6 +50,7 @@ class FeedbackStore:
     async def list_recent(
         self, *, tenant_id: str | None = None, limit: int = 50
     ) -> list[dict[str, Any]]:
+        """最近反馈（按时间倒序），可选按租户过滤。"""
         async with session_scope(self._url) as session:
             stmt = select(Feedback).order_by(Feedback.created_at.desc()).limit(limit)
             if tenant_id:
@@ -86,6 +90,7 @@ class FeedbackStore:
         }
 
     async def health(self) -> tuple[bool, str]:
+        """Postgres 健康探测（取 1 条样本确认可达）。"""
         try:
             rows = await self.list_recent(limit=1)
             return True, f"reachable (sample={len(rows)})"

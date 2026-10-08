@@ -7,6 +7,8 @@ from packages.contracts import CompletionRequest, GenerateRequest, GenerateRespo
 
 
 class ModelGatewayClient:
+    """model-gateway 服务客户端：封装 ``/generate``（RAG 生成）与 ``/complete``（原始补全）。"""
+
     def __init__(self, base_url: str, timeout: float = 120.0) -> None:
         self._client = ServiceClient(base_url, name="model-gateway", timeout=timeout)
 

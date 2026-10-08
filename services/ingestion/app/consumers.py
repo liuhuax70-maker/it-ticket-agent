@@ -15,6 +15,7 @@ logger = get_logger("ingestion.consumers")
 
 
 async def consume_raw_documents(service: IngestionService, settings: Settings) -> None:
+    """消费 ``raw-documents`` 主题做异步接入；``USE_KAFKA=false`` 时直接返回（走 HTTP ``/ingest``）。"""
     if not settings.use_kafka:
         logger.info("USE_KAFKA=false，ingestion 以 HTTP 入口工作，Kafka 消费者未启动")
         return

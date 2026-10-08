@@ -36,6 +36,12 @@ def _lifecycle_fields(meta: dict | None) -> dict[str, object]:
 
 
 class MetadataStore:
+    """Postgres 元数据写入：文档台账 + 分块明细 + 接入任务。
+
+    职责边界：ingestion 只落「文档与 ACL」，不碰检索索引（那是 indexing 的事），
+    避免同一服务同时握有两种存储的事务语义。
+    """
+
     def __init__(self, database_url: str) -> None:
         self._url = database_url
 

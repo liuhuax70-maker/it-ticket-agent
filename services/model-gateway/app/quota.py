@@ -15,10 +15,16 @@ logger = get_logger("model_gateway.quota")
 
 
 class QuotaExceeded(RagError):
-    status_code = 429
+    """配额超限错误（HTTP 429）。"""
 
 
 class QuotaGuard:
+    """租户配额与成本统计：按 ``(租户, UTC 日)`` 累计 token 与美元成本。
+
+    默认 ``enabled=False`` 只统计不拦截；开启后超限抛 ``QuotaExceeded``。
+    Redis 故障一律降级（不影响主流程），成本是旁路统计。
+    """
+
     def __init__(self, redis_url: str, daily_limit: int, enabled: bool) -> None:
         self._redis_url = redis_url
         self._daily_limit = daily_limit

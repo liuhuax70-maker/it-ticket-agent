@@ -135,6 +135,12 @@ def _tighten(content: str, start: int, end: int) -> tuple[int, int]:
 
 
 class RecursiveChunker(BaseChunker):
+    """标题感知 + 偏移精确的递归切分器。
+
+    先按 Markdown 标题分层（得到章节路径），正文再按中英文分隔符递归细分后贪心装箱；
+    每个 chunk 的 ``char_start/char_end`` 与原文逐字对齐，可直接回查原文（而非切完再 find）。
+    """
+
     def __init__(self, config: ChunkingConfig | None = None) -> None:
         self.config = config or ChunkingConfig()
 

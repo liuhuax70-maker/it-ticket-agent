@@ -27,10 +27,18 @@ _WS = re.compile(r"\s+")
 
 
 def normalize(query: str) -> str:
+    """归一化查询：折叠空白、转小写，减少无谓缓存穿透。"""
     return _WS.sub(" ", query).strip().lower()
 
 
 class QueryCache:
+    """Redis 查询缓存（**精确匹配**）。
+
+    键由 7 个身份/请求分量哈希构成，少一个分量即越权（同租户内串答案，见模块 docstring
+    与 ``_key``）。故障一律降级为未命中/不写，不阻断主链路；``version`` 用于换模型/提示词后
+    显式失效。
+    """
+
     def __init__(self, redis_url: str, ttl_seconds: int = 3600, enabled: bool = False) -> None:
         self.enabled = enabled
         self._ttl = ttl_seconds

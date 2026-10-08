@@ -14,6 +14,12 @@ from packages.contracts import ACL, Citation, ContextItem, RetrieveMode, SearchH
 
 
 class RAGState(TypedDict, total=False):
+    """RAG 图可变状态（全部可序列化业务数据，不放客户端对象）。
+
+    关键不变量：``contexts`` 的顺序 = 引用编号顺序，citations 必须由同一列表派生，
+    否则出现「引用张冠李戴」。``acl`` 必须由 route 节点产出，初始刻意不给。
+    """
+
     # ---- 输入 ----
     query: str
     tenant_id: str

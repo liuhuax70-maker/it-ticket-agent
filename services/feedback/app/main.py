@@ -32,6 +32,7 @@ router = APIRouter(prefix="/feedback", tags=["feedback"])
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    """应用生命周期：初始化日志/OTel，构造 store/collector；``use_kafka`` 时启动消费者，退出时回收。"""
     setup_logging(settings.service_name, settings.log_level)
     logger = get_logger(settings.service_name)
     init_otel(settings.service_name, settings.otel_endpoint, settings.otel_enabled)
@@ -66,6 +67,7 @@ def _store(request: Request) -> FeedbackStore:
 
 @router.post("", response_model=FeedbackResponse, summary="提交反馈")
 async def submit(req: FeedbackRequest, request: Request) -> FeedbackResponse:
+    """POST /feedback：提交一条反馈（租户/用户从网关头注入），返回记录 id。"""
     tenant_id = request.headers.get("x-tenant-id") or "default"
     user_id = request.headers.get("x-user-id") or ""
     feedback_id = await _store(request).add(
@@ -82,12 +84,14 @@ async def submit(req: FeedbackRequest, request: Request) -> FeedbackResponse:
 
 @router.get("", summary="最近反馈")
 async def list_feedback(request: Request, limit: int = 50, tenant_id: str = "") -> dict[str, Any]:
+    """GET /feedback：最近反馈（按时间倒序，可选租户过滤）。"""
     items = await _store(request).list_recent(tenant_id=tenant_id or None, limit=min(limit, 500))
     return {"total": len(items), "items": items}
 
 
 @router.get("/bad-cases", summary="坏例列表")
 async def bad_cases(request: Request, limit: int = 100, tenant_id: str = "") -> dict[str, Any]:
+    """GET /feedback/bad-cases：点踩坏例列表（供排查同类错误）。"""
     collector: BadCaseCollector = request.app.state.collector
     items = await collector.collect(limit=min(limit, 500), tenant_id=tenant_id or None)
     return {"total": len(items), "items": items}
@@ -97,6 +101,7 @@ async def bad_cases(request: Request, limit: int = 100, tenant_id: str = "") -> 
 async def export_bad_cases(
     request: Request, limit: int = 100, tenant_id: str = ""
 ) -> dict[str, str]:
+    """POST /feedback/bad-cases/export：导出坏例为 jsonl（喂给 eval 数据集，形成回归防线）。"""
     collector: BadCaseCollector = request.app.state.collector
     path = await collector.export(limit=min(limit, 500), tenant_id=tenant_id or None)
     return {"path": path.as_posix()}
@@ -107,6 +112,7 @@ app.include_router(router)
 
 @app.get("/health", response_model=HealthResponse)
 async def health(request: Request) -> HealthResponse:
+    """GET /health：聚合 Postgres 健康与坏例目录，返回 ``HealthResponse``。"""
     ok, message = await _store(request).health()
     return HealthResponse(
         status="ok" if ok else "degraded",
@@ -117,6 +123,7 @@ async def health(request: Request) -> HealthResponse:
 
 
 def run() -> None:  # pragma: no cover
+    """本地启动入口（uvicorn）。"""
     import uvicorn
 
     uvicorn.run("app.main:app", host=settings.host, port=settings.port, reload=False)

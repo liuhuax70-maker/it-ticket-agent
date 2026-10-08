@@ -11,6 +11,8 @@ _H1 = re.compile(r"^#\s+(.+?)\s*$", re.MULTILINE)
 
 
 class MarkdownParser(BaseParser):
+    """Markdown 解析器：保留原文，标题取自首个一级标题（缺则回退文件名）。"""
+
     extensions = (".md", ".markdown")
 
     def parse(self, path: Path) -> ParsedDocument:

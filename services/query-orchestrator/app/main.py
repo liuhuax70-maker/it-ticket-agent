@@ -53,6 +53,7 @@ def identity_from_headers(request: Request) -> Identity:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    """应用生命周期：初始化日志/OTel，构造 ``OrchestratorService``，退出时释放下游连接。"""
     setup_logging(settings.service_name, settings.log_level)
     logger = get_logger(settings.service_name)
     init_otel(settings.service_name, settings.otel_endpoint, settings.otel_enabled)
@@ -85,11 +86,13 @@ def _service() -> OrchestratorService:
 
 @app.post("/chat", response_model=ChatResponse)
 async def chat(req: ChatRequest, request: Request) -> ChatResponse:
+    """POST /chat：从网关注入身份后跑 RAG 图，返回 ``ChatResponse``。"""
     return await _service().chat(req, identity_from_headers(request))
 
 
 @app.get("/health", response_model=HealthResponse)
 async def health() -> HealthResponse:
+    """GET /health：聚合下游健康，返回 ``HealthResponse``。"""
     details = await _service().health()
     status = details.pop("status")
     return HealthResponse(
@@ -101,6 +104,7 @@ async def health() -> HealthResponse:
 
 
 def run() -> None:  # pragma: no cover
+    """本地启动入口（uvicorn）。"""
     import uvicorn
 
     uvicorn.run("app.main:app", host=settings.host, port=settings.port, reload=False)

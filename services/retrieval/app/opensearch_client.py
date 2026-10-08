@@ -11,6 +11,8 @@ logger = get_logger("retrieval.opensearch")
 
 
 class BM25Retriever:
+    """BM25 检索器：委托 ``OpenSearchStore`` 实现 ``Retriever`` 协议（关键词一路）。"""
+
     name = RETRIEVER_BM25
 
     def __init__(self, settings: OpenSearchSettings) -> None:

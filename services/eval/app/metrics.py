@@ -60,6 +60,11 @@ def wilson_interval(successes: int, total: int, z: float = 1.96) -> tuple[float,
 
 
 class MetricsReport(BaseModel):
+    """L1 确定性指标汇总：检索（hit/mrr/ndcg）、拒答（漏答/误答）、越权泄露、禁用内容、延迟。
+
+    配合失败明细与按标签分组，供基线对比；越权与禁用内容为零容忍门禁。
+    """
+
     count: int = 0
     positive_count: int = 0
     negative_count: int = 0

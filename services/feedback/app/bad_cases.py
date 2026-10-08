@@ -17,6 +17,8 @@ logger = get_logger("feedback.bad_cases")
 
 
 class BadCaseCollector:
+    """坏例收集器：从反馈库捞出点踩记录，导出为 eval 数据集种子（刻意排除 user_id）。"""
+
     def __init__(self, store: FeedbackStore, output_dir: str) -> None:
         self._store = store
         self._dir = Path(output_dir)
@@ -24,11 +26,13 @@ class BadCaseCollector:
     async def collect(
         self, *, limit: int = 100, tenant_id: str | None = None
     ) -> list[dict[str, Any]]:
+        """捞出坏例（点踩记录），供前端查看。"""
         return await self._store.list_bad_cases(limit=limit, tenant_id=tenant_id)
 
     async def export(
         self, *, limit: int = 100, tenant_id: str | None = None, filename: str = "bad_cases.jsonl"
     ) -> Path:
+        """导出为 jsonl：只含评测字段（question/answer/comment/trace_id/source），不带 user_id。"""
         cases = await self.collect(limit=limit, tenant_id=tenant_id)
         self._dir.mkdir(parents=True, exist_ok=True)
         target = self._dir / filename

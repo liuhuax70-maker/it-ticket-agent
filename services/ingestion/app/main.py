@@ -25,6 +25,7 @@ settings: Settings = load_settings(Settings)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    """应用生命周期：初始化日志/OTel，构造 ``IngestionService``；``use_kafka`` 时启动消费者，退出时回收。"""
     setup_logging(settings.service_name, settings.log_level)
     logger = get_logger(settings.service_name)
     init_otel(settings.service_name, settings.otel_endpoint, settings.otel_enabled)
@@ -73,6 +74,7 @@ async def ingest_upload(
     owner: Annotated[str, Form()] = "",
     reindex: Annotated[bool, Form()] = False,
 ) -> IngestResponse:
+    """POST /ingest/upload：上传文件接入；``visibility=private`` 无 owner 时显式失败（避免落库后不可检索）。"""
     data = await file.read()
     if not data:
         raise HTTPException(status_code=422, detail="上传文件为空")
@@ -98,6 +100,7 @@ async def ingest_upload(
 
 @app.get("/jobs/{job_id}")
 async def get_job(job_id: str) -> dict[str, object]:
+    """GET /jobs/{job_id}：查询接入任务状态（不存在 404）。"""
     job = await _service()._metadata.get_job(job_id)  # noqa: SLF001 - 只读查询，无需再包一层
     if job is None:
         raise NotFoundError(f"任务不存在: {job_id}")
@@ -132,6 +135,7 @@ async def list_documents(
 
 @app.get("/documents/{doc_id}")
 async def get_document(doc_id: str) -> dict[str, object]:
+    """GET /documents/{doc_id}：查询文档台账（不存在 404）。"""
     document = await _service().get_document(doc_id)
     if document is None:
         raise NotFoundError(f"文档不存在: {doc_id}")
@@ -146,6 +150,7 @@ async def delete_document(doc_id: str) -> dict[str, object]:
 
 @app.get("/health", response_model=HealthResponse)
 async def health() -> HealthResponse:
+    """GET /health：聚合 Postgres 与 sink 健康，返回 ``HealthResponse``。"""
     details = await _service().health()
     status = details.pop("status")
     return HealthResponse(

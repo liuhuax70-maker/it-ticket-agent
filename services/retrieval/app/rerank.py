@@ -19,6 +19,12 @@ logger = get_logger("retrieval.rerank")
 
 
 class Reranker:
+    """可选重排器：cross-encoder 本地打分（无需外部服务）。
+
+    关闭时**显式透传**（``reranker="rrf"``），不假装重排过；模型加载/打分失败均降级为
+    融合顺序，避免重排这一步把整个检索链路拖挂。
+    """
+
     def __init__(self, enabled: bool, model_name: str) -> None:
         self.enabled = enabled
         self.model_name = model_name

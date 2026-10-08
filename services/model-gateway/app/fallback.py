@@ -20,6 +20,12 @@ RETRYABLE: tuple[type[BaseException], ...] = (
 
 @dataclass(frozen=True)
 class FallbackPolicy:
+    """兜底策略：最大尝试次数（主 + 兜底模型数）与冷却间隔。
+
+    ``is_retryable`` 区分可重试（网络抖动 / 上游 5xx / 限流）与不可重试（配置错误）——后者
+    重试只会浪费配额。
+    """
+
     max_attempts: int = 1
     cooldown_seconds: float = 0.5
 

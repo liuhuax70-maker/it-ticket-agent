@@ -69,6 +69,7 @@ async def _score_l2(rows: list[dict[str, Any]], settings: Settings) -> dict[str,
 
 
 def _log_l1(l1: MetricsReport) -> None:
+    """把 L1 核心指标打到日志（hit@k / 漏答 / 误答 / 越权条数 / 禁用内容条数）。"""
     logger.info(
         "L1 完成: hit@k=%s 漏答=%s 误答=%s 越权=%s 条 禁用内容=%s 条",
         l1.hit_at_k,
