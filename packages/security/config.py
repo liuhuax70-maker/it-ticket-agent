@@ -45,19 +45,22 @@ class SecuritySettings(BaseAppSettings):
         """
         paths = [p.strip() for p in self.authz_exempt_paths.split(",") if p.strip()]
 
-        # 根路径无条件豁免（**不受配置控制**）。
+        # 根路径与 /ui-config 无条件豁免（**不受配置控制**）。
         #
-        # 原因：网关把 UI 挂在 /ui，根路径只做一次 302 跳转到 /ui/，自身不返回任何数据，
-        # 放行不构成越权风险。但它一旦被拦，用户拿到的就是 401 JSON —— 而登录页在 /ui，
-        # 浏览器根本到不了，等于"开启鉴权后无法登录"的死锁。
+        # 原因：网关把 UI 挂在 /ui，根路径只做一次 302 跳转到 /ui/，自身不返回任何数据；
+        # /ui-config 只下发 issuer / client_id 这类前端必须知道的公开信息。
+        # 两者一旦被拦，用户拿到的就是 401 JSON —— 而登录页在 /ui、登录所需的
+        # issuer 也在这个配置里，浏览器根本到不了，等于"开启鉴权后无法登录"的死锁。
         #
         # 为什么不能只写进 authz_exempt_paths 的默认值：已经部署的环境 .env 里
         # 早就显式配好了这个列表，改默认值对他们无效，必须在这里兜住。
         #
         # 注意中间件按 `path == item or path.startswith(item + "/")` 匹配，
         # item="/" 时前缀是 "//"，所以只有精确的 "/" 命中，**不会**顺带放行 /chat 等接口。
-        if "/" not in paths:
-            paths.append("/")
+        exempt_always = ("/", "/ui-config")
+        for item in exempt_always:
+            if item not in paths:
+                paths.append(item)
 
         # /metrics 只在**已配置 METRICS_TOKEN** 时才免用户鉴权：
         #   * Prometheus 没有 Keycloak 令牌，若要求用户鉴权就没法抓取指标；

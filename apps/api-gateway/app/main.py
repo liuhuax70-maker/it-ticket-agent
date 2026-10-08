@@ -26,7 +26,7 @@ from app.clients import (
 )
 from app.config import Settings
 from app.middleware import AuditMiddleware, IdentityMiddleware, RateLimitMiddleware
-from app.routers import admin, chat, documents, feedback, health
+from app.routers import admin, chat, documents, feedback, health, ui
 from packages.common.constants import SERVICE_API_GATEWAY, VERSION
 from packages.common.errors import install_exception_handlers
 from packages.common.logging import get_logger, setup_logging
@@ -109,7 +109,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     # 否则监控会漏掉最该告警的那部分流量。
     install_metrics(app, SERVICE_API_GATEWAY, settings=settings)
 
-    for module in (health, chat, documents, admin, feedback):
+    for module in (health, chat, documents, admin, feedback, ui):
         app.include_router(module.router)
 
     if settings.serve_ui and STATIC_DIR.exists():

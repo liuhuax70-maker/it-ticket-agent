@@ -23,15 +23,39 @@
   //
   // 走标准浏览器侧流程：不接触 client_secret，令牌只存在 sessionStorage。
   // 关闭鉴权（AUTHZ_ENABLED=false）时后端不校验令牌，这里静默降级为"未登录也可用"。
+  //
+  // ⚠️ issuer / clientId 由后端 /ui-config **运行时下发**，不在这里硬编码。
+  // 曾经硬编码成 localhost:8180 + rag-ui，于是换任何非 localhost 环境部署，
+  // 浏览器都会跳到一个不存在的 Keycloak，且没有任何报错提示。
+  // 下面两个字段只是"还没拿到配置时的占位"，init() 会用 /ui-config 覆盖。
 
   var AUTH = {
-    issuer: 'http://localhost:8180/realms/rag',
-    clientId: 'rag-ui',
+    issuer: '',
+    clientId: '',
     redirectUri: window.location.origin + '/ui/',
     tokenKey: 'par.token',
     verifierKey: 'par.pkce_verifier',
-    stateKey: 'par.oauth_state'
+    stateKey: 'par.oauth_state',
+    authzEnabled: true,
+    loaded: false
   };
+
+  // 拉取后端下发的运行时配置。失败时**不阻塞** UI（authz 关闭时本来就不需要它）。
+  function loadUiConfig() {
+    return fetch('/ui-config', { headers: { Accept: 'application/json' } })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (cfg) {
+        if (!cfg) return false;
+        if (cfg.oidc) {
+          AUTH.issuer = cfg.oidc.issuer || '';
+          AUTH.clientId = cfg.oidc.client_id || '';
+        }
+        AUTH.authzEnabled = cfg.authz_enabled !== false;
+        AUTH.loaded = true;
+        return true;
+      })
+      .catch(function () { return false; });
+  }
 
   function b64url(bytes) {
     var binary = '';
@@ -84,6 +108,11 @@
   }
 
   function signIn() {
+    if (!AUTH.issuer || !AUTH.clientId) {
+      // 之前这里会直接跳到 'undefined/realms/undefined/...'，用户只看到白屏。
+      toast('登录配置未就绪：无法获取 OIDC 参数，请检查服务端 /ui-config', 'fail');
+      return;
+    }
     crypto.subtle.digest('SHA-256', new TextEncoder().encode(randomString(64)))
       .then(function (digest) {
         var verifier = randomString(64);
@@ -1353,15 +1382,18 @@
     renderMessages();
     $('input').focus();
 
-    // 先消费 OAuth 回调（如果有），再渲染登录态与知识库计数
-    completeSignIn().then(function () {
+    // ⚠️ 顺序要求：必须**先**拿到 /ui-config 再处理 OAuth 回调。
+    // completeSignIn() 要用 AUTH.issuer 去换 token，配置没到位时它会拿到
+    // 空串，登录回调就这样静默失败（用户看到"登录了但还是未登录"）。
+    loadUiConfig().then(function () {
+      return completeSignIn();
+    }).then(function () {
       renderAuthState();
       refreshKbCount();
       if (storedToken()) loadKbListIfOpen();
+      // 模型清单依赖登录态（需 chat 权限），放在拿到令牌之后再拉
+      loadModels();
     });
-
-    // 顶栏模型下拉（失败时静默降级成"默认"，不影响问答）
-    loadModels();
   }
 
   // 模型下拉只负责"用户选了什么"，不跟随服务端实际生效的模型变化。

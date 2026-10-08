@@ -249,6 +249,43 @@ def test_exempt_root_does_not_open_the_rest(monkeypatch) -> None:
         assert test_client.get("/chat/models").status_code == 401
 
 
+# ---------------- 前端运行时配置 ----------------
+
+
+def test_ui_config_is_readable_without_token(monkeypatch) -> None:
+    """/ui-config 必须免鉴权，否则形成死锁。
+
+    未登录 → 前端拿不到 issuer → 无法发起登录 → 永远拿不到配置。
+    这与根路径 401 是同一类错误，只是隐蔽得多。
+    """
+    app = _build_app(monkeypatch, authz_enabled=True, keycloak_url="http://localhost:8180")
+    with TestClient(app) as test_client:
+        resp = test_client.get("/ui-config")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["oidc"]["issuer"] == "http://localhost:8180/realms/rag"
+    assert body["oidc"]["client_id"] == "rag-ui"
+    assert body["authz_enabled"] is True
+
+
+def test_ui_config_never_leaks_server_secrets(client) -> None:
+    """这个响应是匿名可读的，绝不能包含 client_secret 之类的机密。"""
+    resp = client.get("/ui-config")
+    assert resp.status_code == 200
+    raw = resp.text
+    assert "secret" not in raw.lower()
+    assert "password" not in raw.lower()
+    assert "DATABASE_URL" not in raw
+
+
+def test_ui_config_blanks_oidc_when_authz_disabled(client) -> None:
+    """鉴权关闭时前端不需要走登录流程，必须给空串而不是真实 issuer。"""
+    body = client.get("/ui-config").json()
+    assert body["authz_enabled"] is False
+    assert body["oidc"]["issuer"] == ""
+    assert body["oidc"]["client_id"] == ""
+
+
 def test_root_redirects_to_ui_when_served(monkeypatch) -> None:
     """开启 UI 时，根路径必须能走到登录页（这是修复前真实存在的死锁）。"""
     app = _build_app(

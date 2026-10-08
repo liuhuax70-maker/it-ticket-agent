@@ -48,6 +48,14 @@ class Settings(SecuritySettings):
     serve_ui: bool = True
     cors_origins: str = "http://localhost:3000,http://localhost:8000"
 
+    # 浏览器侧 OIDC 客户端（public client，走 PKCE，无 secret）。
+    #
+    # 刻意与 SecuritySettings.keycloak_client_id（= rag-api，confidential client，
+    # 服务间调用用，带 secret）**分开**：把 secret-bearing 的 client_id 暴露给前端
+    # 毫无意义，而把浏览器 client 配到后端去又会让人误以为前端需要 secret。
+    # realm 的 rag-ui 定义见 infra/docker/keycloak/realm-rag.json。
+    keycloak_ui_client_id: str = "rag-ui"
+
     def rate_limit_exempt(self) -> set[str]:
         """限流豁免名单。
 
