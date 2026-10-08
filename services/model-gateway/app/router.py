@@ -9,7 +9,12 @@ from app.config import Settings
 from app.cost import parse_prices, usage_cost_usd
 from app.fallback import FallbackPolicy
 from app.quota import QuotaExceeded, QuotaGuard
-from packages.common.constants import REFUSE_MARKER, REFUSE_TEXT
+from packages.common.constants import (
+    NO_CITE_MARKER,
+    NO_CONTEXT_NOTICE,
+    REFUSE_MARKER,
+    REFUSE_TEXT,
+)
 from packages.common.errors import UpstreamError
 from packages.common.logging import get_logger
 from packages.contracts import (
@@ -79,12 +84,16 @@ def build_messages(
     ``prompt_version`` 可切换（v1 用话术、v4 用哨兵），便于灰度。
     """
     registry = get_prompt_registry()
-    # 两个变量都传：v1 用 refuse_text，v2 用 refuse_marker，便于版本切换时互不影响
+    # 变量全量传：v1 用 refuse_text，v2+ 用 refuse_marker，v5 起还用 no_context_notice。
+    # render 会校验"模板里用到但没提供"直接 ConfigError，所以宁可多传也不要漏——
+    # 漏一个变量等于该版本**每次请求都失败**，而不是回退到旧行为。
     user_content = registry.render(
         "rag_answer",
         prompt_version,
         refuse_text=REFUSE_TEXT,
         refuse_marker=REFUSE_MARKER,
+        no_context_notice=NO_CONTEXT_NOTICE,
+        no_cite_marker=NO_CITE_MARKER,
         context=format_context(req),
         query=req.query,
     )

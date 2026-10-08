@@ -114,6 +114,7 @@ class OrchestratorService:
             timings_ms=timings,
             refused=bool(final.get("refused", False)),
             cached=bool(final.get("cached", False)),
+            no_context=bool(final.get("no_context", False)),
             model=final.get("model"),
             trace_id=trace_id,
             # 缓存命中时没有 contexts（缓存只存答案与引用），评测脚本需注意

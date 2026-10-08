@@ -156,15 +156,60 @@ async def test_acls_and_candidate_k_are_pushed_down(make_graph) -> None:
     assert req.top_k >= 3
 
 
-async def test_empty_retrieval_refuses_without_calling_llm(make_graph) -> None:
+async def test_empty_retrieval_falls_back_to_general_answer(make_graph) -> None:
+    """检索为空 → 通用回答，而不是拒答。
+
+    知识库是**可选信息源**，不该是回答的闸门：用户问「你好」或「年假多少天」
+    而库里没有，回一句冷冰冰的「无法回答」是把检索层的空结果直接甩给用户。
+
+    这里断言三件事：
+    1) 走的是 ``complete``（裸提示词）而不是 ``generate``（RAG 模板带空 context）；
+    2) ``refused=False`` 且 ``no_context=True`` —— 答了，但必须标记为无资料支撑；
+    3) ``citations`` 为空 —— 通用知识挂引用就是编造。
+    """
     graph, _, gateway = make_graph(hits=[])
+    final = await graph.ainvoke(_state())
+
+    assert final["refused"] is False
+    assert final["no_context"] is True
+    assert final["citations"] == []
+    assert gateway.complete_calls == 1, "检索为空应走通用回答（complete）"
+    assert gateway.generate_calls == 0, "通用回答不经过 RAG 生成模板"
+    assert "no_context_fallback" in final["errors"]
+    assert final["answer"] != REFUSE_TEXT
+
+
+async def test_empty_retrieval_refuses_when_fallback_disabled(make_graph) -> None:
+    """开关关掉时必须回到历史行为（一律拒答），且**不调用任何 LLM**。
+
+    这是给"降级有风险、需要一键回退"留的退路：改配置即可，
+    不需要回滚代码或重新部署。
+    """
+    graph, _, gateway = make_graph(hits=[], answer_fallback_enabled=False)
     final = await graph.ainvoke(_state())
 
     assert final["refused"] is True
     assert final["answer"] == REFUSE_TEXT
     assert final["citations"] == []
-    assert gateway.generate_calls == 0, "检索为空时绝不能调用 LLM"
+    assert gateway.complete_calls == 0, "关闭降级时不得调用 LLM"
     assert "empty_retrieval" in final["errors"]
+
+
+async def test_empty_generation_still_refuses_even_with_fallback_on(make_graph) -> None:
+    """生成为空（模型故障）**不走降级**，仍然拒答。
+
+    检索有结果说明资料是有的，只是模型没吐字——这时候用通用知识回答，
+    等于用幻觉掩盖一次真实的模型故障，排障时会失去线索。
+    """
+    graph, _, gateway = make_graph(
+        hits=[_hit("d_1:4", "转正后凭发票报销。")], answer="   ", answer_fallback_enabled=True
+    )
+    final = await graph.ainvoke(_state())
+
+    assert final["refused"] is True
+    assert final["answer"] == REFUSE_TEXT
+    assert gateway.complete_calls == 0
+    assert "empty_generation" in final["errors"]
 
 
 async def test_empty_generation_refuses_with_correct_reason(make_graph) -> None:

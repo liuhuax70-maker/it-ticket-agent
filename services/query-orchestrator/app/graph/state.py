@@ -56,6 +56,10 @@ class RAGState(TypedDict, total=False):
     answer: str
     citations: list[Citation]
     refused: bool
+    # 检索为空时给出的**通用回答**（已声明来源不来自知识库），refused=False。
+    # 与 refused 区分：拒答是"没答"，通用回答是"答了但没有资料支撑"，
+    # 两者对用户、缓存和评测的意义完全不同，不能共用一个布尔。
+    no_context: bool
     cached: bool
     # model 见输入段：输入=请求的模型，输出=实际作答的模型（同一 key 复用）
     reranker: str

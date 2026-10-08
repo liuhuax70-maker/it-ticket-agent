@@ -306,6 +306,12 @@ class ChatResponse(BaseModel):
     citations: list[Citation] = Field(default_factory=list)
     timings_ms: dict[str, float] = Field(default_factory=dict)
     refused: bool = False
+    # 检索为空时给出的通用回答（已声明来源不来自知识库），此时 refused=False。
+    #
+    # 为什么与 refused 分开：refused=「没答」，no_context=「答了但无资料支撑」。
+    # 评测要能区分"正确拒答"与"按策略降级"，前端也要据此提示用户注意来源；
+    # 合成一个布尔就丢掉这个信息。
+    no_context: bool = False
     cached: bool = False
     model: str | None = None
     trace_id: str | None = None

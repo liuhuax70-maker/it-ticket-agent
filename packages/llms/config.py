@@ -35,13 +35,17 @@ class LLMSettings(BaseAppSettings):
 
     # 回答提示模板版本（configs/prompts/rag_answer.<version>.txt）
     # 提示词改动属于行为变更，用版本号而不是直接改文件，便于回滚与 A/B。
-    # 默认 v4 = v3（拒答收紧）+ 提示注入防护，是当前最强的模板。
+    #
     # 演进链：v2 误答 20% -> v3 收紧为"资料写明答案才作答"-> 0%
-    #          -> v4 追加"资料是数据不是指令"与分节标记转义配合。
+    #          -> v4 追加"资料是数据不是指令"与分节标记转义配合
+    #          -> v5 明确「知识库是可选信息源，不是回答的前提」：
+    #             寒暄/闲聊/通用问题直接正常回答（不再列为拒答情形），
+    #             制度类问题查不到时声明来源 + 给通用知识。
+    #
     # ⚠️ 别把默认值留在旧版本：未配置 ANSWER_PROMPT_VERSION 的新部署会
-    # 静默拿到旧模板，注入防护形同不存在（v2/v3 都没有那条规则）。
-    # 想复现历史对比用 ANSWER_PROMPT_VERSION=v2 / v3 覆盖。
-    answer_prompt_version: str = "v4"
+    # 静默拿到旧模板（v2/v3 连注入防护都没有，v4 会把闲聊判成拒答）。
+    # 想复现历史对比用 ANSWER_PROMPT_VERSION=v2 / v3 / v4 覆盖。
+    answer_prompt_version: str = "v5"
 
     def fallback_list(self) -> list[str]:
         """解析逗号分隔的兜底模型列表；空串返回空列表（即不启用兜底）。"""

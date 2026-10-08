@@ -3,9 +3,14 @@
 from __future__ import annotations
 
 import pytest
-from app.graph.nodes.guard import build_citations, detect_refusal, extract_citation_indexes
+from app.graph.nodes.guard import (
+    build_citations,
+    detect_refusal,
+    extract_citation_indexes,
+    strip_no_cite_marker,
+)
 
-from packages.common.constants import REFUSE_MARKER, REFUSE_TEXT
+from packages.common.constants import NO_CITE_MARKER, REFUSE_MARKER, REFUSE_TEXT
 from packages.contracts import SearchHit
 
 
@@ -56,6 +61,32 @@ def test_snippet_is_truncated_to_200_chars() -> None:
     hits[0].text = "长" * 500
     citations, _ = build_citations("结论[1]。", hits)
     assert len(citations[0].snippet) == 200
+
+
+# ---------------- 无引用标记 ----------------
+
+
+def test_strip_no_cite_marker_removes_marker_and_reports_it() -> None:
+    answer = f"你好！有什么可以帮您的吗？\n{NO_CITE_MARKER}"
+    cleaned, marked = strip_no_cite_marker(answer)
+    assert marked is True
+    assert NO_CITE_MARKER not in cleaned
+    assert "你好" in cleaned
+
+
+def test_strip_no_cite_marker_absent_is_noop() -> None:
+    """没带标记时必须原样返回——否则会把正常答案误判成"声明不附引用"。"""
+    answer = "年假 12 天[1]。"
+    cleaned, marked = strip_no_cite_marker(answer)
+    assert marked is False
+    assert cleaned == answer
+
+
+def test_no_cite_marker_survives_blank_answer() -> None:
+    """空答案不能因为 strip 而变成 None 或抛异常。"""
+    cleaned, marked = strip_no_cite_marker("")
+    assert cleaned == ""
+    assert marked is False
 
 
 # ---------------- 拒答识别 ----------------

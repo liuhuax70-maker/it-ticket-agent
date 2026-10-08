@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from packages.common.constants import REFUSE_MARKER
+from packages.common.constants import NO_CITE_MARKER, NO_CONTEXT_NOTICE, REFUSE_MARKER
 from packages.common.errors import ConfigError
 from packages.common.ids import content_hash, stable_chunk_id, stable_doc_id
 from packages.common.settings import BaseAppSettings
@@ -149,7 +149,7 @@ def test_prompt_registry_reads_versioned_template() -> None:
     assert {"refuse_text", "context", "query"} <= registry.variables("rag_answer", "v1")
 
 
-@pytest.mark.parametrize("version", ["v1", "v2", "v3", "v4"])
+@pytest.mark.parametrize("version", ["v1", "v2", "v3", "v4", "v5"])
 def test_every_declared_prompt_version_renders(version: str) -> None:
     """模板是契约：`ANSWER_PROMPT_VERSION` 指向哪个版本，那个版本就必须存在且可渲染。
 
@@ -166,8 +166,64 @@ def test_every_declared_prompt_version_renders(version: str) -> None:
         query="问题",
         refuse_marker=REFUSE_MARKER,
         refuse_text="不知道",
+        no_context_notice=NO_CONTEXT_NOTICE,
+        no_cite_marker=NO_CITE_MARKER,
     )
     assert "{{" not in rendered, "渲染后不能残留占位符"
+
+
+def test_fallback_prompt_distinguishes_greeting_from_substantive() -> None:
+    """降级提示词必须把「寒暄」和「实质问题」分开处理。
+
+    为什么要钉这一条：检索为空时若只要求"声明知识库没有内容再回答"，
+    模型会对「你好」也回一句"知识库中没有检索到相关内容"——用户问好却拿到免责声明，
+    比不回答还糟。这两类必须显式分流，且寒暄分支禁止提到知识库。
+    """
+    template = get_prompt_registry().get("rag_fallback", "v1")
+    assert "{{no_context_notice}}" in template, "缺少来源声明占位符"
+    # A 类：寒暄必须存在，且明确禁止提"知识库"
+    assert "A 类" in template and "不要" in template
+    # B 类：实质问题必须要求先声明来源
+    assert "B 类" in template
+    # 无论哪一类都必须禁止编造引用
+    assert "禁止" in template and "[1]" in template
+
+
+def test_fallback_prompt_renders_with_notice() -> None:
+    rendered = get_prompt_registry().render(
+        "rag_fallback",
+        "v1",
+        query="年假多少天？",
+        no_context_notice=NO_CONTEXT_NOTICE,
+        no_cite_marker=NO_CITE_MARKER,
+    )
+    assert "{{" not in rendered
+    assert NO_CONTEXT_NOTICE in rendered
+    assert "年假多少天？" in rendered
+
+
+def test_no_cite_marker_is_declared_in_v5_and_fallback() -> None:
+    """v5 主提示词与降级提示词都必须要求输出「本回答不附引用」标记。
+
+    不加这个标记时，guard 的「没标引用就兜底附 top1」会生效，导致两种荒谬结果：
+    用户问「你好」得到挂着制度引用的回答；答案写着「资料中没有相关内容」
+    却脚挂一条引用。两者都会让用户误以为通用建议有公司制度背书。
+    """
+    registry = get_prompt_registry()
+    for name, version in (("rag_answer", "v5"), ("rag_fallback", "v1")):
+        template = registry.get(name, version)
+        assert "{{no_cite_marker}}" in template, f"{name}.{version} 缺少 no_cite_marker 占位符"
+        rendered = registry.render(
+            name,
+            version,
+            context="c",
+            query="q",
+            refuse_marker=REFUSE_MARKER,
+            refuse_text="t",
+            no_context_notice=NO_CONTEXT_NOTICE,
+            no_cite_marker=NO_CITE_MARKER,
+        )
+        assert NO_CITE_MARKER in rendered, f"{name}.{version} 渲染后必须含标记"
 
 
 def test_v4_declares_materials_are_data_not_instructions() -> None:

@@ -16,7 +16,12 @@ from app.clients.model_gateway import ModelGatewayClient
 from app.config import Settings
 from app.graph.nodes.base import add_error, merge_timing
 from app.graph.state import RAGState
-from packages.common.constants import REFUSE_MARKER, REFUSE_TEXT
+from packages.common.constants import (
+    NO_CITE_MARKER,
+    NO_CONTEXT_NOTICE,
+    REFUSE_MARKER,
+    REFUSE_TEXT,
+)
 from packages.common.logging import get_logger
 from packages.contracts import ChatMessage, Citation, CompletionRequest, SearchHit
 from packages.prompts import get_prompt_registry
@@ -45,6 +50,19 @@ _REFUSAL_PATTERNS = (
 # 兜底层只对「短句」生效：长答案里出现「未提及」通常是在说明局部信息
 # （如「手册未提及加班费，但规定了年假……」），那是有内容的正常回答。
 _MAX_REFUSAL_LEN = 80
+
+
+def strip_no_cite_marker(answer: str) -> tuple[str, bool]:
+    """剥离 ``NO_CITE_MARKER``，返回 (净化后的答案, 是否带过该标记)。
+
+    标记存在的含义是：模型明确声明「本次回答不应带引用」（寒暄 / 声明无资料的
+    通用回答）。这时 guard 的「没标引用就兜底附 top1」必须让位——否则会出现
+    「答案说资料里没有，脚上却挂着一条引用」这种自相矛盾，且用户无从分辨。
+    """
+    if NO_CITE_MARKER not in (answer or ""):
+        return answer or "", False
+    cleaned = (answer or "").replace(NO_CITE_MARKER, "")
+    return cleaned.strip(), True
 
 
 def detect_refusal(answer: str) -> bool:
@@ -82,6 +100,15 @@ def build_citations(answer: str, hits: list[SearchHit]) -> tuple[list[Citation],
         (citations, 是否发生了兜底)
         模型漏标引用时兜底附上 top1 —— 「引用非空」是接口契约，
         但兜底必须在 errors 里留痕，避免把兜底当成正常行为。
+
+    曾经试过加一个「答案太短就不兜底」的闸门，用来避免「你好！有什么可以帮你的吗？」
+    这类寒暄被挂上制度引用。**已放弃**：长度区分不出寒暄和实质回答——
+    「你好！有什么可以帮你的吗」（13 字）与「转正后凭发票报销，上限五百元。」（15 字）
+    长度几乎相同，按长度取舍必然一边误伤（实测确实误伤了后者，测试直接挂掉）。
+    真正的解法是让检索层能表达「无相关结果」，而这需要标定相关性阈值：
+    混合检索的 RRF 分数只反映排名，表达不了相关性，所以现在**没有**可用信号。
+    在那之前靠提示词侧的 ``NO_CITE_MARKER`` 降低概率，兜底逻辑保持原样——
+    宁可让寒暄偶发挂错引用，也不要在正常问答上丢掉引用。
     """
     if not hits:
         return [], False
@@ -154,6 +181,11 @@ def make_guard_node(model_gateway: ModelGatewayClient, settings: Settings):
         answer = (state.get("answer") or "").strip()
         hits = list(state.get("hits") or [])
 
+        # 0) 先剥离「本回答不应带引用」标记（寒暄 / 声明无资料的通用回答）。
+        #    必须在拒答识别**之前**：这类回答里常含"没有检索到相关内容"之类表述，
+        #    先剥离才不会在下一步被当成拒答而丢掉内容。
+        answer, marked_no_cite = strip_no_cite_marker(answer)
+
         # 1) 拒答识别：统一话术并清空引用。
         #    引用意味着「有资料支撑」，挂在拒答上等于误导用户，必须清掉。
         if detect_refusal(answer):
@@ -171,12 +203,18 @@ def make_guard_node(model_gateway: ModelGatewayClient, settings: Settings):
                 else list(state.get("errors") or []),
             )
 
-        # 2) 引用映射
-        citations, fallback = build_citations(answer, hits)
+        # 2) 引用映射。模型显式声明过"本次不该带引用"时，跳过兜底：
+        #    寒暄或"声明无资料"的回答挂上 top1 引用，是自相矛盾且会误导用户。
         errors = list(state.get("errors") or [])
-        if fallback:
-            logger.warning("答案未标注引用，已兜底附 top1")
-            errors = add_error(state, "citation_fallback_to_top1")
+        if marked_no_cite:
+            logger.info("回答声明不附引用（寒暄/无资料通用回答），跳过引用兜底")
+            errors = add_error(state, "no_cite_marker")
+            citations, fallback = [], False
+        else:
+            citations, fallback = build_citations(answer, hits)
+            if fallback:
+                logger.warning("答案未标注引用，已兜底附 top1")
+                errors = add_error(state, "citation_fallback_to_top1")
 
         # 3) 可选 LLM 合规审核（默认关闭）
         refused = False
@@ -211,23 +249,51 @@ def make_guard_node(model_gateway: ModelGatewayClient, settings: Settings):
     return guard
 
 
-def make_refuse_node(settings: Settings):  # noqa: ARG001
-    """拒答出口：**不调用 LLM**，从源头堵死幻觉。
+def make_refuse_node(model_gateway: ModelGatewayClient, settings: Settings):
+    """无资料 / 生成失败出口。
 
-    有两条路会走到这里，原因完全不同，错误标签必须分开——
-    统一记 ``empty_retrieval`` 会把排障的人引去查检索服务，
-    而真凶可能是模型返回了空（服务其实一切正常）。
+    两条路走到这里，**处理方式不同**：
+
+    1. ``empty_generation``（检索有结果但生成为空）—— 模型异常或被截断。
+       仍走拒答：这时候连"资料都没找到"都说不准，用通用知识回答会掩盖故障。
+    2. ``empty_retrieval``（检索为空）—— 按 ``ANSWER_FALLBACK_ENABLED`` 决定：
+       开启时走**通用回答**（见 :func:`_fallback_answer`），关闭时保持历史拒答行为。
+
+    为什么检索为空不再直接拒答：知识库是**可选的信息来源**，不该成为回答的闸门。
+    用户输入「你好」或「年假多少天」而库里没有，不该回一句冷冰冰的「无法回答」。
+
+    但降级答案必须显式声明来源不来自知识库（见 :data:`NO_CONTEXT_NOTICE`）：
+    本项目是制度问答，用户可能把答案当作公司规定去执行。
     """
 
     async def refuse(state: RAGState) -> dict:
         started = time.perf_counter()
+        query = state.get("query", "")
         if state.get("hits"):
-            # 检索有结果但生成为空：模型异常/被截断
             reason = "empty_generation"
-            logger.info("生成为空，走拒答出口 query=%r", state.get("query", "")[:60])
+            logger.info("生成为空，走拒答出口 query=%r", query[:60])
+        elif settings.answer_fallback_enabled:
+            logger.info("检索为空，走通用回答 query=%r", query[:60])
+            answer = await _fallback_answer(model_gateway, state)
+            if answer:
+                answer, _ = strip_no_cite_marker(answer)
+                # citations 必须空：通用知识没有任何资料支撑，挂引用就是编造。
+                return merge_timing(
+                    state,
+                    "guard",
+                    started,
+                    answer=answer,
+                    citations=[],
+                    refused=False,
+                    no_context=True,
+                    errors=add_error(state, "no_context_fallback"),
+                )
+            # 降级生成本身失败（模型不可用等）：落回拒答，不能让请求变成 5xx
+            logger.warning("通用回答生成失败，回退拒答 query=%r", query[:60])
+            reason = "fallback_generation_failed"
         else:
             reason = "empty_retrieval"
-            logger.info("检索为空，走拒答出口 query=%r", state.get("query", "")[:60])
+            logger.info("检索为空且未开启通用回答，走拒答出口 query=%r", query[:60])
         return merge_timing(
             state,
             "guard",
@@ -239,3 +305,40 @@ def make_refuse_node(settings: Settings):  # noqa: ARG001
         )
 
     return refuse
+
+
+async def _fallback_answer(model_gateway: ModelGatewayClient, state: RAGState) -> str:
+    """无资料时生成通用回答：让模型区分「寒暄」与「实质问题」。
+
+    寒暄（"你好"）直接友好回应——回一句"知识库里没有相关内容"是荒谬的；
+    与公司制度相关但无资料的，才声明来源并给通用知识。
+
+    返回空字符串表示生成失败，调用方回退到拒答。
+    """
+    registry = get_prompt_registry()
+    try:
+        prompt = registry.render(
+            "rag_fallback",
+            "v1",
+            query=state.get("query", ""),
+            no_context_notice=NO_CONTEXT_NOTICE,
+            no_cite_marker=NO_CITE_MARKER,
+        )
+    except Exception as exc:  # noqa: BLE001 - 模板缺失不应让请求失败
+        logger.error("渲染 rag_fallback 提示词失败: %s", exc)
+        return ""
+
+    try:
+        resp = await model_gateway.complete(
+            CompletionRequest(
+                messages=[ChatMessage(role="user", content=prompt)],
+                # 评测传 0 换可复现，这里沿用同一个值，不另造随机性来源
+                temperature=state.get("temperature"),
+                max_tokens=512,
+                tenant_id=state.get("tenant_id"),
+            )
+        )
+    except Exception as exc:  # noqa: BLE001 - 降级失败由调用方兜底
+        logger.warning("通用回答调用失败: %s", exc)
+        return ""
+    return (resp.answer or "").strip()

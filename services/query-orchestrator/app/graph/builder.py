@@ -74,7 +74,7 @@ def build_graph(
     graph.add_node(NODE_RERANK, make_rerank_node(retrieval, settings))
     graph.add_node(NODE_GENERATE, make_generate_node(model_gateway, settings))
     graph.add_node(NODE_GUARD, make_guard_node(model_gateway, settings))
-    graph.add_node(NODE_REFUSE, make_refuse_node(settings))
+    graph.add_node(NODE_REFUSE, make_refuse_node(model_gateway, settings))
     graph.add_node(NODE_CACHE_STORE, make_cache_store_node(cache, settings))
 
     graph.add_edge(START, NODE_CACHE_LOOKUP)
