@@ -1,0 +1,41 @@
+name: 功能建议
+description: 提出新能力或改进
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        建议先描述场景与动机，不要直接提大 PR。本项目的关键取舍记录在 `docs/adr/`，
+        提建议前先看看是否已有相关决策。
+
+  - type: textarea
+    id: scenario
+    attributes:
+      label: 场景
+      description: 谁、在什么情况下、需要什么
+    validations:
+      required: true
+
+  - type: textarea
+    id: motivation
+    attributes:
+      label: 动机
+      description: 现状哪里不够用
+    validations:
+      required: true
+
+  - type: textarea
+    id: tradeoff
+    attributes:
+      label: 与现有设计的取舍
+      description: |
+        是否与以下既有约束冲突：
+        - 权限过滤下沉到存储层（不在应用层裁剪 top_k）
+        - 缓存键含身份维度
+        - 检索为空即拒答、不调用 LLM
+        - 文档生命周期库层过滤
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: 考虑过的替代方案

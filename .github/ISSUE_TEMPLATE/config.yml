@@ -1,0 +1,5 @@
+blank_issues_enabled: true
+contact_links:
+  - name: 安全漏洞（不要公开提交 issue）
+    url: https://github.com/liuhuax70-maker/permission-aware-rag/security/advisories/new
+    about: 请通过 GitHub Security Advisory 私下报告，我们会在确认后给出修复与披露时机。

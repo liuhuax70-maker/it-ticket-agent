@@ -4,9 +4,7 @@
 
 ## 行为准则
 
-讨论中对人友善，尊重不同意见。提技术意见时对事不对人。
-
-> 本仓库尚未提供 `CODE_OF_CONDUCT.md`；如需正式的贡献者行为准则，请先补充后再把上文链接化。
+参与即表示同意遵守 [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md)。
 
 ## 贡献方式
 
@@ -18,21 +16,13 @@
 
 ## 报告 bug
 
-提交 issue 时请包含：
+请使用 [bug 报告模板](.github/ISSUE_TEMPLATE/bug_report.yml)，其中会引导你填完版本 / commit、运行环境、复现步骤、期望与实际结果、日志。
 
-- 版本 / commit
-- 操作系统和运行环境（Python 版本、是否 Docker、本地还是容器）
-- 复现步骤
-- 期望结果和实际结果
-- 日志或截图
-
-> 本仓库尚未配置 issue 模板；如需结构化收集上述信息，可在 `.github/ISSUE_TEMPLATE/` 下补充。
-
-**安全漏洞不要开公开 issue**，请私下联系维护者（见「沟通」一节）。
+**安全漏洞不要开公开 issue**，请通过 [GitHub Security Advisory](https://github.com/liuhuax70-maker/permission-aware-rag/security/advisories/new) 私下报告。
 
 ## 功能建议
 
-先开 issue 讨论场景和动机，不要直接写大 PR。已有实现方向时，说明它与现有设计的取舍关系——本项目多数关键取舍有 `docs/adr/` 记录，新增前先看看是否已有相关决策。
+先开 [功能建议 issue](.github/ISSUE_TEMPLATE/feature_request.yml) 讨论场景与动机，不要直接写大 PR。已有实现方向时，说明它与现有设计的取舍关系——本项目多数关键取舍记录在 `docs/adr/`，新增前先看看是否已有相关决策。
 
 ## 开发环境
 
@@ -92,30 +82,19 @@ make test-packages    # 只跑共享库
 1. 切分支
 2. 修改代码并补测试
 3. 跑 `make fmt-check lint type-check test`
-4. 提 PR，描述里覆盖下方清单
+4. 提 PR（自动套用 [PR 模板](.github/PULL_REQUEST_TEMPLATE.md)，含检查清单）
 5. 等 review，按反馈修改
 
-PR 检查清单：
-
-- [ ] 测试通过
-- [ ] 加了测试
-- [ ] 更新了文档
-- [ ] 没有无关改动
-- [ ] 涉及鉴权 / 权限 / 限流 / 审计的改动，注释写明了 fail-closed / fail-open 取舍
-- [ ] 行为变更同步更新了 `configs/` 下的配置版本或 `docs/` 文档
-
-> 本仓库尚未配置 PR 模板；如需自动化，可在 `.github/PULL_REQUEST_TEMPLATE.md` 下补充。
+改动涉及权限语义（ACL 过滤下推、缓存键身份维度、拒答行为、生命周期过滤）时，PR 模板要求你说明验证过隔离矩阵：`python scripts/verify_permissions.py`。这类回归往往在功能测试里看不出来。
 
 ## Review 与合并
 
 维护者会尽量在数日内回复。小 PR 更容易合并。合并权在维护者。
 
-改动涉及权限语义（ACL 过滤下推、缓存键身份维度、拒答行为、生命周期过滤）时，请说明你验证过隔离矩阵：`python scripts/verify_permissions.py`。这类的回归往往在功能测试里看不出来。
-
 ## 沟通
 
-- Issue：https://github.com/liuhuax70-maker/permission-aware-rag/issues
-- 邮件 / 内部沟通渠道：待补充
+- Issue 与 PR：https://github.com/liuhuax70-maker/permission-aware-rag/issues
+- 安全漏洞：走 [Security Advisory](https://github.com/liuhuax70-maker/permission-aware-rag/security/advisories/new)，不要公开提交
 
 ## 许可证
 

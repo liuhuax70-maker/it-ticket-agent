@@ -1,0 +1,81 @@
+name: 报告 bug
+description: 报告可复现的缺陷
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: 感谢反馈。请先搜索现有 issue，确认不是重复问题。
+
+  - type: input
+    id: version
+    attributes:
+      label: 版本 / commit
+      placeholder: 如 0.1.0 / a1b2c3d
+    validations:
+      required: true
+
+  - type: input
+    id: env
+    attributes:
+      label: 运行环境
+      description: Python 版本、操作系统、是否 Docker、本地运行还是容器
+      placeholder: Python 3.11 / Windows 11 / Docker Compose
+    validations:
+      required: true
+
+  - type: textarea
+    id: repro
+    attributes:
+      label: 复现步骤
+      placeholder: |
+        1. 执行 …
+        2. 调用 …（给出请求体或命令）
+        3. 观察 …
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: 期望结果
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: 实际结果
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: 日志或截图
+      description: 请用代码块包裹。务必脱敏：不要贴令牌、密钥、内部地址。
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: 问题发生在哪个环节
+      options:
+        - 接入 / 切分
+        - 检索 / 排序
+        - 生成 / 拒答
+        - 权限过滤 / 越权
+        - 网关 / 鉴权 / 限流
+        - 评测 / 门禁
+        - 部署 / 可观测性
+        - 其他
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: 提交前确认
+      options:
+        - label: 已搜索现有 issue，确认不是重复问题
+          required: true
+        - label: 日志已脱敏（不含令牌 / 密钥）
+          required: true
