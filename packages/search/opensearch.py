@@ -239,20 +239,21 @@ class OpenSearchStore:
     def _compile_filter(filters: FilterDict | None) -> list[dict[str, Any]]:
         """把过滤契约翻译成 OpenSearch bool 查询片段。
 
-        这段是 ACL 在检索侧的**唯一执行点**，与
+        这是 ACL 在检索侧的**唯一执行点**，与
         :meth:`packages.vectorstores.milvus.MilvusStore._compile_expr` 必须 1:1 对应
-        （语义源是 ``packages/retrievers/filters.py`` 的模块 docstring）。
+        （语义源见 :mod:`packages.retrievers.filters`）。
 
         三个容易踩的点：
-            * **用 filter 不用 must**：``filter`` 子句不打分，``must`` 会参与 BM25
-              计算。把 tenant/visibility 写进 must 会污染相关性排序。
-            * **clause 之间 OR、clause 内部 AND**：visibility_clauses 里每条是
-              "可见性 + 归属"的合取，条与条之间是互斥的可见性类别（取其一）。
-            * ``minimum_should_match: 1`` 显式写出下限。它在纯 should 下默认值也是 1，
-              但一旦有人把这段挪进 must 或改成顶层 should，缺了它过滤会退化成 match-all
-              ——这类退化不会报错，只会静默地多召回别人的文档。
 
-        返回空列表等价于 match-all（无过滤），语义与 Milvus 的 ``expr=""`` 一致。
+        * **用 filter 不用 must**：``filter`` 子句不打分，``must`` 会参与 BM25 计算，
+          把 tenant / visibility 写进 must 会污染相关性排序。
+        * **clause 之间 OR、clause 内部 AND**：visibility_clauses 每条是"可见性 + 归属"的
+          合取，条与条之间是互斥的可见性类别。
+        * ``minimum_should_match: 1`` 必须显式写出：纯 should 下默认值也是 1，但一旦这段被
+          挪进 must 或改成顶层 should，缺了它过滤会退化成 match-all——且不会报错，只会静默
+          多召回别人的文档。
+
+        返回空列表等价 match-all（无过滤），与 Milvus 的 ``expr=""`` 语义一致。
         """
         if not filters:
             return []

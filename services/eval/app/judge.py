@@ -1,19 +1,15 @@
 """RAGAS 裁判适配器：把项目自己的 LLMClient 接到 RAGAS 上。
 
-为什么不直接用 ragas 自带的两种方式：
+不用 ragas 自带的两种方式：``llm_factory`` 走 OpenAI 兼容协议，而本地裁判是思考型模型，
+在兼容协议下关不掉思考链、content 为空，RAGAS 会拿到空字符串、所有指标变 NaN 且看不出
+原因；``langchain-ollama`` 能关思考链但要多引一套依赖，模型解析逻辑还会与项目的双模解析
+分裂成两份。
 
-1. ``llm_factory(...)`` 走 OpenAI 兼容协议。本地裁判是思考型模型（qwen3 等），
-   在兼容协议下**关不掉思考链**，输出预算被思维链吃光、content 为空，
-   RAGAS 会拿到空字符串——所有指标 NaN，而且看不出原因。
-2. ``langchain-ollama`` 能关思考链，但要多引一套依赖，而且模型解析逻辑
-   会和项目里的 DeepSeek/本地双模解析分裂成两份。
+复用自己的 LLMClient 后，本地端点用 ``LOCAL_LLM_API_STYLE=ollama`` + ``LOCAL_LLM_THINK=false``
+即可关掉思考链，切 DeepSeek 官方 API 时同一份代码不用改。
 
-复用自己的 LLMClient 之后：
-    本地端点用 ``LOCAL_LLM_API_STYLE=ollama`` + ``LOCAL_LLM_THINK=false`` 就已经关掉思考链，
-    切 DeepSeek 官方 API 时同一份代码也不用改。
-
-另一个刻意的设计：``is_finished`` 判空返回 False。RAGAS 会因此抛
-``LLMDidNotFinishException``——宁可响亮地失败，也不要静默产出一堆 NaN 分数。
+``is_finished`` 判空返回 False 是刻意的：RAGAS 会抛 ``LLMDidNotFinishException``，
+宁可响亮地失败，也不要静默产出一堆 NaN 分数。
 """
 
 from __future__ import annotations

@@ -1,23 +1,12 @@
 """进程内指标采集与 Prometheus 文本导出。
 
-**为什么不引 prometheus_client**：本项目需要的只是「计数器 / 仪表 / 直方图」三种原语
-和一段文本曝露格式，自己实现约 150 行且完全可控；引一个依赖会让镜像多一份供应链风险，
-而它真正值钱的部分（多进程聚合、pushgateway、自定义 collector）我们都没用到。
-取舍与本项目自写 RAGAS 裁判适配器一致。
+**不引 prometheus_client**：本项目只需要计数器 / 仪表 / 直方图三种原语加一段文本导出格式，
+自己实现可控且少一份供应链依赖；它值钱的部分（多进程聚合、pushgateway、自定义 collector）
+都没用到。
 
-**为什么必须做路径归一化**：`/documents/d_830daea6` 这类路径如果原样当标签，
-每个文档都会生成一个时间序列，几次爬取就能把 Prometheus 打爆（基数爆炸）。
-所以标签取**路由模板**（`/documents/{doc_id}`）而不是实际 URL；匹配不到路由的一律
-归到 `<unmatched>`。
-
-指标语义（支撑验收里的可用性 / 错误率 / P95 / 拒答率）：
-
-    http_requests_total{service,method,route,status}        请求计数，按状态码分桶 → 可用性与错误率
-    http_request_duration_seconds{service,method,route}     延迟直方图 → P95/P99
-    http_requests_in_progress{service}                      并发请求数 → 拥塞判断
-    rag_answer_total{outcome}                               answered/refused/error → 拒答率与错误率
-    rag_cache_lookups_total{result}                         缓存命中率
-    rag_acl_missing_total                                   检索未携带 ACL 的次数（**生产必须为 0**）
+**标签必须做路径归一化**：``/documents/d_830daea6`` 原样当标签会让每个文档生成一条时间
+序列，几次爬取就能打爆 Prometheus。所以标签取**路由模板**而非实际 URL，匹配不到路由的
+归到 ``<unmatched>``。指标清单见 README 第7 节。
 """
 
 from __future__ import annotations

@@ -1,20 +1,15 @@
 """接入编排：解析 -> 切分 -> 落元数据 -> 同步直连入库。
 
-顺序设计（**仅同步直连模式成立**）：
-    1. 先建/更新 documents 行（status=pending）与 chunks 明细；
-    2. 再调用 indexing 写检索索引；
-    3. 只有第 2 步成功才把 status 置为 indexed。
-这样任何时刻「元数据说已索引」都意味着索引真的写了，不会出现半成品状态。
+顺序（仅同步直连模式成立）：先写 documents 行（status=pending）与 chunks 明细，再调
+indexing 写索引，只有成功才把 status 置 indexed——这样「元数据说已索引」永远意味着索引
+真的写了，不会出现半成品状态。
 
-两种模式必须区分（``USE_KAFKA`` 切换，见 :class:`~app.producers.ChunkSink`）：
-    * **HTTP 直连**：``send()`` 返回前索引已写完，上面那条不变量成立；
-    * **Kafka**：``send()`` 只表示**事件投递成功**（见 producers.py 的说明），
-      此时 status=indexed 的含义是"已投递"，检索可见性最终一致。
-      按 status 判断"能不能检索到"只在直连模式下有效。
+两种模式语义不同（``USE_KAFKA`` 切换）：HTTP 直连下 ``send()`` 返回时索引已写完；Kafka 下
+``send()`` 只表示事件投递成功，status=indexed 的含义是"已投递"、检索可见性最终一致，
+按 status 判断"能不能检索到"只在直连模式下有效。
 
-另外，即使在直连模式下，第 3 步也只判断了调用是否抛异常，**没有区分 indexing
-返回的 partial 状态**（例如 Milvus 成功而 OpenSearch 失败）。要严格判断，
-需要额外检查返回体的 status 字段。
+已知缺口：直连模式最后一步只判断调用是否抛异常，**没有区分 indexing 返回的 partial 状态**
+（例如 Milvus 成功而 OpenSearch 失败）。
 """
 
 from __future__ import annotations

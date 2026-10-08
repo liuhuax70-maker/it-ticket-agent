@@ -1,19 +1,15 @@
 """重建检索索引：Milvus 集合 + 从语料重新入库。
 
-什么时候需要它：
-    **给向量集合加字段的时候。** Milvus 的 schema 没有 alter（`_ensure_collection_sync`
-    是"不存在才建"），新增标量字段对已有集合**不会生效**，写入时会被拒。
-    所以加字段 = 重建集合 = 重新入库，这条路径必须存在且可执行。
-
-    同理，切分参数（chunk_size/overlap）改变也属于换 ID 空间，需要重建（见 README）。
+**给向量集合加字段时必须走这里**：Milvus schema 没有 alter（``_ensure_collection_sync``
+只"不存在才建"），新增标量字段对已有集合不生效、写入时会被拒。切分参数变更同样属于换
+ID 空间（见 :func:`packages.common.ids.stable_chunk_id`），也需重建。
 
 用法：
-    python scripts/rebuild_index.py                # 重建 Milvus 集合并重新入库全部语料
+    python scripts/rebuild_index.py# 重建 Milvus 集合并重新入库全部语料
     python scripts/rebuild_index.py --dry-run      # 只打印将要做的事
 
-前置条件：语料在仓库里（`data/corpus`、`data/corpus_permissions`），
-索引可以完全由它们重建。若语料不完整，重建会造成数据丢失——
-因此脚本默认**先确认当前语料可读**，再动手。
+前提是语料在仓库里（``data/corpus``、``data/corpus_permissions``）且索引可完全由它们重建——
+语料不完整时重建会造成数据丢失，所以脚本动手前先确认语料可读。
 """
 
 from __future__ import annotations
