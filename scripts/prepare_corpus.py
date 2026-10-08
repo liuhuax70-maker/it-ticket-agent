@@ -45,6 +45,11 @@ GENERAL_WRITER = "carol"
 
 
 async def _headers(tokens: TokenProvider, username: str) -> dict[str, str]:
+    """为某用户取 JWT 并组装 Authorization 头；取不到令牌则空头上送。
+
+    空头上送是为了兼容 AUTHZ_ENABLED=false 的本地模式——
+    那时代理不校验身份，带不带令牌都一样，脚本不该因此报错退出。
+    """
     token = await tokens.token(username)
     if token:
         return {"Authorization": f"Bearer {token}"}
@@ -52,6 +57,11 @@ async def _headers(tokens: TokenProvider, username: str) -> dict[str, str]:
 
 
 async def prepare_general(tokens: TokenProvider, *, reindex: bool) -> dict:
+    """以 ``GENERAL_WRITER`` 身份批量接入通用语料。
+
+    超时 1800s：大目录解析+嵌入+建索引整体很慢。返回 body 供调用方
+    （verify_acl 之外）按需取文档/分块数，避免二次探测。
+    """
     path = ROOT / GENERAL_DIR
     count = len(list(path.glob("*.md")))
     async with httpx.AsyncClient(timeout=1800.0) as client:
@@ -123,6 +133,11 @@ async def verify_acl(tokens: TokenProvider, doc_ids: dict[str, str]) -> bool:
 
 
 async def main() -> int:
+    """CLI 入口：按 --only 决定准备哪些语料；permissions 分支会再回读台账核对 ACL。
+
+    ACL 核对失败（返回 1）是"硬性失败"——它意味着网关身份注入或下游
+    ACL 写入可能与预期不一致，必须拦在评测前，否则权限用例会假绿。
+    """
     parser = argparse.ArgumentParser(description="准备知识库语料")
     parser.add_argument("--only", choices=["general", "permissions"], default=None)
     parser.add_argument("--no-reindex", action="store_true", help="不清理旧分块（内容未变时更快）")

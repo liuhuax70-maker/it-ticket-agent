@@ -33,6 +33,10 @@ EVAL_URL = os.getenv("RAG_EVAL_URL", "http://localhost:8006")
 
 
 def _print_summary(summary: dict) -> None:
+    """把评测 summary 按 L1（确定性）+ L2（RAGAS）两段打印到终端。
+
+    两个 MRR 标签必须区分「引用序/检索侧」——它们是不同量，混在一起会被误读成重复指标。
+    """
     def pct(value: object) -> str:
         return "—" if value is None else f"{float(value) * 100:.1f}%"
 
@@ -67,6 +71,7 @@ def _print_summary(summary: dict) -> None:
 
 
 async def _post(client: httpx.AsyncClient, path: str, payload: dict) -> tuple[int, dict]:
+    """POST 到 eval 服务；网络/HTTP 错误都归一化成 (1, {})，让上层统一判失败。"""
     try:
         resp = await client.post(f"{EVAL_URL}{path}", json=payload)
     except Exception as exc:  # noqa: BLE001
@@ -79,6 +84,11 @@ async def _post(client: httpx.AsyncClient, path: str, payload: dict) -> tuple[in
 
 
 async def run(args: argparse.Namespace) -> int:
+    """跑一次评测并据结果控退出码：越权泄露（leak_count>0）直接返回 2 这个绝对不变量。
+
+    ``--rescore`` 复用上次采集结果只重打分，省下打真实链路的成本；
+    ``--preflight`` 仅校验语料就绪，不消耗模型额度。
+    """
     payload: dict = {"dataset_path": args.dataset, "limit": args.limit, "write_report": True}
     async with httpx.AsyncClient(timeout=7200.0) as client:
         if args.preflight:
@@ -128,6 +138,7 @@ async def run(args: argparse.Namespace) -> int:
 
 
 def main() -> int:
+    """CLI 入口：解析评测参数并异步驱动一次评测跑批。"""
     parser = argparse.ArgumentParser(description="RAG 评测跑批（L1 确定性 + L2 RAGAS）")
     parser.add_argument("--dataset", default=None, help="评测集路径（默认用服务配置）")
     parser.add_argument("--limit", type=int, default=None, help="样本数上限")

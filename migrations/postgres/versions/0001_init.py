@@ -20,6 +20,12 @@ depends_on: str | Sequence[str] | None = None
 
 
 def upgrade() -> None:
+    """建库初版：租户 / 文档 / 分块 / 接入作业 / 反馈 五张表。
+
+    关键取舍：chunks 冗余存 tenant_id/department_id/visibility，
+    让存储层（Milvus/OpenSearch）能直接按这些标量做权限过滤，
+    不必每次检索都回 join documents；FK 用 ondelete=CASCADE 保证删文档连带清分块。
+    """
     op.create_table(
         "tenants",
         sa.Column("id", sa.String(64), primary_key=True),
@@ -136,6 +142,7 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    """逆序回退初版：先删有外键依赖的表，再删被引用的 documents / tenants。"""
     op.drop_table("feedback")
     op.drop_table("ingestion_jobs")
     op.drop_table("chunks")

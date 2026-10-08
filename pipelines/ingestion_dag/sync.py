@@ -28,6 +28,7 @@ _SUPPORTED = {".md", ".markdown", ".txt", ".pdf"}
 
 
 def _iter_files(root: Path, rel_base: Path) -> list[tuple[Path, str]]:
+    """递归收集受支持类型的文件，返回 (绝对路径, 相对 rel_base 的 source)。"""
     files: list[tuple[Path, str]] = []
     for path in sorted(root.rglob("*")):
         if path.is_file() and path.suffix.lower() in _SUPPORTED:
@@ -36,6 +37,11 @@ def _iter_files(root: Path, rel_base: Path) -> list[tuple[Path, str]]:
 
 
 async def sync(root: Path, *, reindex: bool, dry_run: bool) -> int:
+    """增量同步语料：按 doc_id 存在性 + content_hash 决定 create/update/skip。
+
+    相同 doc_id 且哈希一致才跳过，保证「改了内容会更新、没改不重复建索引」。
+    --dry-run 只打印计划不写入。
+    """
     files = _iter_files(root, ROOT)
     if not files:
         print(f"[sync] {root} 下没有可同步的文件")
@@ -103,6 +109,7 @@ async def sync(root: Path, *, reindex: bool, dry_run: bool) -> int:
 
 
 def main() -> int:
+    """CLI 入口：解析语料路径与 dry-run/reindex 开关，异步驱动增量同步。"""
     parser = argparse.ArgumentParser(description="语料增量同步")
     parser.add_argument("--path", default="data/corpus")
     parser.add_argument("--reindex", action="store_true", help="强制重建索引")

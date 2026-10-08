@@ -114,6 +114,11 @@ def check(condition: bool, message: str) -> bool:
 
 
 def wait_keycloak(timeout: int = 180) -> None:
+    """轮询 Keycloak 的 .well-known 配置直到就绪；超时则直接退出。
+
+    权限验收全程依赖真实令牌，Keycloak 没起来后面每步都会假失败，
+    所以宁可阻塞等它，也不要带着不可达依赖硬跑。
+    """
     deadline = time.time() + timeout
     while time.time() < deadline:
         try:
@@ -129,6 +134,7 @@ def wait_keycloak(timeout: int = 180) -> None:
 
 
 def token(username: str) -> str:
+    """用密码模式向 Keycloak 取某账号的 access_token（权限验收只用真身份）。"""
     resp = httpx.post(
         f"{KEYCLOAK}/protocol/openid-connect/token",
         data={
@@ -146,12 +152,18 @@ def token(username: str) -> str:
 
 
 def decode_claims(access_token: str) -> dict:
+    """不校验签名地解出 JWT payload，仅用于回显 tenant/department/roles 做断言。
+
+    注意：这里不验签，因为本脚本本身就是用同一套 Keycloak 取的令牌，
+    断言的是「网关侧解析出的声明是否符合预期」，而非令牌真伪。
+    """
     part = access_token.split(".")[1]
     part += "=" * (-len(part) % 4)
     return json.loads(base64.urlsafe_b64decode(part))
 
 
 def chat(access_token: str | None, query: str) -> dict:
+    """以某身份走网关 /chat；非 2xx 抛错（权限探针要的是确定性结果，不应静默吞）。"""
     headers = {"Authorization": f"Bearer {access_token}"} if access_token else {}
     resp = httpx.post(f"{GATEWAY}/chat", json={"query": query}, headers=headers, timeout=180)
     if resp.status_code != 200:
@@ -160,6 +172,7 @@ def chat(access_token: str | None, query: str) -> dict:
 
 
 def upload(access_token: str, filename: str, visibility: str, reindex: bool = True) -> dict:
+    """以某身份上传权限语料；可见性由参数给定，但 tenant/department 由网关按身份覆盖。"""
     path = CORPUS / filename
     with path.open("rb") as handle:
         resp = httpx.post(
@@ -175,6 +188,7 @@ def upload(access_token: str, filename: str, visibility: str, reindex: bool = Tr
 
 
 def list_documents(access_token: str) -> dict:
+    """拉取当前身份可见的文档台账，用于核对落库 ACL 与隔离矩阵。"""
     resp = httpx.get(
         f"{GATEWAY}/documents",
         params={"limit": 200},
@@ -186,6 +200,7 @@ def list_documents(access_token: str) -> dict:
 
 
 def cited_titles(body: dict) -> list[str]:
+    """从回答里抽出被引用的文档标题列表，作为越权对比的素材。"""
     return [c.get("doc_title") or "" for c in body.get("citations", [])]
 
 
@@ -382,7 +397,7 @@ LOCK_FILE = ROOT / "data" / "verify_permissions.lock"
 
 
 class AlreadyRunning(RuntimeError):
-    pass
+    """表明已有另一份验证进程持有锁在跑，本进程应当直接退出而非抢占。"""
 
 
 def acquire_lock() -> None:
@@ -404,6 +419,7 @@ def acquire_lock() -> None:
 
 
 def release_lock() -> None:
+    """进程退出（无论成功/失败）时删锁，避免残留锁文件挡住下一次运行。"""
     try:
         LOCK_FILE.unlink(missing_ok=True)
     except OSError:
@@ -417,6 +433,7 @@ def _current_pid() -> int:
 
 
 def _pid_alive(pid: int) -> bool:
+    """跨平台判断 pid 是否仍存活（Windows 用 tasklist，POSIX 用 kill(pid,0)）。"""
     import os
 
     if os.name == "nt":
@@ -441,6 +458,7 @@ def _pid_alive(pid: int) -> bool:
 
 
 def main() -> int:
+    """CLI 入口：入口加锁防并发，再编排各阶段；退出码非 0 即验收未通过。"""
     parser = argparse.ArgumentParser(description="权限闭环验收")
     parser.add_argument(
         "--skip-prepare",
@@ -462,6 +480,7 @@ def main() -> int:
 
 
 def _run(args: argparse.Namespace) -> int:
+    """实际验收流程：门禁→准备→隔离矩阵→存储层过滤→OPA 写权限，最后汇总结论。"""
     wait_keycloak()
 
     print("=" * 60)

@@ -38,6 +38,11 @@ def build_config(sql_only: bool = False) -> Config:
 
 
 def main() -> int:
+    """解析 CLI 参数并执行 Alembic 升级/降级。
+
+    ``--sql`` 走离线模式只打印 SQL（CI 评审迁移用），不落库；
+    其余情况直接对 ``DATABASE_URL`` 指向的库执行，失败即非零退出。
+    """
     parser = argparse.ArgumentParser(description="Postgres 迁移")
     parser.add_argument("--revision", default="head", help="目标版本（默认 head）")
     parser.add_argument("--downgrade", action="store_true", help="执行降级")

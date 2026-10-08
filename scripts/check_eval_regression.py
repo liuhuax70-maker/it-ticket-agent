@@ -68,12 +68,14 @@ ZERO_TOLERANCE = (
 
 
 def _load(path: Path) -> dict:
+    """加载评测报告 JSON；文件缺失直接退出（提醒先跑评测或建基线）。"""
     if not path.exists():
         raise SystemExit(f"找不到文件：{path}（先跑一次评测，或用 --update-baseline 建立基线）")
     return json.loads(path.read_text(encoding="utf-8"))
 
 
 def _value(report: dict, where: str, key: str):
+    """从报告里取某项指标：``l1`` 取自 summary，``l2`` 取自 summary.ragas。"""
     summary = report.get("summary") or {}
     if where == "l1":
         return summary.get(key)
@@ -81,6 +83,7 @@ def _value(report: dict, where: str, key: str):
 
 
 def _fmt(value) -> str:
+    """把指标值格式化成可对齐的短串（None 显示「—」）。"""
     if value is None:
         return "—"
     if isinstance(value, float):
@@ -89,6 +92,7 @@ def _fmt(value) -> str:
 
 
 def _snapshot(report: dict) -> dict:
+    """从报告里抽出可冻结的基线快照（指标 + 关键上下文：样本数/模型/鉴权模式）。"""
     summary = report.get("summary") or {}
     data: dict = {
         "frozen_at": summary.get("finished_at") or "",
@@ -101,6 +105,11 @@ def _snapshot(report: dict) -> dict:
 
 
 def _update_baseline(report: dict) -> int:
+    """把当前报告冻结为新基线；但带着不变量违规的报告一律拒绝冻结。
+
+    基线只允许记录"干净的当前状态"——否则基线本身就存着 leak/forbidden 违规，
+    后续门禁会比「现状 vs 违规基线」永远通过，等于关掉了零容忍不变量。
+    """
     snapshot = _snapshot(report)
     # 冻结基线时**不允许**带着不变量违规过去——否则基线本身就记录了违规状态
     for key, label in ZERO_TOLERANCE:
@@ -117,6 +126,7 @@ def _update_baseline(report: dict) -> int:
 
 
 def main() -> int:
+    """CLI 入口：先查零容忍不变量，再比指标退化（含样本数可比性防护），控制退出码。"""
     parser = argparse.ArgumentParser(description="评测回归门禁")
     parser.add_argument("--report", default=str(DEFAULT_REPORT))
     parser.add_argument("--baseline", default=str(BASELINE_PATH))

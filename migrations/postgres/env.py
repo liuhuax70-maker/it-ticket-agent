@@ -33,10 +33,15 @@ DEFAULT_URL = "postgresql+asyncpg://rag:rag@localhost:5432/rag"
 
 
 def get_url() -> str:
+    """取连接串：优先用环境变量 ``DATABASE_URL``，兜底本地开发库（含开发口令）。
+
+    不在 alembic.ini 里写死口令——迁移脚本若被外发，口令不会随之泄露。
+    """
     return os.getenv("DATABASE_URL", DEFAULT_URL)
 
 
 def run_migrations_offline() -> None:
+    """离线模式：不建真实连接，只生成可评审的 SQL（``--sql`` 走这条）。"""
     context.configure(
         url=get_url(),
         target_metadata=target_metadata,
@@ -49,12 +54,14 @@ def run_migrations_offline() -> None:
 
 
 def do_run_migrations(connection) -> None:  # noqa: ANN001
+    """在已有连接上执行迁移；``compare_type=True`` 让列类型变更也被纳入迁移。"""
     context.configure(connection=connection, target_metadata=target_metadata, compare_type=True)
     with context.begin_transaction():
         context.run_migrations()
 
 
 async def run_async_migrations() -> None:
+    """在线模式：用 asyncio 引擎建连接，把同步迁移跑在连接的 run_sync 里。"""
     configuration = config.get_section(config.config_ini_section) or {}
     configuration["sqlalchemy.url"] = get_url()
     connectable = async_engine_from_config(
@@ -66,6 +73,7 @@ async def run_async_migrations() -> None:
 
 
 def run_migrations_online() -> None:
+    """在线入口：驱动异步迁移直到完成并释放引擎连接。"""
     asyncio.run(run_async_migrations())
 
 

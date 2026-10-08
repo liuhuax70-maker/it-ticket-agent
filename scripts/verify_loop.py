@@ -120,6 +120,10 @@ def locate(path: Path, start: int, end: int) -> str:
 
 
 async def check_health(client: httpx.AsyncClient) -> None:
+    """V1：逐个探活 6 个服务，任一不可达或下游依赖报错即记入 _failures。
+
+    这一步是后续所有阶段的前置门禁——服务没起来就别浪费时间跑接入和问答。
+    """
     print("\nV1 服务健康检查")
     for name, base in SERVICES.items():
         try:
@@ -147,6 +151,10 @@ async def check_health(client: httpx.AsyncClient) -> None:
 
 
 async def check_ingest(client: httpx.AsyncClient) -> None:
+    """V2：接入两次并断言 chunk 数一致，验证接入幂等。
+
+    不幂等说明 reindex 没真正清理旧分块，会让索引膨胀、检索结果重复。
+    """
     print("\nV2 语料接入（幂等）")
     payload = {"path": str(CORPUS_DIR.relative_to(ROOT).as_posix()), "reindex": True}
     counts: list[int] = []
@@ -178,6 +186,7 @@ async def check_ingest(client: httpx.AsyncClient) -> None:
 
 
 async def retrieval_search(client: httpx.AsyncClient, query: str, top_k: int = 5) -> list[dict]:
+    """向 retrieval 发一次混合检索，返回 hits（含 char_start/char_end/text）。"""
     resp = await client.post(
         f"{SERVICES['retrieval']}/search",
         json={"query": query, "top_k": top_k, "mode": "hybrid", "acl": ACL},
@@ -188,6 +197,11 @@ async def retrieval_search(client: httpx.AsyncClient, query: str, top_k: int = 5
 
 
 async def check_retrieval_locate(client: httpx.AsyncClient) -> None:
+    """V3：用原文偏移回查，证明检索命中能精确定位到原文字符区间。
+
+    这是「引用真实可溯源、不是模型现编」的硬证据，且完全不依赖 LLM，
+    所以 --skip-chat 时也必须跑。
+    """
     print("\nV3 检索级引用回查（content[char_start:char_end] == hit.text）")
     index = corpus_index()
     if not index:
@@ -230,6 +244,7 @@ async def check_retrieval_locate(client: httpx.AsyncClient) -> None:
 
 
 async def chat(client: httpx.AsyncClient, query: str) -> dict:
+    """走网关 /chat 发一次问答；非 2xx 直接抛错（让调用方记作失败而非误判拒答）。"""
     resp = await client.post(
         f"{SERVICES['api-gateway']}/chat",
         json={"query": query},
@@ -242,6 +257,10 @@ async def chat(client: httpx.AsyncClient, query: str) -> dict:
 
 
 async def check_chat(client: httpx.AsyncClient) -> None:
+    """V4/V5：正样本要答案+引用齐备，负样本必须拒答不能编造。
+
+    V5 的「未拒答」按可能编造处理——RAG 答了文档里没有的事比答不上来更危险。
+    """
     index = corpus_index()
     print("\nV4 正样本问答（需要可用的 LLM 配置）")
     for query in POSITIVE_QUERIES:
@@ -301,6 +320,10 @@ async def check_chat(client: httpx.AsyncClient) -> None:
 
 
 async def main() -> int:
+    """CLI 入口：依次跑 V1~V3（必要时 V4/V5），汇总失败/警告并控制退出码。
+
+    退出码非 0 即「验收未通过」，可直接接进 CI 门禁。
+    """
     parser = argparse.ArgumentParser(description="最小闭环验收")
     parser.add_argument("--skip-chat", action="store_true", help="只验 V1~V3（不需要 LLM）")
     args = parser.parse_args()

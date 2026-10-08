@@ -68,32 +68,40 @@ MIN_SENTENCE_CHARS = 12
 
 @dataclass(frozen=True)
 class Finding:
+    """一条一致性发现：``level`` 决定严重度（error 阻断 / warn 仅提示）。"""
+
     level: str  # "error" | "warn"
     check: str
     message: str
 
     def render(self) -> str:
+        """渲染成带 [FAIL]/[warn] 标签的单行文本。"""
         tag = "[FAIL]" if self.level == "error" else "[warn]"
         return f"  {tag} {self.check}: {self.message}"
 
 
 @dataclass(frozen=True)
 class Document:
+    """被检查的一份语料文档（只持有文件名与全文，解析靠正则按需进行）。"""
+
     name: str
     text: str
 
     @property
     def title(self) -> str:
+        """取一级标题（# 标题）；缺标题返回空串（结构检查会据此报错）。"""
         match = _TITLE.search(self.text)
         return match.group(1).strip() if match else ""
 
     def sentences(self) -> list[str]:
+        """拆出"像句子"的片段（去掉太短、可能是标题/表头的噪声片段）。"""
         return [
             s.strip() for s in _SENTENCE.findall(self.text) if len(s.strip()) >= MIN_SENTENCE_CHARS
         ]
 
 
 def load_documents(dirs: tuple[Path, ...] = DEFAULT_CORPUS_DIRS) -> list[Document]:
+    """把指定目录下的所有 .md 读成 Document 列表（固定排序，保证结果可复现）。"""
     docs: list[Document] = []
     for directory in dirs:
         for path in sorted(directory.glob("*.md")):
@@ -102,6 +110,7 @@ def load_documents(dirs: tuple[Path, ...] = DEFAULT_CORPUS_DIRS) -> list[Documen
 
 
 def load_facts(path: Path = DEFAULT_FACTS) -> list[dict[str, str]]:
+    """加载规范值声明（normative_facts.yaml）；文件缺失直接退出——没有基线就别检查。"""
     if not path.exists():
         raise SystemExit(f"找不到规范值声明文件：{path}")
     data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
@@ -221,6 +230,7 @@ def check_facts(
 
 
 def check_references(docs: list[Document]) -> list[Finding]:
+    """检查交叉引用（《X》）指向的文档是否真实存在；断链即失去制度依据。"""
     titles = {doc.title for doc in docs if doc.title}
     findings: list[Finding] = []
     for doc in docs:
@@ -277,6 +287,7 @@ def check_duplicate_sentences(
 
 
 def check_placeholders(docs: list[Document]) -> list[Finding]:
+    """抓 TODO/待补充/XXX 之类占位符——它们不该被当成正式内容入库。"""
     findings: list[Finding] = []
     for doc in docs:
         hits = sorted({m.group(0) for m in _PLACEHOLDER.finditer(doc.text)})
@@ -286,6 +297,7 @@ def check_placeholders(docs: list[Document]) -> list[Finding]:
 
 
 def check_structure(docs: list[Document]) -> list[Finding]:
+    """结构检查：缺一级标题、或正文短到不像一份完整制度都记为 error。"""
     findings: list[Finding] = []
     for doc in docs:
         if not doc.title:
@@ -306,6 +318,7 @@ def run(
     facts: list[dict[str, str]],
     declarations: dict[str, LifecycleDeclaration] | None = None,
 ) -> list[Finding]:
+    """汇总跑全部检查，返回去重后的 Findings（已废止文档已被排除出规范值比较）。"""
     declarations = declarations or {}
     # 已废止的文档不参与规范值比较：它们的取值本就应该与现行版本不同
     skip = retired_names(docs, declarations)
@@ -322,6 +335,7 @@ def run(
 
 
 def main() -> int:
+    """CLI 入口：加载语料/规则/生命周期声明，跑检查并据 error 数控制退出码。"""
     parser = argparse.ArgumentParser(description="语料一致性检查")
     parser.add_argument("--facts", default=str(DEFAULT_FACTS))
     parser.add_argument("--lifecycle", default=str(DEFAULT_LIFECYCLE))

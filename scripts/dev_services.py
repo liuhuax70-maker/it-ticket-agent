@@ -32,6 +32,11 @@ SERVICES: list[tuple[str, str, int]] = [
 
 
 def main(argv: list[str]) -> int:
+    """前台逐个拉起选中的服务；任一退出或收到 SIGINT/SIGTERM 则全部退出。
+
+    用 SIGINT/SIGTERM 联动是为了本地联调时单个服务崩了不会留下孤儿进程；
+    终端 Ctrl+C 会一次性把 6 个 uvicorn 都带下去。
+    """
     keywords = [a.lower() for a in argv[1:] if not a.startswith("-")]
     selected = [s for s in SERVICES if not keywords or any(k in s[0] for k in keywords)]
     if not selected:

@@ -26,6 +26,11 @@ RETRIEVAL_URL = "http://localhost:8002"
 
 
 async def seed(path: str, reindex: bool) -> int:
+    """把本地语料推给 ingestion 做一次接入。
+
+    超时给到 600s：大语料解析+切分+建索引可能很慢，短超时会把"正常慢"
+    误判成失败。``reindex`` 让 ingestion 先清理旧索引再写，避免重复分块。
+    """
     payload = {"path": path, "reindex": reindex}
     async with httpx.AsyncClient(timeout=600.0) as client:
         resp = await client.post(f"{INGESTION_URL}/ingest", json=payload)
@@ -42,6 +47,7 @@ async def seed(path: str, reindex: bool) -> int:
 
 
 async def check() -> int:
+    """只探测 retrieval 健康并返回其健康详情，不改动任何数据。"""
     async with httpx.AsyncClient(timeout=30.0) as client:
         health = await client.get(f"{RETRIEVAL_URL}/health")
         print(json.dumps(health.json(), ensure_ascii=False, indent=2))
@@ -49,6 +55,7 @@ async def check() -> int:
 
 
 async def main() -> int:
+    """CLI 入口：默认导入语料，``--check`` 时只打印检索侧索引规模。"""
     parser = argparse.ArgumentParser(description="导入语料并建立索引")
     parser.add_argument("--path", default="./data/corpus", help="文件或目录路径")
     parser.add_argument("--reindex", action="store_true", help="先清理该文档的旧索引再写入")

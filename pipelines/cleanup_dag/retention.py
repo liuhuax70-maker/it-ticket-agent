@@ -32,6 +32,7 @@ INGESTION_URL = os.getenv("RAG_INGESTION_URL", "http://localhost:8004")
 async def _list_documents(
     client: httpx.AsyncClient, tenant_id: str | None, limit: int
 ) -> list[dict]:
+    """拉取文档台账（可按租户收窄）；返回 items 列表供后续判定过期/精确删除。"""
     params = {"limit": limit, "offset": 0}
     if tenant_id:
         params["tenant_id"] = tenant_id
@@ -41,6 +42,7 @@ async def _list_documents(
 
 
 def _expired(document: dict, cutoff: dt.datetime) -> bool:
+    """判定文档是否超过留存期：缺时间/无法解析一律视为不过期（宁可留、不要误删）。"""
     created_at = document.get("created_at")
     if not created_at:
         return False
@@ -56,6 +58,10 @@ def _expired(document: dict, cutoff: dt.datetime) -> bool:
 async def run(
     *, older_than_days: int | None, doc_ids: list[str], apply: bool, tenant_id: str | None
 ) -> int:
+    """按"天数留存"或"精确 doc_id"收集待删目标；未加 --apply 只 dry-run 打印清单。
+
+    删除是不可逆的，所以默认 dry-run——先看清单确认无误，再带 --apply 真删。
+    """
     targets: list[str] = list(doc_ids)
 
     async with httpx.AsyncClient(timeout=120.0) as client:
@@ -91,6 +97,7 @@ async def run(
 
 
 def main() -> int:
+    """CLI 入口：至少给定 --older-than-days 或 --doc-id，编排 dry-run / 真删。"""
     parser = argparse.ArgumentParser(description="文档留存与合规删除")
     parser.add_argument("--older-than-days", type=int, default=None)
     parser.add_argument("--doc-id", action="append", default=[])

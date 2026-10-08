@@ -39,6 +39,11 @@ MYPY_FLAGS = ["--ignore-missing-imports", "--no-error-summary"]
 
 
 def check(path: str) -> tuple[bool, str]:
+    """对单个模块跑 mypy，返回是否通过及（最多 10 条）错误摘要。
+
+    只截取 ``: error:`` 行做摘要：警告与进度噪声不计入失败判定，
+    但保留退出码作为兜底失败依据。
+    """
     proc = subprocess.run(
         [sys.executable, "-m", "mypy", path, *MYPY_FLAGS],
         cwd=ROOT,
@@ -58,6 +63,7 @@ def check(path: str) -> tuple[bool, str]:
 
 
 def main() -> int:
+    """CLI 入口：逐模块跑 mypy（关键词过滤），任一模块失败即非零退出。"""
     keywords = [arg for arg in sys.argv[1:] if not arg.startswith("-")]
     targets = [
         (label, path)
