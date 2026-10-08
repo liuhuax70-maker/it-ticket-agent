@@ -51,6 +51,20 @@ def _quote(value: str) -> str:
     return '"' + str(value).replace("\\", "\\\\").replace('"', '\\"') + '"'
 
 
+def _truncate_utf8(value: str, max_bytes: int) -> str:
+    """按 **字节** 截断 UTF-8 字符串，且不切出半个多字节字符。
+
+    Milvus 的 VARCHAR ``max_length`` 是字节上限：中文按字符截断（[:512]）
+    只保证 512 个字符，字节数可达 3 倍——真超长时 Milvus **拒写整批 rows**，
+    表现为整个文档入库失败。text 字段早已按字节截断，section_path/owner
+    曾是漏网的两处（实测口径混用不出错，只在真超长时爆）。
+    """
+    encoded = value.encode("utf-8")
+    if len(encoded) <= max_bytes:
+        return value
+    return encoded[:max_bytes].decode("utf-8", errors="ignore")
+
+
 def build_collection_schema(client: MilvusClient, dim: int, text_max_length: int) -> Any:
     """按给定维度与 text 字节上限构造集合 schema（含 ACL 标量与 lifecycle 字段）。
 
@@ -175,19 +189,6 @@ class MilvusStore:
             return 0
 
     # ---------------- 写入 ----------------
-    @staticmethod
-    def _truncate_utf8(value: str, max_bytes: int) -> str:
-        """按 **字节** 截断 UTF-8 字符串，且不切出半个多字节字符。
-
-        Milvus 的 VARCHAR ``max_length`` 是字节上限：中文按字符截断（[:512]）
-        只保证 512 个字符，字节数可达 3 倍——真超长时 Milvus **拒写整批 rows**，
-        表现为整个文档入库失败。text 字段早已按字节截断，section_path/owner
-        曾是漏网的两处（实测口径混用不出错，只在真超长时爆）。
-        """
-        encoded = value.encode("utf-8")
-        if len(encoded) <= max_bytes:
-            return value
-        return encoded[:max_bytes].decode("utf-8", errors="ignore")
 
     def _row(self, chunk: Chunk, vector: list[float]) -> dict[str, Any]:
         text_max = self._settings.milvus_text_max_length
@@ -202,16 +203,16 @@ class MilvusStore:
             # 引用高亮请以元数据里的原文为准，不要拿向量库里的 text 做高亮。
             "text": chunk.text.encode("utf-8")[:text_max].decode("utf-8", errors="ignore"),
             "chunk_index": chunk.chunk_index,
-            "section_path": self._truncate_utf8(chunk.section_path, 512),
+            "section_path": _truncate_utf8(chunk.section_path, 512),
             "char_start": chunk.char_start,
             "char_end": chunk.char_end,
             "tenant_id": chunk.acl.tenant_id,
             "department_id": chunk.acl.department_id,
             "visibility": chunk.acl.visibility.value,
-            "owner": self._truncate_utf8(chunk.acl.owner or "", 128),
+            "owner": _truncate_utf8(chunk.acl.owner or "", 128),
             # 生命周期（失效管理）。缺省为 active：未声明的文档保持可检索，
             # 这样加字段不需要迁移存量数据。
-            "lifecycle": self._truncate_utf8(chunk.lifecycle or LIFECYCLE_ACTIVE, 16),
+            "lifecycle": _truncate_utf8(chunk.lifecycle or LIFECYCLE_ACTIVE, 16),
         }
 
     def _upsert_sync(self, rows: list[dict[str, Any]]) -> int:
@@ -280,7 +281,13 @@ class MilvusStore:
         if visibility_clauses:
             ors: list[str] = []
             for clause in visibility_clauses:
-                ands = [f"{k} == {_quote(v)}" for k, v in clause.items()]
+                ands = []
+                for k, v in clause.items():
+                    # owner 写入时按 128 字节截断（VARCHAR max_length），查询侧必须同口径，
+                    # 否则长 owner 的 private 文档在 Milvus 侧检索不到。
+                    if k == "owner":
+                        v = _truncate_utf8(v, 128)
+                    ands.append(f"{k} == {_quote(v)}")
                 ors.append("(" + " and ".join(ands) + ")")
             parts.append("(" + " or ".join(ors) + ")")
 

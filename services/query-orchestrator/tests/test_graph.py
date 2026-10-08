@@ -8,7 +8,7 @@ import pytest
 from app.clients.cache import QueryCache
 from app.clients.model_gateway import ModelGatewayClient
 from app.clients.retrieval import RetrievalClient
-from app.config import Settings
+from app.config import Settings, resolve_mode
 from app.graph import build_graph
 from app.graph.edges import NODE_RETRIEVE, NODE_ROUTE
 from app.graph.state import RAGState
@@ -114,7 +114,7 @@ def _state(**kw) -> RAGState:
         "user_id": "u_1",
         "roles": ["rag_user"],
         "top_k": 3,
-        # 故意把 mode 置空：验证 route 节点在缺少显式模式时的兜底行为
+        # 故意把 mode 置空：验证入口（chat）在缺少显式模式时的兜底行为
         # （真实 HTTP 链路上 service 总会预填 mode，所以这条分支只在直接组图时可达）
         "mode": cast(RetrieveMode, None),
         "trace_id": "tr_test",
@@ -122,6 +122,10 @@ def _state(**kw) -> RAGState:
         "errors": [],
     }
     base.update(kw)  # type: ignore[typeddict-item]
+    # 入口（chat）会在进图前定好 mode；直接组图时这里补同样的兜底，
+    # 使图内行为等价于真实 HTTP 链路（缓存键与检索都依赖这个 mode）。
+    if base.get("mode") is None:
+        base["mode"] = resolve_mode(base.get("query") or "", Settings())
     return base
 
 
@@ -218,6 +222,14 @@ async def test_quoted_short_query_routes_to_keyword(make_graph) -> None:
     graph, retrieval, _ = make_graph(hits=[_hit("d_1:0", "x")])
     await graph.ainvoke(_state(query="“BT-2024”"))
     assert retrieval.searches[0].mode.value == "keyword"
+
+
+def test_resolve_mode_quoted_short_uses_keyword() -> None:
+    settings = Settings(retrieve_mode=RetrieveMode.hybrid.value)
+    assert resolve_mode("“BT-2024”", settings) == RetrieveMode.keyword
+    assert resolve_mode("入职体检费用怎么报销", settings) == settings.default_mode()
+    # 超长（>16 字）即使带引号也走默认 hybrid
+    assert resolve_mode("“员工试用期转正后体检费用报销流程与额度说明”", settings) == settings.default_mode()
 
 
 async def test_node_names_are_stable() -> None:

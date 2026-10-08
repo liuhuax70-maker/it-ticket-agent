@@ -8,7 +8,7 @@ from app.clients.cache import QueryCache
 from app.clients.langfuse import build_tracer, record_stage, trace_chat
 from app.clients.model_gateway import ModelGatewayClient
 from app.clients.retrieval import RetrievalClient
-from app.config import Settings
+from app.config import Settings, resolve_mode
 from app.graph import build_graph
 from packages.common.errors import ConfigError
 from packages.common.ids import new_id
@@ -52,7 +52,7 @@ class OrchestratorService:
     async def chat(self, req: ChatRequest, identity: Identity) -> ChatResponse:
         started = time.perf_counter()
         trace_id = new_id("tr_")
-        mode: RetrieveMode = req.mode or self.settings.default_mode()
+        mode: RetrieveMode = req.mode or resolve_mode(req.query, self.settings)
         top_k = req.top_k or self.settings.top_k
 
         with trace_chat(

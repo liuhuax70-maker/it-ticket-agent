@@ -180,6 +180,7 @@ class IngestionService:
             total_chunks = 0
             indexed = 0
             doc_ids: list[str] = []
+            any_failed = False
 
             for doc in documents:
                 started = time.perf_counter()
@@ -202,35 +203,50 @@ class IngestionService:
                 started = time.perf_counter()
                 try:
                     result = await self._sink.send(chunks, reindex=req.reindex)
-                    await self._metadata.update_document_status(doc.doc_id, "indexed", len(chunks))
-                    indexed += result.chunks_indexed
                 except Exception as exc:  # noqa: BLE001
                     await self._metadata.update_document_status(doc.doc_id, "failed")
                     logger.error("索引写入失败 doc_id=%s err=%s", doc.doc_id, exc)
+                    any_failed = True
                     if self._settings.fail_fast_on_index_error:
                         raise
+                else:
+                    # send 不抛异常也可能没写全（某库写 0 条时返回 status="partial"），
+                    # 这种不能当成功——否则 Milvus/OpenSearch 一侧 0 条却对外称已索引。
+                    if result.status == "ok":
+                        await self._metadata.update_document_status(
+                            doc.doc_id, "indexed", len(chunks)
+                        )
+                        indexed += len(chunks)
+                        total_chunks += len(chunks)
+                        doc_ids.append(doc.doc_id)
+                    else:
+                        await self._metadata.update_document_status(doc.doc_id, "failed")
+                        logger.error(
+                            "索引部分写入失败 doc_id=%s milvus=%s opensearch=%s",
+                            doc.doc_id,
+                            result.milvus,
+                            result.opensearch,
+                        )
+                        any_failed = True
+                        if self._settings.fail_fast_on_index_error:
+                            raise RuntimeError(f"索引部分写入失败 doc_id={doc.doc_id}")
                 timings["index"] = timings.get("index", 0.0) + _ms(started)
 
-                total_chunks += len(chunks)
-                doc_ids.append(doc.doc_id)
-
-            # ⚠️ 这里无条件把 job 标为 succeeded，即使中间有文档索引失败。
-            # 默认 fail_fast_on_index_error=True 时失败会先抛出去、走不到这里；
-            # 但把它设成 False 后，**可靠判据是 `indexed < chunk_count`**
-            # （或按 documents.status 查 failed），不能只看 job 状态。
+            job_status = "failed" if any_failed else "succeeded"
             await self._metadata.update_job(
-                job_id, status="succeeded", chunk_count=total_chunks, message=None
+                job_id, status=job_status, chunk_count=total_chunks, message=None
             )
             logger.info(
-                "接入完成 job=%s docs=%s chunks=%s indexed=%s",
+                "接入完成 job=%s docs=%s chunks=%s indexed=%s failed=%s",
                 job_id,
                 len(doc_ids),
                 total_chunks,
                 indexed,
+                any_failed,
             )
             return IngestResponse(
                 job_id=job_id,
-                status="succeeded",
+                status=job_status,
                 documents=len(doc_ids),
                 chunk_count=total_chunks,
                 indexed=indexed,

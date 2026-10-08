@@ -63,16 +63,13 @@ class RetrievalService:
     async def search(self, req: SearchRequest) -> SearchResponse:
         mode = req.mode or self._settings.default_mode()
         top_k = req.top_k or self._settings.top_k
-        filters = self.compile_filters(req)
-        if filters is None:
-            # filters=None 会被两个 store 翻译成 match-all，即不分租户、不分部门的
-            # **全库召回**。这是权限系统的最终防线，必须 fail-closed：
-            #
-            # 早期实现只打一条 warning 然后照常全库检索——方向是错的。正常链路上
-            # ACL 由编排层 route 节点从网关身份构造，不该出现 None；真出现就说明
-            # 身份注入链路断了（网关没注入 / 反向代理丢了 header / 有人直连本服务）。
-            # 这种情况下返回**全部租户**的文档，比报错危险得多：它不会抛异常，
-            # 只会安静地把别人的资料当成检索结果送进生成阶段。
+        # 权限下推的最终防线：只要请求没带 ACL 就 fail-closed。光看 filters 是否为 None
+        # 不够——acl=None 时 compile_filters 仍可能返回带 doc_ids 的契约，而那份契约没有
+        # tenant_id，等于跨租户按 doc_id 召回他人文档（doc_ids 是 acl=None 时的逃生口，
+        # 必须一并堵住）。正常链路上 ACL 由编排层 route 从网关身份构造，不该为 None；
+        # 真为 None 说明身份注入链路断了（网关没注入 / 反向代理丢 header / 有人直连本服务），
+        # 这时返回他人的文档比报错危险得多——它不抛异常，只会把别人资料送进生成阶段。
+        if req.acl is None:
             if not self._settings.allow_unfiltered_search:
                 ACL_MISSING_COUNTER.inc()
                 logger.error(
@@ -83,6 +80,7 @@ class RetrievalService:
                     "确需内部调试请显式设置 ALLOW_UNFILTERED_SEARCH=true"
                 )
             logger.warning("检索未携带 ACL，按 allow_unfiltered_search 放行（仅限内部调试）")
+        filters = self.compile_filters(req)
 
         # 重排开启时多取候选：融合结果先截断到 top_k 会让重排失去意义（见 config 说明）。
         candidate_k = (

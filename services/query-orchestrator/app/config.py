@@ -6,9 +6,27 @@
 
 from __future__ import annotations
 
+import re
+
 from packages.common.constants import SERVICE_QUERY_ORCHESTRATOR
 from packages.common.settings import BaseAppSettings
 from packages.contracts import RetrieveMode
+
+# 带引号的短术语通常是精确术语（制度编号、错误码），BM25 比向量更稳，
+# 这类查询改走 keyword。必须在进入缓存查询节点之前定好 mode：缓存键含 mode 分量，
+# 若入口用 hybrid、store 时已被 route 改成 keyword，命中键永远对不上。
+_QUOTED = re.compile(r'["“”「」\']')
+
+
+def resolve_mode(query: str, settings: "Settings") -> RetrieveMode:
+    """决定检索模式：hybrid 默认下，带引号且 ≤16 字的短查询改走 keyword。"""
+    if (
+        settings.retrieve_mode == RetrieveMode.hybrid.value
+        and _QUOTED.search(query)
+        and len(query) <= 16
+    ):
+        return RetrieveMode.keyword
+    return settings.default_mode()
 
 
 class Settings(BaseAppSettings):
