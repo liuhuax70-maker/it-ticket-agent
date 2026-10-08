@@ -513,6 +513,11 @@
       body.appendChild(buildSources(message.citations));
     }
 
+    // 「召回原文」开关打开时，后端才会回传 contexts（默认不传，避免无谓的正文暴露）
+    if (message.contexts && message.contexts.length) {
+      body.appendChild(buildContexts(message.contexts));
+    }
+
     body.appendChild(buildActions(message));
     var meta = buildMeta(message);
     if (meta) body.appendChild(meta);
@@ -658,6 +663,67 @@
     $('input').disabled = value;
   }
 
+  // 深度思考开启时使用的召回条数。5 是编排层默认 top_k，这里加倍换召回覆盖。
+  var DEEP_TOP_K = 10;
+
+  function buildChatPayload(query) {
+    var payload = { query: query };
+
+    // 「深度思考」：强制 hybrid 并加大召回。
+    // 关闭时两个字段都不传——由后端 resolve_mode 按 query 自行决定模式、top_k 用默认值。
+    if ($('toggleReason').classList.contains('active')) {
+      payload.mode = 'hybrid';
+      payload.top_k = DEEP_TOP_K;
+    }
+
+    // 「召回原文」：让后端回传本次检索到的正文片段
+    if ($('toggleSearch').classList.contains('active')) {
+      payload.include_contexts = true;
+    }
+
+    // 选了具体模型才下发；留空表示"由网关挑默认模型"
+    var model = $('modelSelect').value;
+    if (model) payload.model = model;
+
+    return payload;
+  }
+
+  function buildContexts(contexts) {
+    var wrap = document.createElement('details');
+    wrap.className = 'contexts';
+
+    var sum = document.createElement('summary');
+    sum.textContent = '召回原文（' + contexts.length + ' 段）';
+    wrap.appendChild(sum);
+
+    contexts.forEach(function (ctx) {
+      var item = document.createElement('div');
+      item.className = 'context-item';
+
+      var head = document.createElement('div');
+      head.className = 'context-head';
+      var idx = document.createElement('span');
+      idx.className = 'context-idx';
+      idx.textContent = '[' + (ctx.index != null ? ctx.index + 1 : '?') + ']';
+      var title = document.createElement('span');
+      title.className = 'context-title';
+      // section_path 形如 "章节 > 小节"，比只给标题更利于定位
+      title.textContent = ctx.section_path || ctx.doc_title || ctx.doc_id || '';
+      head.appendChild(idx);
+      head.appendChild(title);
+      item.appendChild(head);
+
+      var text = document.createElement('pre');
+      text.className = 'context-text';
+      text.textContent = ctx.text || '';
+      item.appendChild(text);
+
+      wrap.appendChild(item);
+    });
+
+    return wrap;
+  }
+
   function send(rawQuery, options) {
     var query = String(rawQuery || '').replace(/\s+$/, '');
     if (!query || busy) return;
@@ -685,7 +751,7 @@
     authFetch('/chat', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ query: query }),
+      body: JSON.stringify(buildChatPayload(query)),
       signal: abortController.signal
     })
       .then(function (resp) {
@@ -704,9 +770,10 @@
           refused: !!data.refused,
           cached: !!data.cached,
           model: data.model || null,
+          contexts: data.contexts || null,
           timings: data.timings_ms || {}
         });
-        if (data.model) $('modelChip').textContent = '模型：' + data.model;
+        if (data.model) setActiveModel(data.model);
       })
       .catch(function (err) {
         if (err && err.name === 'AbortError') {
@@ -1241,13 +1308,60 @@
       if (storedToken()) loadKbListIfOpen();
     });
 
-    // 顶栏显示当前生效模型（失败时静默，不影响问答）
-    authFetch('/admin/models')
+    // 顶栏模型下拉（失败时静默降级成"默认"，不影响问答）
+    loadModels();
+  }
+
+  // 把服务端回报的"实际生效模型"同步回下拉。
+  // 注意这**不是**回显用户的选择：请求可能被缓存命中或模型不可用而落到别的模型，
+  // 只有服务端知道真正作答的是哪个。
+  function setActiveModel(name) {
+    var select = $('modelSelect');
+    if (!select || !name) return;
+    for (var i = 0; i < select.options.length; i++) {
+      if (select.options[i].value === name) {
+        select.value = name;
+        return;
+      }
+    }
+    // 服务端用了清单里没有的模型（例如兜底链切到了备用模型）：补进去而不是丢弃，
+    // 否则下拉会停留在一个与实际不符的选项上。
+    var opt = document.createElement('option');
+    opt.value = name;
+    opt.textContent = name;
+    select.appendChild(opt);
+    select.value = name;
+  }
+
+  function loadModels() {
+    authFetch('/chat/models')
       .then(function (r) { return r.ok ? r.json() : null; })
       .then(function (models) {
-        if (models && models.length) $('modelChip').textContent = '模型：' + models[0].name;
+        if (!models || !models.length) return;
+        // 只列对话模型：把 embedding 模型放进下拉是误导，选它做不了任何事
+        var chatModels = models.filter(function (m) {
+          return m.kind === 'chat' && m.available !== false;
+        });
+        if (!chatModels.length) return;
+
+        var select = $('modelSelect');
+        var current = select.value;
+        select.innerHTML = '';
+
+        var def = document.createElement('option');
+        def.value = '';
+        def.textContent = '默认';
+        select.appendChild(def);
+
+        chatModels.forEach(function (m) {
+          var opt = document.createElement('option');
+          opt.value = m.name;
+          opt.textContent = m.provider ? m.name + '（' + m.provider + '）' : m.name;
+          select.appendChild(opt);
+        });
+        select.value = current;
       })
-      .catch(function () { /* 忽略 */ });
+      .catch(function () { /* 忽略：保持"默认" */ });
   }
 
   if (document.readyState === 'loading') {

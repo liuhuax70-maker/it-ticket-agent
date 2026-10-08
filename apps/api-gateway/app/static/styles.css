@@ -213,6 +213,69 @@ button { font: inherit; color: inherit; cursor: pointer; }
   white-space: nowrap;
 }
 
+/* 顶栏模型下拉：药丸外形，与 DeepSeek 的模型选择器一致 */
+.model-picker {
+  display: inline-flex; align-items: center; gap: 7px;
+  padding: 3px 8px 3px 11px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--bg-soft);
+  color: var(--muted);
+  font-size: 12px;
+  white-space: nowrap;
+  max-width: 260px;
+}
+.model-label { flex: 0 0 auto; }
+.model-picker select {
+  min-width: 0; max-width: 190px;
+  border: 0; background: transparent;
+  color: var(--text);
+  font: inherit;
+  cursor: pointer;
+  outline: none;
+}
+.model-picker:focus-within { border-color: var(--accent); }
+
+/* 「召回原文」区：折叠展示本次检索到的正文片段 */
+.contexts {
+  margin: 10px 0 2px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--code-bg);
+  overflow: hidden;
+}
+.contexts > summary {
+  padding: 9px 13px;
+  cursor: pointer;
+  color: var(--muted);
+  font-size: 12.5px;
+  user-select: none;
+}
+.contexts > summary:hover { color: var(--accent); }
+
+.context-item {
+  padding: 10px 13px;
+  border-top: 1px solid var(--border);
+}
+.context-head {
+  display: flex; align-items: baseline; gap: 7px;
+  margin-bottom: 5px;
+  font-size: 12px;
+}
+.context-idx { color: var(--accent); font-weight: 600; flex: 0 0 auto; }
+.context-title {
+  color: var(--muted);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.context-text {
+  margin: 0;
+  max-height: 190px; overflow-y: auto;
+  white-space: pre-wrap; word-break: break-word;
+  color: var(--text);
+  font: inherit;
+  font-size: 12.5px; line-height: 1.65;
+}
+
 .icon-btn {
   display: grid; place-items: center;
   width: 32px; height: 32px;
