@@ -73,8 +73,20 @@ class Settings(EmbedSettings, MilvusSettings, OpenSearchSettings):
     # RRF 各路权重（BM25 在短查询上更稳，向量在语义改写上更强）
     rrf_weight_vector: float = 1.0
     rrf_weight_bm25: float = 1.0
-    # 低于该分数的结果直接丢弃；0 表示不过滤
-    min_score: float = 0.0
+    # 相关性阈值（余弦相似度）；0 表示不过滤。
+    #
+    # 标定依据（实测 22 条，见 docs/adr/0008-relevance-threshold.md）：
+    #   无关提问（你好/谢谢/讲笑话/写代码…）向量分 0.3077~0.4077
+    #   真实制度提问（请假/年假/报销/采购…）  向量分 0.4521~0.7785
+    # 中间是干净空档，0.43 两侧余量均为 0.022，是这份语料上的最优切点。
+    #
+    # ⚠️ 换语料/换嵌入模型后**必须重新标定**，不要直接沿用：余弦相似度的
+    # 绝对值与分布随模型而变，阈值不跟着走会变成静默误杀或静默失效。
+    # 重新标定的脚本思路见 ADR 0008。
+    #
+    # 只对**向量路**真正有效：BM25 分数量纲是 5~9，永远不会低于 0.43。
+    # 混合模式下的相关性判定以向量路为准，理由见 hybrid.search 的闸门注释。
+    min_score: float = 0.43
 
     # ---- 重排 ----
     rerank_enabled: bool = False

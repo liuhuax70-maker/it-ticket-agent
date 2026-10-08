@@ -127,6 +127,23 @@ class HybridRetriever:
         bm25_hits = bm25_hits or []
         timings["retrieve"] = elapsed
 
+        # 相关性闸门：向量路（已按 min_score 过滤）为空时，整体判为「无相关结果」。
+        #
+        # 为什么必须在这里再判一次，而不是只靠 min_score：min_score 作用在 BM25 上
+        # 是**无效**的——BM25 分数量纲是 5~9，而阈值是余弦相似度 0.43，两者在同一
+        # 个 if 里被同一个数字比较，BM25 永远不会低于阈值。于是「你好」这类无关
+        # 问题虽然向量路被滤空，BM25 仍会因字面词匹配带回几个片段，融合后
+        # hits 非空，编排层就会当成"有资料"去生成——用户问「你好」，界面却列出
+        # 一堆制度切片。
+        #
+        # 判据只用向量路：余弦相似度是有语义含义的相关性度量；BM25 只反映字面
+        # 词面命中，"你好"命中「数据合规与留存制度」不代表资料与问题相关。
+        # 代价是纯字面精确匹配（如问某个工单号）可能落空，但那种场景通常带引号，
+        # 由 resolve_mode 走 keyword 单路，不受这条影响。
+        if self._min_score > 0 and not vector_hits:
+            logger.debug("相关性闸门：向量路在 min_score=%s 下无命中，判为无相关", self._min_score)
+            return [], timings
+
         started = time.perf_counter()
         fused = reciprocal_rank_fusion(
             [(RETRIEVER_VECTOR, vector_hits), (RETRIEVER_BM25, bm25_hits)],

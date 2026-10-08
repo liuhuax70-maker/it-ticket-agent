@@ -106,6 +106,68 @@ async def test_hybrid_degrades_when_one_route_fails() -> None:
     assert [h.chunk_id for h in hits] == ["d_1:0"]
 
 
+# ---------------- 相关性闸门（min_score）----------------
+#
+# 这些分数取自实测标定（见 docs/adr/0008-relevance-threshold.md）：
+#   无关提问（你好/讲笑话/写代码…）  向量 top1  0.3077~0.4077
+#   真实制度提问（请假/年假/报销…） 向量 top1  0.4521~0.7785
+# BM25 分数量纲是 5~9，永远不会低于 0.43 —— 闸门因此只看向量路。
+
+IRRELEVANT_SCORE = 0.3624  # 「你好」的实测分数
+RELEVANT_SCORE = 0.5906  # 「请假什么流程？」的实测分数
+
+
+async def test_unrelated_query_returns_no_hits_even_when_bm25_matched() -> None:
+    """无关提问必须判为「无相关」，且**不能**被 BM25 的字面命中救回来。
+
+    「你好」在向量路被阈值滤空，但 BM25 仍会因字面词匹配带回片段。
+    如果这里放行，界面就会给「你好」列出一堆制度切片。
+    """
+    vector = FakeRetriever(RETRIEVER_VECTOR, [_hit("d_1:0", score=IRRELEVANT_SCORE)])
+    bm25 = FakeRetriever(RETRIEVER_BM25, [_hit("d_2:0", score=5.9)])
+    hybrid = HybridRetriever(vector, bm25, min_score=0.43)
+
+    hits, _ = await hybrid.search(
+        "你好", RetrieveMode.hybrid, top_k=5, vector_top_k=10, bm25_top_k=10
+    )
+    assert hits == []
+
+
+async def test_related_query_still_returns_hits() -> None:
+    """闸门不能误杀真实提问：向量分过阈值时必须正常召回。"""
+    vector = FakeRetriever(RETRIEVER_VECTOR, [_hit("d_1:0", score=RELEVANT_SCORE)])
+    bm25 = FakeRetriever(RETRIEVER_BM25, [_hit("d_1:0", score=5.9)])
+    hybrid = HybridRetriever(vector, bm25, min_score=0.43)
+
+    hits, _ = await hybrid.search(
+        "请假什么流程？", RetrieveMode.hybrid, top_k=5, vector_top_k=10, bm25_top_k=10
+    )
+    assert [h.chunk_id for h in hits] == ["d_1:0"]
+
+
+async def test_gate_disabled_keeps_previous_behavior() -> None:
+    """min_score=0（未标定/显式关闭）时闸门必须完全放行，行为与改动前一致。"""
+    vector = FakeRetriever(RETRIEVER_VECTOR, [_hit("d_1:0", score=IRRELEVANT_SCORE)])
+    bm25 = FakeRetriever(RETRIEVER_BM25, [_hit("d_2:0", score=5.9)])
+    hybrid = HybridRetriever(vector, bm25, min_score=0.0)
+
+    hits, _ = await hybrid.search(
+        "你好", RetrieveMode.hybrid, top_k=5, vector_top_k=10, bm25_top_k=10
+    )
+    assert hits, "min_score=0 时不应拦截（保留旧行为，便于回退）"
+
+
+async def test_vector_route_alone_still_cut_by_threshold() -> None:
+    """单路 vector 模式也按阈值过滤（这是闸门生效的前提）。"""
+    vector = FakeRetriever(RETRIEVER_VECTOR, [_hit("d_1:0", score=IRRELEVANT_SCORE)])
+    hybrid = HybridRetriever(vector, FakeRetriever(RETRIEVER_BM25, []), min_score=0.43)
+
+    hits, _ = await hybrid.search(
+        "你好", RetrieveMode.vector, top_k=5, vector_top_k=10, bm25_top_k=10
+    )
+    assert hits == []
+
+
 async def test_keyword_mode_only_calls_bm25() -> None:
     vector = FakeRetriever(RETRIEVER_VECTOR, [_hit("d_1:0")])
     bm25 = FakeRetriever(RETRIEVER_BM25, [_hit("d_2:0")])
