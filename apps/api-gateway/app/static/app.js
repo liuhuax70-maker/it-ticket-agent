@@ -21,7 +21,8 @@
 
   // ---------------- 身份（OIDC 授权码 + PKCE） ----------------
   //
-  // 走标准浏览器侧流程：不接触 client_secret，令牌只存在 sessionStorage。
+  // 走标准浏览器侧流程：不接触 client_secret。令牌存 localStorage 并在过期前
+  // 自动续期（见 storeToken / scheduleRefresh），否则 30 分钟后会被硬登出。
   // 关闭鉴权（AUTHZ_ENABLED=false）时后端不校验令牌，这里静默降级为"未登录也可用"。
   //
   // ⚠️ issuer / clientId 由后端 /ui-config **运行时下发**，不在这里硬编码。
@@ -70,31 +71,117 @@
   }
 
   function storedToken() {
-    try {
-      var raw = sessionStorage.getItem(AUTH.tokenKey);
-      if (!raw) return null;
-      var parsed = JSON.parse(raw);
-      if (parsed.expires_at && Date.now() > parsed.expires_at) {
-        sessionStorage.removeItem(AUTH.tokenKey);
-        return null;
-      }
-      return parsed.access_token || null;
-    } catch (err) {
-      return null;
-    }
+    var parsed = readToken();
+    if (!parsed || !parsed.access_token) return null;
+    return parsed.access_token;
   }
 
+  // access_token 是否已过期（或即将过期）。
+  // 提前 30 秒判定：请求飞行途中令牌就过期的话，会收到一个莫名其妙的 401。
+  function tokenExpired(parsed) {
+    if (!parsed || !parsed.expires_at) return true;
+    return Date.now() >= parsed.expires_at;
+  }
+
+  // 用 refresh_token 换新的 access_token。
+  //
+  // 为什么要它：realm 配的 accessTokenLifespan 是 1800s（30 分钟）。没有续期机制时，
+  // 令牌一过期 storedToken() 就返回 null，用户被硬登出——表现为"过一会儿就退出登录"。
+  //
+  // 并发去重：多个请求同时发现过期时，若各发一次刷新，Keycloak 在开启
+  // refresh token rotation 后会让前一个 refresh_token 立即失效，
+  // 导致"刷新竞态 → 其余请求全部失败 → 用户被登出"。所以共用同一个 Promise。
+  function refreshToken() {
+    if (AUTH._refreshing) return AUTH._refreshing;
+
+    var parsed = readToken();
+    if (!parsed || !parsed.refresh_token) {
+      // 拿不到 refresh_token 就没什么可做的，直接登出而不是反复失败
+      if (parsed) clearToken();
+      return Promise.resolve(null);
+    }
+
+    var body = new URLSearchParams({
+      grant_type: 'refresh_token',
+      client_id: AUTH.clientId,
+      refresh_token: parsed.refresh_token
+    });
+
+    AUTH._refreshing = fetch(AUTH.issuer + '/protocol/openid-connect/token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: body.toString()
+    })
+      .then(function (resp) {
+        if (!resp.ok) {
+          // 400 invalid_grant：refresh_token 也过期了，只能重新登录
+          console.warn('[auth] 刷新失败 status=' + resp.status);
+          clearToken();
+          return null;
+        }
+        return resp.json();
+      })
+      .then(function (data) {
+        if (!data || !data.access_token) {
+          clearToken();
+          return null;
+        }
+        // 开启 rotation 时 Keycloak 每次都返回新的 refresh_token，必须覆盖；
+        // 未返回时沿用旧的，否则下一次刷新会拿一个已被轮换掉的 token。
+        if (!data.refresh_token) data.refresh_token = parsed.refresh_token;
+        storeToken(data);
+        renderAuthState();
+        return data.access_token;
+      })
+      .catch(function (err) {
+        console.warn('[auth] 刷新异常', err);
+        return null;
+      })
+      .then(function (result) {
+        AUTH._refreshing = null;
+        return result;
+      });
+
+    return AUTH._refreshing;
+  }
+
+  // 取一个可用的 access_token：有效则直接返回，过期则先续期。
+  function ensureToken() {
+    var parsed = readToken();
+    if (!parsed || !parsed.access_token) return Promise.resolve(null);
+    if (!tokenExpired(parsed)) return Promise.resolve(parsed.access_token);
+    return refreshToken();
+  }
+
+  // 令牌存 localStorage 而**不是** sessionStorage：
+  // sessionStorage 是会话级的——关掉标签页或重启浏览器就没了，用户会以为"登录状态丢失"。
+  //
+  // 安全权衡：refresh_token 落在 localStorage 里，XSS 可以直接读到。
+  // 纯前端的 SPA 无法彻底规避这一点（要彻底规避需要 BFF 模式把令牌放在服务端），
+  // 这里靠 CSP + 不使用 innerHTML 拼接未转义内容来降低风险。PKCE 的
+  // verifier/state 仍留在 sessionStorage —— 那是**一次性的授权凭据**，
+  // 缩小它的存活窗口本身就是防护。
   function storeToken(payload) {
     payload.expires_at = Date.now() + Math.max(0, (payload.expires_in || 300) - 30) * 1000;
     try {
-      sessionStorage.setItem(AUTH.tokenKey, JSON.stringify(payload));
+      localStorage.setItem(AUTH.tokenKey, JSON.stringify(payload));
     } catch (err) {
       console.error('[auth] 无法保存令牌', err);
     }
   }
 
+  function readToken() {
+    try {
+      var raw = localStorage.getItem(AUTH.tokenKey);
+      if (!raw) return null;
+      return JSON.parse(raw);
+    } catch (err) {
+      return null;
+    }
+  }
+
   function clearToken() {
-    try { sessionStorage.removeItem(AUTH.tokenKey); } catch (err) { /* 忽略 */ }
+    try { localStorage.removeItem(AUTH.tokenKey); } catch (err) { /* 忽略 */ }
   }
 
   function claimsOf(accessToken) {
@@ -125,7 +212,10 @@
             response_type: 'code',
             client_id: AUTH.clientId,
             redirect_uri: AUTH.redirectUri,
-            scope: 'openid profile',
+            // offline_access 是拿到 refresh_token 的必要条件。
+            // 少了它：access_token 到期（realm 配的是 1800s = 30 分钟）后
+            // 没有任何办法续期，用户会被硬登出——表现为"过一会就退出登录"。
+            scope: 'openid profile offline_access',
             code_challenge: b64url(d),
             code_challenge_method: 'S256',
             state: sessionStorage.getItem(AUTH.stateKey) || ''
@@ -191,20 +281,29 @@
 
   function authFetch(url, options) {
     var opts = options || {};
-    var token = storedToken();
-    if (token) {
-      opts.headers = Object.assign({}, opts.headers, { Authorization: 'Bearer ' + token });
-    }
-    return fetch(url, opts).then(function (resp) {
-      // 只在「这个失败请求用的就是当前令牌」时清空。
-      // 否则会出现：登录回调刚把新令牌写进去，而早于登录发出的请求（如 /admin/models）
-      // 的 401 姗姗来迟，把刚到手的令牌又清掉——表现为"登录成功却立刻变成未登录"。
-      if (resp.status === 401 && token && storedToken() === token) {
-        clearToken();
-        renderAuthState();
-      }
-      return resp;
-    });
+    return ensureToken()
+      .then(function (token) {
+        if (token) {
+          opts.headers = Object.assign({}, opts.headers, { Authorization: 'Bearer ' + token });
+        }
+        return fetch(url, opts);
+      })
+      .then(function (resp) {
+        if (resp.status !== 401) return resp;
+        // 到这里可能是令牌刚好在飞行途中过期。先强制续期并重试一次，
+        // 续不上才登出——否则用户会看到毫无征兆的"被踢下线"。
+        return refreshToken().then(function (fresh) {
+          if (!fresh) {
+            clearToken();
+            renderAuthState();
+            return resp;
+          }
+          var retry = Object.assign({}, opts, {
+            headers: Object.assign({}, opts.headers, { Authorization: 'Bearer ' + fresh })
+          });
+          return fetch(url, retry);
+        });
+      });
   }
 
   // 401 时把登录入口高亮 3 秒：用户的第一反应是"页面坏了"，而不是"我该登录"。
@@ -1388,12 +1487,33 @@
     loadUiConfig().then(function () {
       return completeSignIn();
     }).then(function () {
+      // 静默续期：打开页面时若 access_token 已过期但 refresh_token 仍有效，
+      // 先换新再渲染，否则用户会看到"明明登录过却是未登录"。
+      return ensureToken();
+    }).then(function () {
       renderAuthState();
       refreshKbCount();
       if (storedToken()) loadKbListIfOpen();
       // 模型清单依赖登录态（需 chat 权限），放在拿到令牌之后再拉
       loadModels();
+      scheduleRefresh();
     });
+  }
+
+  // 在令牌过期前主动续期。
+  // 为什么需要"提前"：如果等到过期那一刻才刷新，用户正好在那一刻点发送，
+  // 就会经历"点击 → 等待 → 401 → 重试"的一次可感知卡顿。
+  function scheduleRefresh() {
+    if (AUTH._timer) clearTimeout(AUTH._timer);
+    var parsed = readToken();
+    if (!parsed || !parsed.refresh_token) return;
+    var ttl = Math.max(0, (parsed.expires_at || 0) - Date.now());
+    // 提前 60 秒；refresh_token 缺失时上面的守卫已经返回
+    AUTH._timer = setTimeout(function () {
+      refreshToken().then(function (fresh) {
+        if (fresh) scheduleRefresh();
+      });
+    }, Math.max(5000, ttl - 60000));
   }
 
   // 模型下拉只负责"用户选了什么"，不跟随服务端实际生效的模型变化。
