@@ -63,6 +63,7 @@ class QueryCache:
         query: str,
         temperature: float | None = None,
         version: str = "1",
+        model: str | None = None,
     ) -> str:
         """组装缓存键。
 
@@ -70,21 +71,29 @@ class QueryCache:
         都会让同租户内不同部门共用同一条答案，检索层 ACL 被整段绕过，且缓存关闭时完全不可见。
         private 按 owner 过滤，所以 ``user_id`` 不能省。
 
-        ``version``（``CACHE_VERSION``）是显式失效开关，应对缓存键表达不了的变化——换作答
-        模型、改提示词、改切分参数，这些编排层并不知道下游实际用了什么。
+        ``model`` 是调用方逐请求指定的生成模型：模型不同则答案必然不同，必须分键。
+        它是**条件追加**的分量——留空表示"用网关默认模型"，此时键与引入该参数前**逐字节相同**，
+        升级后默认路径仍命中存量缓存；只有显式选了模型才会分出新键。
+
+        ``version``（``CACHE_VERSION``）仍是显式失效开关，应对缓存键表达不了的**全局**变化——
+        改提示词、改切分参数这类影响所有请求、且编排层无从得知具体取值的改动。
+        （过去"换作答模型"也归它管，但模型现在逐请求可选，已由 ``model`` 分量直接覆盖。）
         """
-        parts = "|".join(
-            [
-                version or "1",
-                tenant_id or "-",
-                department_id or "-",
-                user_id or "-",
-                mode,
-                str(top_k),
-                f"{temperature}",
-                normalize(query),
-            ]
-        )
+        parts = [
+            version or "1",
+            tenant_id or "-",
+            department_id or "-",
+            user_id or "-",
+            mode,
+            str(top_k),
+            f"{temperature}",
+            normalize(query),
+        ]
+        # 只在显式选模型时追加，保证 model=None 的键与旧实现完全一致
+        if model:
+            parts.append(model)
+        digest = hashlib.sha256("|".join(parts).encode()).hexdigest()
+        return f"rag:cache:v{version or '1'}:{digest}"
         digest = hashlib.sha256(parts.encode()).hexdigest()
         return f"rag:cache:v{version or '1'}:{digest}"
 
@@ -98,13 +107,14 @@ class QueryCache:
         query: str,
         temperature: float | None = None,
         version: str = "1",
+        model: str | None = None,
     ) -> dict[str, Any] | None:
         if not self.enabled:
             return None
         try:
             raw = await self._client().get(
                 self._key(
-                    tenant_id, department_id, user_id, mode, top_k, query, temperature, version
+                    tenant_id, department_id, user_id, mode, top_k, query, temperature, version, model
                 )
             )
         except Exception as exc:  # noqa: BLE001 - 缓存故障必须降级而不是报错
@@ -129,13 +139,14 @@ class QueryCache:
         payload: dict[str, Any],
         temperature: float | None = None,
         version: str = "1",
+        model: str | None = None,
     ) -> None:
         if not self.enabled:
             return
         try:
             await self._client().set(
                 self._key(
-                    tenant_id, department_id, user_id, mode, top_k, query, temperature, version
+                    tenant_id, department_id, user_id, mode, top_k, query, temperature, version, model
                 ),
                 json.dumps(payload, ensure_ascii=False),
                 ex=self._ttl,

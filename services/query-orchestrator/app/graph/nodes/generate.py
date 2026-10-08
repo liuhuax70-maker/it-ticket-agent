@@ -30,6 +30,8 @@ def make_generate_node(model_gateway: ModelGatewayClient, settings: Settings):  
             contexts=list(state.get("contexts") or []),
             # 留空则由 model-gateway 用自己的默认温度；评测会显式传 0 换取可复现
             temperature=state.get("temperature"),
+            # 调用方逐请求指定的模型；留空则由 model-gateway 挑默认模型
+            model=state.get("model"),
             tenant_id=state.get("tenant_id"),
             trace_id=state.get("trace_id"),
         )

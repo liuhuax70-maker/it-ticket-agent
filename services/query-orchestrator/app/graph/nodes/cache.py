@@ -17,7 +17,7 @@ logger = get_logger("orchestrator.node.cache")
 
 def _cache_key(
     state: RAGState, settings: Settings
-) -> tuple[str, str, str, str, int, str, float | None]:
+) -> tuple[str, str, str, str, int, str, float | None, str | None]:
     """缓存键分量，见 QueryCache._key 的说明（身份维度缺一即越权风险）。"""
     mode = (state.get("mode") or settings.default_mode()).value
     top_k = state.get("top_k") or settings.top_k
@@ -29,6 +29,8 @@ def _cache_key(
         top_k,
         state.get("query", ""),
         state.get("temperature"),
+        # 请求指定的模型：换了模型答案必然不同，必须分键，否则会命中别的模型的旧答案
+        state.get("model"),
     )
 
 
@@ -47,7 +49,7 @@ def make_cache_lookup_node(cache: QueryCache, settings: Settings):
             CACHE_LOOKUP_COUNTER.inc({"result": "skip"})
             return merge_timing(state, "cache_lookup", started, cached=False)
 
-        tenant_id, department_id, user_id, mode, top_k, query, temperature = _cache_key(
+        tenant_id, department_id, user_id, mode, top_k, query, temperature, model = _cache_key(
             state, settings
         )
         payload = await cache.get(
@@ -59,6 +61,7 @@ def make_cache_lookup_node(cache: QueryCache, settings: Settings):
             query,
             temperature,
             settings.cache_version,
+            model,
         )
         if payload is None:
             CACHE_LOOKUP_COUNTER.inc({"result": "miss"})
@@ -95,7 +98,7 @@ def make_cache_store_node(cache: QueryCache, settings: Settings):
         # 不缓存拒答：把「资料缺失」固化下来，会在文档补录后继续吐旧答案
         if state.get("refused"):
             return merge_timing(state, "cache_store", started)
-        tenant_id, department_id, user_id, mode, top_k, query, temperature = _cache_key(
+        tenant_id, department_id, user_id, mode, top_k, query, temperature, model = _cache_key(
             state, settings
         )
         await cache.set(
@@ -113,6 +116,7 @@ def make_cache_store_node(cache: QueryCache, settings: Settings):
             },
             temperature,
             settings.cache_version,
+            model,
         )
         return merge_timing(state, "cache_store", started)
 

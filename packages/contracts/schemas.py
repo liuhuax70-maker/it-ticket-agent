@@ -285,6 +285,13 @@ class ChatRequest(BaseModel):
     # ② 延迟变成"命中/未命中"的混合值，P50 随缓存状态漂移（实测同代码 1.29s vs 2.13s）。
     # 另外评测跑批若允许写缓存，会把评测流量灌进生产缓存，让**下一次**评测拿到一堆命中。
     use_cache: bool = True
+    # 指定生成模型（留空则由 model-gateway 用自己的默认模型）。
+    #
+    # 编排层会把它透传给 GenerateRequest.model，并**纳入查询缓存键**：
+    # 过去模型由部署配置决定、编排层无从得知，所以只能靠 CACHE_VERSION 整体作废；
+    # 现在模型可由调用方逐请求选择，若不入键，换模型后会继续命中别的模型的旧答案，
+    # 直到 TTL 过期——症状是"明明选了新模型，答案还是老模型的口吻"。
+    model: str | None = None
 
 
 class ChatResponse(BaseModel):

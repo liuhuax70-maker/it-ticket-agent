@@ -29,6 +29,10 @@ class RAGState(TypedDict, total=False):
     top_k: int
     mode: RetrieveMode
     temperature: float | None
+    # 请求方指定的生成模型（ChatRequest.model）。留空由 model-gateway 决定。
+    # ⚠️ 同一个 key 兼作输出：generate 节点会用"实际生效的模型"覆盖它，
+    # 这样 ChatResponse.model 报的一定是真正作答的那个模型，而不是请求的意图。
+    model: str | None
     trace_id: str
     # 本次请求是否允许读写查询缓存。由 ChatRequest.use_cache 决定，
     # 缓存节点据此整体跳过——评测传 False，否则缓存命中会改变可测量的指标
@@ -53,7 +57,7 @@ class RAGState(TypedDict, total=False):
     citations: list[Citation]
     refused: bool
     cached: bool
-    model: str | None
+    # model 见输入段：输入=请求的模型，输出=实际作答的模型（同一 key 复用）
     reranker: str
     timings: dict[str, float]
     errors: list[str]
