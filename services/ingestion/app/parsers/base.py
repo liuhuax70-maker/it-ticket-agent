@@ -60,5 +60,4 @@ def supported_extensions() -> list[str]:
 
 
 def all_extensions() -> set[str]:
-    """返回已注册扩展名集合。"""
     return set(_REGISTRY)
