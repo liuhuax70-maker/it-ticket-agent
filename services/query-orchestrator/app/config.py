@@ -29,6 +29,12 @@ class Settings(BaseAppSettings):
 
     # ---- 可选节点开关（默认关闭，保持可解释的最小链路）----
     rewrite_enabled: bool = False
+
+    # ---- 查询规划（子查询分解）----
+    # 默认关闭：多花一次 LLM 调用，增益要靠评测证明（多跳样本片段召回）。
+    # 启发式闸门保证单信息点问题不产生额外调用。
+    decompose_enabled: bool = False
+    decompose_max_sub_queries: int = 3
     rerank_enabled: bool = False
     guard_llm_enabled: bool = False
     cache_enabled: bool = False

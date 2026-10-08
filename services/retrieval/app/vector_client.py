@@ -31,6 +31,9 @@ class VectorRetriever:
     async def ensure(self) -> None:
         await self._store.ensure_collection()
 
+    async def aclose(self) -> None:
+        await self._store.aclose()
+
     async def retrieve(
         self, query: str, top_k: int, filters: FilterDict | None = None
     ) -> list[SearchHit]:

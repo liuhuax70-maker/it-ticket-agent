@@ -49,7 +49,7 @@ class HybridRetriever:
 
     async def _both(
         self, query: str, vector_top_k: int, bm25_top_k: int, filters: FilterDict | None
-    ) -> tuple[str, list[SearchHit], list[SearchHit] | None]:
+    ) -> tuple[str, list[SearchHit], list[SearchHit] | None, float]:
         started = time.perf_counter()
         results = await asyncio.gather(
             self._vector.retrieve(query, vector_top_k, filters),
@@ -79,13 +79,14 @@ class HybridRetriever:
             if not isinstance(bm25_result, BaseException)
             else []
         )
-        # ⚠️ 耗时通过实例属性回传，而 HybridRetriever 是进程内单例：
-        # 并发 hybrid 请求会互相覆盖这个值，调用方拿到的可能是别的请求的耗时
-        # （属性也没在 __init__ 里初始化，靠下游 getattr 默认值兜底）。
-        # 它只用于 /eval 的延迟统计，不影响检索结果，所以维持 best-effort；
-        # 若要把延迟做成可信指标，必须把 elapsed 随返回值一起传出去。
-        self._last_elapsed = elapsed
-        return ("hybrid", vector_hits, bm25_hits)
+        # elapsed 随返回值传递。曾用实例属性回传——HybridRetriever 是单例，
+        # 并发请求会互相覆盖，调用方拿到别的请求的耗时（观测数据不可信）。
+        return ("hybrid", vector_hits, bm25_hits, elapsed)
+
+    async def aclose(self) -> None:
+        """关闭两路检索器的连接（向量 = Milvus gRPC，BM25 = OpenSearch）。"""
+        await self._vector.aclose()
+        await self._bm25.aclose()
 
     async def search(
         self,
@@ -111,12 +112,14 @@ class HybridRetriever:
             timings["bm25"] = _ms(started)
             return self._cut(hits, self._min_score)[:top_k], timings
 
-        _, vector_hits, bm25_hits = await self._both(query, vector_top_k, bm25_top_k, filters)
+        _, vector_hits, bm25_hits, elapsed = await self._both(
+            query, vector_top_k, bm25_top_k, filters
+        )
         # 两个检索器都契约化返回 list，但降级路径可能给出 None —— 统一兜成空列表，
         # 否则下面的 len() / RRF 会直接 TypeError。
         vector_hits = vector_hits or []
         bm25_hits = bm25_hits or []
-        timings["retrieve"] = getattr(self, "_last_elapsed", 0.0)
+        timings["retrieve"] = elapsed
 
         started = time.perf_counter()
         fused = reciprocal_rank_fusion(

@@ -31,6 +31,10 @@ class RAGState(TypedDict, total=False):
 
     # ---- 中间态 ----
     rewritten_query: str
+    # 规划节点产出：可独立检索的子查询列表（单信息点问题就是 [原查询]）。
+    # retrieve 节点对每个子查询独立检索，再用 RRF 融合——多跳问题的
+    # 每类信息点都能以自己的关键词参赛，而不是挤在一条查询里互相压制。
+    sub_queries: list[str]
     # ⚠️ ACL 必须由 route 节点产出（它从网关下传的身份构造），初始 state 里刻意不给。
     # 检索节点用 ``state.get("acl")``：一旦有人把 route 从图里摘掉，ACL 会静默变成
     # None，而 None 在 filters.compile_filters 里表示"放弃全部过滤" = 全库召回。

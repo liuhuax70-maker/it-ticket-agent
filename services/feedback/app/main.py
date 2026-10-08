@@ -12,6 +12,7 @@ from app.bad_cases import BadCaseCollector
 from app.config import Settings
 from app.consumers import consume_feedback_events
 from app.store import FeedbackStore
+from packages.common.background import cancel_and_wait, spawn_supervised
 from packages.common.constants import SERVICE_FEEDBACK, VERSION
 from packages.common.errors import install_exception_handlers
 from packages.common.logging import get_logger, setup_logging
@@ -42,12 +43,13 @@ async def lifespan(app: FastAPI):
     consumer_task: asyncio.Task | None = None
     try:
         if settings.use_kafka:
-            consumer_task = asyncio.create_task(consume_feedback_events(store, settings))
+            consumer_task = spawn_supervised(
+                consume_feedback_events(store, settings), name="feedback-kafka-consumer"
+            )
         logger.info("feedback 启动 port=%s", settings.port)
         yield
     finally:
-        if consumer_task is not None:
-            consumer_task.cancel()
+        await cancel_and_wait(consumer_task)
 
 
 app = FastAPI(title="feedback", version=VERSION, lifespan=lifespan)

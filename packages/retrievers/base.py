@@ -55,6 +55,8 @@ class Retriever(Protocol):
         self, query: str, top_k: int, filters: FilterDict | None = None
     ) -> list[SearchHit]: ...
 
+    async def aclose(self) -> None: ...
+
 
 RETRIEVER_VECTOR = "vector"
 RETRIEVER_BM25 = "bm25"

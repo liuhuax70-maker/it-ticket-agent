@@ -63,6 +63,9 @@ class FakeRetriever:
         self.calls.append(query)
         return self._hits[:top_k]
 
+    async def aclose(self) -> None:
+        return None
+
 
 class FailingRetriever:
     name = "failing"
@@ -71,6 +74,9 @@ class FailingRetriever:
         from packages.common.errors import DependencyUnavailable
 
         raise DependencyUnavailable("OpenSearch", "down")
+
+    async def aclose(self) -> None:
+        return None
 
 
 async def test_hybrid_fuses_two_routes_with_rrf() -> None:

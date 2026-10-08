@@ -10,6 +10,7 @@ from fastapi import FastAPI, HTTPException
 from app.config import Settings
 from app.consumers import consume_chunk_events
 from app.service import IndexService
+from packages.common.background import cancel_and_wait, spawn_supervised
 from packages.common.constants import SERVICE_INDEXING, VERSION
 from packages.common.errors import install_exception_handlers
 from packages.common.logging import get_logger, setup_logging
@@ -34,12 +35,13 @@ async def lifespan(app: FastAPI):
     try:
         await service.startup()
         if settings.use_kafka:
-            consumer_task = asyncio.create_task(consume_chunk_events(service, settings))
+            consumer_task = spawn_supervised(
+                consume_chunk_events(service, settings), name="indexing-kafka-consumer"
+            )
         logger.info("indexing 启动完成 port=%s", settings.port)
         yield
     finally:
-        if consumer_task is not None:
-            consumer_task.cancel()
+        await cancel_and_wait(consumer_task)
         await service.aclose()
 
 

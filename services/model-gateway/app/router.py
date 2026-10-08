@@ -8,7 +8,7 @@ import time
 from app.config import Settings
 from app.cost import parse_prices, usage_cost_usd
 from app.fallback import FallbackPolicy
-from app.quota import QuotaGuard
+from app.quota import QuotaExceeded, QuotaGuard
 from packages.common.constants import REFUSE_MARKER, REFUSE_TEXT
 from packages.common.errors import UpstreamError
 from packages.common.logging import get_logger
@@ -143,14 +143,18 @@ class ModelRouter:
                 )
                 if idx > 0:
                     logger.warning("主模型不可用，已降级到 %s", target.name)
-                await self._quota.consume(tenant_id, result.usage.get("total_tokens", 0))
-                # 成本折算：token 数不等于钱，只有折算成美元才能做预算与降本决策。
-                # 记 0 的情况（本地模型/未配单价）也会如实进指标，不会虚增成本。
+                # 成本折算先于配额检查：**调用已成功，钱已经花了**——若先查配额，
+                # 越限那次成功的生成会被丢弃、成本也漏记（token 计了、金额没计，
+                # 两个口径从此对不上）。
                 cost = usage_cost_usd(result.model, result.usage, self._prices)
                 LLM_COST_COUNTER.inc(
                     {"model": result.model, "tenant": tenant_id or "anonymous"}, cost
                 )
                 await self._quota.add_cost(tenant_id, cost)
+                # QuotaExceeded(429) 必须原样向上抛，不能落进下面的泛化 except：
+                # 否则"配额用尽"会被包装成"全部模型均失败"(502)——
+                # 调用方无法区分该退避重试还是该停止调用，且已付费的结果被丢弃。
+                await self._quota.consume(tenant_id, result.usage.get("total_tokens", 0))
                 timings = dict(result.timings_ms)
                 timings["total"] = round((time.perf_counter() - started_total) * 1000, 1)
                 return GenerateResponse(
@@ -160,6 +164,8 @@ class ModelRouter:
                     usage=result.usage,
                     timings_ms=timings,
                 )
+            except QuotaExceeded:
+                raise
             except Exception as exc:  # noqa: BLE001
                 errors.append(f"{target.name}: {exc}")
                 logger.error("模型调用失败 target=%s err=%s", target.name, exc)

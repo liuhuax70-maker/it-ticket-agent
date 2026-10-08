@@ -13,6 +13,7 @@ from app.graph.nodes.guard import (
     make_guard_node,
     make_refuse_node,
 )
+from app.graph.nodes.plan import make_plan_node
 from app.graph.nodes.rerank import make_rerank_node
 from app.graph.nodes.retrieve import make_retrieve_node
 from app.graph.nodes.rewrite import make_rewrite_node
@@ -26,6 +27,7 @@ __all__ = [
     "make_cache_store_node",
     "make_generate_node",
     "make_guard_node",
+    "make_plan_node",
     "make_refuse_node",
     "make_rerank_node",
     "make_retrieve_node",

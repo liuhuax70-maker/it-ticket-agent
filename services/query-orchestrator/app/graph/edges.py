@@ -13,6 +13,7 @@ from app.graph.state import RAGState
 # 节点名
 NODE_CACHE_LOOKUP = "cache_lookup"
 NODE_REWRITE = "rewrite"
+NODE_PLAN = "plan"
 NODE_ROUTE = "route"
 NODE_RETRIEVE = "retrieve"
 NODE_RERANK = "rerank"

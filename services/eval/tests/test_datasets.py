@@ -105,8 +105,9 @@ def _row(
     latency_ms: float | None = 100.0,
     answer: str | None = None,
     must_not_contain: list[str] | None = None,
+    **extra: object,
 ) -> dict:
-    return {
+    row = {
         "sample_id": sample_id,
         "answer": answer
         if answer is not None
@@ -123,6 +124,8 @@ def _row(
         "error": error,
         "latency_ms": latency_ms,
     }
+    row.update(extra)
+    return row
 
 
 def test_hit_at_k_and_mrr() -> None:
@@ -224,6 +227,29 @@ def test_leak_is_counted_even_for_a_single_citation() -> None:
     assert report.leak_count == 1
     assert report.leak_rate == pytest.approx(0.5)
     assert report.failures == [] or all(f["kind"] != "leak" for f in report.failures)
+
+
+def test_leak_is_detected_via_context_even_without_citation() -> None:
+    """泄露的第一现场是**检索层**，模型引不引用它是生成侧的、不受控的行为。
+
+    只查引用的话，「存储层 ACL 打穿 + 模型恰好没引用泄露分块」会得出
+    leak=0 的假阴性——而这条指标是零容忍门禁，假阴性等于权限回归被静默放行。
+    """
+    rows = [
+        _row(
+            "silent-leak",
+            citations=[{"doc_id": "d_public"}],  # 模型只引用了公开文档
+            contexts=["公开分块", "禁用文档的分块"],
+            chunk_doc_ids=["d_public", "d_secret"],  # 但检索层送进了禁用文档
+            forbidden=["d_secret"],
+        ),
+        _row("clean", citations=[{"doc_id": "d_public"}], forbidden=["d_secret"]),
+    ]
+    report = compute(rows)
+    assert report.leak_count == 1
+    detail = report.leak_details[0]
+    assert detail["sample_id"] == "silent-leak"
+    assert detail["leaked_doc_ids"] == ["d_secret"]
 
 
 def test_by_tag_breakdown_exposes_small_group_failures() -> None:

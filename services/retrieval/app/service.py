@@ -116,7 +116,4 @@ class RetrievalService:
         return details
 
     async def aclose(self) -> None:
-        # ⚠️ 这里只关了 BM25 客户端，**Milvus 客户端没有关闭**（向量客户端由
-        # HybridRetriever 持有，未暴露关闭入口）。进程退出时由 OS 回收，不影响
-        # 正确性；但"资源释放不完整"这件事必须写下来，否则重构时容易误以为已经关干净。
-        await self._bm25.aclose()
+        await self._hybrid.aclose()

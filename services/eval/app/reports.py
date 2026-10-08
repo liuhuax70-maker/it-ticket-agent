@@ -69,6 +69,9 @@ def summarize(payload: dict[str, Any]) -> dict[str, Any]:
         "authz_mode": payload["preflight"].get("authz_mode"),
         "confidence": "ok" if l1.count >= MIN_SAMPLES_FOR_CONFIDENCE else "insufficient_samples",
         "latency_ms_avg": round(sum(latencies) / len(latencies), 1) if latencies else None,
+        # 报告完成时间：回归门禁冻结基线时会读它作 frozen_at——
+        # 此前 summary 从不产出这个字段，基线的"何时冻结"一直是空串，失去可追溯性
+        "finished_at": datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ"),
     }
 
 

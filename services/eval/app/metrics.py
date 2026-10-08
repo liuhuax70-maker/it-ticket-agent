@@ -422,11 +422,20 @@ def _apply_leak_metrics(report: MetricsReport, rows: list[dict[str, Any]]) -> No
 
     ``forbidden_doc_ids`` 由采集器保证是**完整**集合（数据集显式声明 + 台账 ACL 推导），
     这里只做判定，不再自己算一遍可见集合——两处各算一套正是漏检的来源。
+
+    判定范围是**引用 ∪ 上下文**，不只看引用：泄露的第一现场是**检索层**
+    （禁用文档的 chunk 进了 contexts），模型引不引用它是生成侧行为、完全不受控。
+    只查引用的话，"存储层 ACL 打穿 + 模型恰好没引用"会得出 leak=0 的假阴性，
+    而这条指标是零容忍门禁——假阴性等于权限回归被静默放行。
     """
     leaks: list[dict[str, Any]] = []
     for row in rows:
         forbidden = set(row.get("forbidden_doc_ids") or [])
-        leaked = [doc_id for doc_id in _unique_doc_ids(row) if doc_id in forbidden]
+        # 引用侧：模型选择引用的文档
+        cited = set(_unique_doc_ids(row))
+        # 检索侧：真正送进生成上下文的文档（与 contexts 等长同序）
+        retrieved = {doc_id for doc_id in (row.get("chunk_doc_ids") or []) if doc_id}
+        leaked = sorted((cited | retrieved) & forbidden)
         if leaked:
             leaks.append(
                 {

@@ -13,7 +13,7 @@ from typing import Any
 from fastapi import Request
 from pydantic import BaseModel, Field
 
-from packages.common.errors import RagError
+from packages.common.errors import DependencyUnavailable, RagError
 from packages.common.logging import get_logger
 from packages.contracts import ACL, Visibility
 from packages.security.config import SecuritySettings
@@ -71,15 +71,23 @@ def _fetch_jwks(settings: SecuritySettings, *, force: bool = False) -> list[dict
     缓存未命中时会在事件循环里阻塞最多 5 秒（timeout）。JWKS 每 5 分钟才刷一次，
     正常情况下影响有限；但 Keycloak 不可达时，每个请求都可能付这 5 秒。
     要彻底解决需改为 httpx.AsyncClient，并把本函数一并改成 async。
+
+    网络错误必须转成 :class:`DependencyUnavailable`（RagError 家族）：
+    中间件只捕 RagError，裸的 httpx 异常会把"身份服务不可达"变成
+    500 Internal Server Error——监控会把 IdP 故障误判成网关 bug。
     """
     now = time.time()
     if not force and _jwks_cache["keys"] and now - _jwks_cache["fetched_at"] < JWKS_TTL_SECONDS:
         return _jwks_cache["keys"]
     import httpx
 
-    resp = httpx.get(settings.jwks_url(), timeout=5.0)
-    resp.raise_for_status()
-    keys = resp.json().get("keys", [])
+    try:
+        resp = httpx.get(settings.jwks_url(), timeout=5.0)
+        resp.raise_for_status()
+        keys = resp.json().get("keys", [])
+    except httpx.HTTPError as exc:
+        # 连接失败/超时/5xx：这是依赖故障不是"令牌非法"，语义上属于 503
+        raise DependencyUnavailable("keycloak", f"JWKS 拉取失败: {exc}") from exc
     _jwks_cache.update({"fetched_at": now, "keys": keys})
     return keys
 

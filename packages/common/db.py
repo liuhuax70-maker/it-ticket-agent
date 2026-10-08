@@ -1,4 +1,9 @@
-"""Postgres 异步引擎与会话工厂（SQLAlchemy 2.0 + asyncpg）。"""
+"""Postgres 异步引擎与会话工厂（SQLAlchemy 2.0 + asyncpg）。
+
+按 **URL 键控**缓存引擎/会话工厂。曾实现为"首个 URL 永久生效"的单例：
+进程里第二个库（例如网关同时触主库与审计库）的读写会**静默落到第一个库**，
+没有任何报错——那是最阴险的一类 bug。
+"""
 
 from __future__ import annotations
 
@@ -14,33 +19,34 @@ from sqlalchemy.ext.asyncio import (
 
 from packages.common.models import Base
 
-_engine: AsyncEngine | None = None
-_session_factory: async_sessionmaker[AsyncSession] | None = None
+_engines: dict[str, AsyncEngine] = {}
+_session_factories: dict[str, async_sessionmaker[AsyncSession]] = {}
 
 
 def get_engine(database_url: str, *, echo: bool = False) -> AsyncEngine:
-    """进程级单例引擎。"""
-    global _engine
-    if _engine is None:
-        _engine = create_async_engine(
+    engine = _engines.get(database_url)
+    if engine is None:
+        engine = create_async_engine(
             database_url,
             echo=echo,
             pool_pre_ping=True,
             pool_size=5,
             max_overflow=5,
         )
-    return _engine
+        _engines[database_url] = engine
+    return engine
 
 
 def get_session_factory(
     database_url: str, *, echo: bool = False
 ) -> async_sessionmaker[AsyncSession]:
-    global _session_factory
-    if _session_factory is None:
-        _session_factory = async_sessionmaker(
+    factory = _session_factories.get(database_url)
+    if factory is None:
+        factory = async_sessionmaker(
             bind=get_engine(database_url, echo=echo), expire_on_commit=False
         )
-    return _session_factory
+        _session_factories[database_url] = factory
+    return factory
 
 
 @asynccontextmanager
@@ -63,9 +69,11 @@ async def create_all(database_url: str) -> None:
         await conn.run_sync(Base.metadata.create_all)
 
 
-async def dispose_engine() -> None:
-    global _engine, _session_factory
-    if _engine is not None:
-        await _engine.dispose()
-    _engine = None
-    _session_factory = None
+async def dispose_engine(database_url: str | None = None) -> None:
+    """关闭引擎。传 URL 只关那一个；不传清空全部（测试用）。"""
+    urls = [database_url] if database_url else list(_engines)
+    for url in urls:
+        engine = _engines.pop(url, None)
+        if engine is not None:
+            await engine.dispose()
+        _session_factories.pop(url, None)

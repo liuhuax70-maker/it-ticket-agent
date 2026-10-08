@@ -32,6 +32,18 @@ async def consume_chunk_events(service: IndexService, settings: Settings) -> Non
         settings.kafka_bootstrap, settings.kafka_topic_chunk_events, settings.kafka_consumer_group
     ):
         try:
+            # 事件分两种形态：入库（带 chunks）与删除（op=delete）。
+            # 此前只认入库形态：删除事件会构造出空 chunks 的 IndexRequest，
+            # 被 service 拒绝后仅记一条 error——**合规删除静默失效**，
+            # 文档已从台账移除但向量与正文永久残留、仍可被检索引用。
+            if payload.get("op") == "delete":
+                doc_id = str(payload.get("doc_id") or "")
+                if not doc_id:
+                    logger.error("删除事件缺少 doc_id，跳过: %s", payload)
+                    continue
+                deleted = await service.delete_document(doc_id)
+                logger.info("Kafka 消费删除成功 doc_id=%s %s", doc_id, deleted)
+                continue
             req = IndexRequest(
                 chunks=[Chunk.model_validate(c) for c in payload.get("chunks", [])],
                 reindex=bool(payload.get("reindex", False)),

@@ -2,9 +2,10 @@
 
 拓扑（最小闭环）：
     START -> cache_lookup -命中-> END
-                         -未命中-> rewrite -> route -> retrieve -空-> refuse -> END
+                         -未命中-> rewrite -> plan -> route -> retrieve -空-> refuse -> END
                                                           -非空-> rerank -> generate
                                                                         -> guard -> cache_store -> END
+    plan（查询规划）：把复合问题拆成子查询；单信息点问题透传，不花 LLM 调用
 
 每个节点只做一件事，``edges.py`` 负责分支判断；
 加「多轮 / 反思 / GraphRAG」只需在图上挂新节点，不必改动已有节点。
@@ -23,6 +24,7 @@ from app.graph.edges import (
     NODE_CACHE_STORE,
     NODE_GENERATE,
     NODE_GUARD,
+    NODE_PLAN,
     NODE_REFUSE,
     NODE_RERANK,
     NODE_RETRIEVE,
@@ -37,6 +39,7 @@ from app.graph.nodes import (
     make_cache_store_node,
     make_generate_node,
     make_guard_node,
+    make_plan_node,
     make_refuse_node,
     make_rerank_node,
     make_retrieve_node,
@@ -60,6 +63,7 @@ def build_graph(
 
     graph.add_node(NODE_CACHE_LOOKUP, make_cache_lookup_node(cache, settings))
     graph.add_node(NODE_REWRITE, make_rewrite_node(model_gateway, settings))
+    graph.add_node(NODE_PLAN, make_plan_node(model_gateway, settings))
     graph.add_node(NODE_ROUTE, make_route_node(settings))
     graph.add_node(NODE_RETRIEVE, make_retrieve_node(retrieval, settings))
     graph.add_node(NODE_RERANK, make_rerank_node(retrieval, settings))
@@ -72,7 +76,8 @@ def build_graph(
     graph.add_conditional_edges(
         NODE_CACHE_LOOKUP, after_cache_lookup, {NODE_REWRITE: NODE_REWRITE, END: END}
     )
-    graph.add_edge(NODE_REWRITE, NODE_ROUTE)
+    graph.add_edge(NODE_REWRITE, NODE_PLAN)
+    graph.add_edge(NODE_PLAN, NODE_ROUTE)
     graph.add_edge(NODE_ROUTE, NODE_RETRIEVE)
     graph.add_conditional_edges(
         NODE_RETRIEVE, after_retrieve, {NODE_RERANK: NODE_RERANK, NODE_REFUSE: NODE_REFUSE}

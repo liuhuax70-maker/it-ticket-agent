@@ -141,6 +141,11 @@ class MilvusStore:
         except Exception as exc:  # noqa: BLE001
             return False, str(exc)
 
+    async def aclose(self) -> None:
+        """关闭 gRPC 长连接。此前从不关闭：进程退出靠 OS 回收，
+        多副本频繁重启会留下一堆半开连接直到服务端 idle 超时。"""
+        await asyncio.to_thread(self._client.close)
+
     async def count(self) -> int:
         try:
             rows = await asyncio.to_thread(
@@ -156,35 +161,43 @@ class MilvusStore:
             return 0
 
     # ---------------- 写入 ----------------
+    @staticmethod
+    def _truncate_utf8(value: str, max_bytes: int) -> str:
+        """按 **字节** 截断 UTF-8 字符串，且不切出半个多字节字符。
+
+        Milvus 的 VARCHAR ``max_length`` 是字节上限：中文按字符截断（[:512]）
+        只保证 512 个字符，字节数可达 3 倍——真超长时 Milvus **拒写整批 rows**，
+        表现为整个文档入库失败。text 字段早已按字节截断，section_path/owner
+        曾是漏网的两处（实测口径混用不出错，只在真超长时爆）。
+        """
+        encoded = value.encode("utf-8")
+        if len(encoded) <= max_bytes:
+            return value
+        return encoded[:max_bytes].decode("utf-8", errors="ignore")
+
     def _row(self, chunk: Chunk, vector: list[float]) -> dict[str, Any]:
+        text_max = self._settings.milvus_text_max_length
         return {
             "chunk_id": chunk.chunk_id,
             "vector": vector,
             "doc_id": chunk.doc_id,
             "doc_title": chunk.doc_title,
             "source": chunk.source,
-            # 按字节截断，避免中文超 max_length 直接插入报错。
-            # ⚠️ 口径提示：VARCHAR 的 max_length 是**字节**上限，所以 text 用字节截断；
-            # 而下面 section_path/owner 是按**字符**截断的（[:512] / [:128]）。
-            # 混用不会立刻报错，只会在字段真超长时被 Milvus 拒写。要严格对齐，
-            # 需把这两处也改成字节截断。
-            # 另一处副作用：text 被截断后 char_start/char_end 仍指向**原文**，
-            # 所以 Milvus 里的 text 与"按偏移回查原文"的结果可能不一致——
+            # 全部 VARCHAR 字段统一按**字节**截断（口径不再混用，见 _truncate_utf8）。
+            # 副作用提示：text 被截断后 char_start/char_end 仍指向**原文**，
             # 引用高亮请以元数据里的原文为准，不要拿向量库里的 text 做高亮。
-            "text": chunk.text.encode("utf-8")[: self._settings.milvus_text_max_length].decode(
-                "utf-8", errors="ignore"
-            ),
+            "text": chunk.text.encode("utf-8")[:text_max].decode("utf-8", errors="ignore"),
             "chunk_index": chunk.chunk_index,
-            "section_path": chunk.section_path[:512],
+            "section_path": self._truncate_utf8(chunk.section_path, 512),
             "char_start": chunk.char_start,
             "char_end": chunk.char_end,
             "tenant_id": chunk.acl.tenant_id,
             "department_id": chunk.acl.department_id,
             "visibility": chunk.acl.visibility.value,
-            "owner": (chunk.acl.owner or "")[:128],
+            "owner": self._truncate_utf8(chunk.acl.owner or "", 128),
             # 生命周期（失效管理）。缺省为 active：未声明的文档保持可检索，
             # 这样加字段不需要迁移存量数据。
-            "lifecycle": (chunk.lifecycle or LIFECYCLE_ACTIVE)[:16],
+            "lifecycle": self._truncate_utf8(chunk.lifecycle or LIFECYCLE_ACTIVE, 16),
         }
 
     def _upsert_sync(self, rows: list[dict[str, Any]]) -> int:
