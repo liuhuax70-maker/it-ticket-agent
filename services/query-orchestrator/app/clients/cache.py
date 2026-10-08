@@ -66,25 +66,12 @@ class QueryCache:
     ) -> str:
         """组装缓存键。
 
-        这里每个分量都不是"可选的"，少一个就会出事：
+        ``tenant_id/department_id/user_id`` 缺一即失效：ACL 过滤依赖这三个维度，少了任一个
+        都会让同租户内不同部门共用同一条答案，检索层 ACL 被整段绕过，且缓存关闭时完全不可见。
+        private 按 owner 过滤，所以 ``user_id`` 不能省。
 
-        ``tenant_id / department_id / user_id``
-            **ACL 过滤依赖这三个维度。** 早期实现只用
-            ``(tenant_id, mode, top_k, query)``，结果同租户内 alice（hr）与
-            bob（engineering）问同一句问题时共用同一条缓存——bob 会直接收到
-            alice 那条**带 HR 文档引用**的答案，检索层的 ACL 过滤被整段绕过。
-            这类漏洞在缓存关闭时完全不可见，只在生产开启缓存后才暴露。
-            private 可见性按 owner 过滤，所以 ``user_id`` 不能省。
-        ``mode / top_k``
-            检索方式与召回条数不同，答案就不同。
-        ``temperature``
-            生成温度不同答案就不同；评测会把上一轮的结果当成本轮结果。
-        ``query``
-            归一化后参与摘要，避免空白差异导致无谓穿透。
-        ``version``
-            显式失效开关（``CACHE_VERSION``）。换作答模型/改提示词/改切分参数后
-            调大它即可让旧答案立刻失效，而不是等 TTL 过期或手动 flushdb。
-            它解决的是"缓存键无法表达的那些变化"——编排层并不知道下游实际用哪个模型。
+        ``version``（``CACHE_VERSION``）是显式失效开关，应对缓存键表达不了的变化——换作答
+        模型、改提示词、改切分参数，这些编排层并不知道下游实际用了什么。
         """
         parts = "|".join(
             [
