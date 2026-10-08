@@ -470,4 +470,4 @@ Milvus schema 没有 alter（`enable_dynamic_field=False`），存量集合不�
 
 ## 许可证
 
-[MIT](LICENSE)。Copyright (c) 2026 吴兴龙。
+[MIT](LICENSE)。Copyright (c) 2026 弄弄nongnong。
