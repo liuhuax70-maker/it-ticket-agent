@@ -32,6 +32,7 @@ FeedbackWriter = Annotated[Identity, Depends(require_action("feedback:write"))]
 async def submit(
     req: FeedbackRequest, request: Request, identity: FeedbackWriter
 ) -> FeedbackResponse:
+    """POST /feedback：鉴权（feedback:write）后转发到 feedback 服务（见模块 docstring 的身份下沉缺口）。"""
     # identity 目前只用于鉴权（依赖注入即校验），未下传——见模块 docstring 的说明。
     del identity
     client: FeedbackClient = request.app.state.feedback

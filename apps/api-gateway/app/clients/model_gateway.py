@@ -9,6 +9,12 @@ from packages.contracts import ModelInfo
 
 
 class ModelGatewayClient:
+    """model-gateway 管理面只读客户端（模型列表 / 租户配额）。
+
+    网关这里只用它来喂给 admin 路由做展示，不涉及推理鉴权；
+    真正的模型调用鉴权在 model-gateway 自身。
+    """
+
     def __init__(self, base_url: str, timeout: float = 30.0) -> None:
         self._client = ServiceClient(base_url, name="model-gateway", timeout=timeout)
 

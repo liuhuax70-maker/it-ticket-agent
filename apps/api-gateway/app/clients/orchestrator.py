@@ -12,6 +12,11 @@ from packages.security import Identity
 
 
 def identity_headers(identity: Identity) -> dict[str, str]:
+    """把身份压平为请求头下传给 query-orchestrator。
+
+    网关是唯一鉴权点，下游无条件信任这些头；因此 tenant/department/roles
+    必须完整且来自已校验的 Identity，绝不可由客户端透传掺假。
+    """
     return {
         "x-user-id": identity.user_id,
         "x-tenant-id": identity.tenant_id,
@@ -21,6 +26,12 @@ def identity_headers(identity: Identity) -> dict[str, str]:
 
 
 class OrchestratorClient:
+    """query-orchestrator 的 HTTP 客户端。
+
+    仅转发已鉴权请求并下传身份头，不缓存、不改写任何决策结果；
+    真正的检索编排与权限下推发生在下游服务。
+    """
+
     def __init__(self, base_url: str, timeout: float = 180.0) -> None:
         self._client = ServiceClient(base_url, name="query-orchestrator", timeout=timeout)
 

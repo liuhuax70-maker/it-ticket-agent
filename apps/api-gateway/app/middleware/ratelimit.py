@@ -27,6 +27,12 @@ WINDOW_SECONDS = 60
 
 
 class RateLimitMiddleware(BaseHTTPMiddleware):
+    """租户固定窗口限流中间件（Redis INCR+EXPIRE，无需 Lua 脚本）。
+
+    Redis 不可用则 **fail-open** 放行：限流是保护下游的手段而非安全边界，
+    真正越权由 OPA 拦截，因缓存故障把问答打挂更糟。
+    """
+
     def __init__(self, app, settings: Settings, counter: RedisCounter) -> None:  # noqa: ANN001
         super().__init__(app)
         self.settings = settings

@@ -9,6 +9,12 @@ from packages.contracts import ACL, IngestRequest, IngestResponse
 
 
 class IngestionClient:
+    """接入/查询/合规删除的 HTTP 客户端。
+
+    注意 ACL 由上游（网关路由层）按身份强制写入再下传，本客户端只负责
+    原样投递，不做二次校验——校验权集中在网关，避免两端逻辑漂移。
+    """
+
     def __init__(self, base_url: str, timeout: float = 600.0) -> None:
         self._client = ServiceClient(base_url, name="ingestion", timeout=timeout)
 

@@ -26,6 +26,11 @@ _FLUSH_INTERVAL = 1.0
 
 
 class AuditSink:
+    """审计记录落库：内存队列 + 后台批量写入（尽力持久，失败丢弃并告警）。
+
+    与中间件解耦：审计写失败绝不拖垮业务；批量插入摊薄高频写入开销。
+    """
+
     def __init__(self, database_url: str) -> None:
         self._url = database_url
         self._queue: asyncio.Queue[dict] = asyncio.Queue(maxsize=_QUEUE_MAX)
@@ -33,11 +38,13 @@ class AuditSink:
         self.dropped = 0
 
     async def start(self) -> None:
+        """启动后台落库任务（开发/测试兜底建表；生产用 Alembic）。"""
         # 开发/测试兜底建表；正式环境用 Alembic（见 packages/common/db.py）
         await create_all(self._url)
         self._task = asyncio.create_task(self._run(), name="audit-sink")
 
     async def put(self, record: dict) -> None:
+        """非阻塞入队；队列满则丢弃并计数（每百条告警一次，避免刷屏）。"""
         try:
             self._queue.put_nowait(record)
         except asyncio.QueueFull:
@@ -47,6 +54,7 @@ class AuditSink:
                 logger.warning("审计队列已满，累计丢弃 %s 条", self.dropped)
 
     async def _run(self) -> None:
+        """攒批循环：阻塞等首条后进入批量窗口；取消时尽力写完残留批次。"""
         loop = asyncio.get_running_loop()
         while True:
             batch: list[dict] = []
@@ -69,6 +77,7 @@ class AuditSink:
             await self._write(batch)
 
     async def _write(self, batch: list[dict]) -> None:
+        """批量写 Postgres；失败整体丢弃并告警（审计是旁路，可据此配置告警）。"""
         if not batch:
             return
         started = time.perf_counter()
@@ -84,6 +93,7 @@ class AuditSink:
             logger.warning("审计批量写入失败，丢弃 %s 条: %s", len(batch), exc)
 
     async def aclose(self) -> None:
+        """取消后台落库任务。"""
         if self._task is not None:
             self._task.cancel()
             try:

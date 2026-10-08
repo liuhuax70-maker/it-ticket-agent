@@ -7,6 +7,12 @@ from packages.security import SecuritySettings
 
 
 class Settings(SecuritySettings):
+    """api-gateway 配置：入口层只关心「鉴权 + 限流 + 转发」。
+
+    下游地址、Redis 限流、审计落库、上传/前端开关都在此；``rate_limit_exempt`` 与父类
+    ``authz_exempt_paths`` 是两个不同名单（方法名刻意不同，避免覆盖静默失效）。
+    """
+
     service_name: str = SERVICE_API_GATEWAY
     host: str = "0.0.0.0"
     port: int = 8000

@@ -17,6 +17,12 @@ logger = get_logger("gateway.keycloak")
 
 
 class KeycloakClient:
+    """Keycloak 客户端：服务账号令牌与可达性探测。
+
+    用户令牌的**校验**在 ``packages.security.identity``（走 JWKS，不依赖本模块）；
+    本类只服务 eval / 定时任务等非交互场景。
+    """
+
     def __init__(self, settings: SecuritySettings, timeout: float = 5.0) -> None:
         self._settings = settings
         self._timeout = timeout

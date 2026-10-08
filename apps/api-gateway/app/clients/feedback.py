@@ -12,6 +12,12 @@ from packages.contracts import FeedbackRequest, FeedbackResponse
 
 
 class FeedbackClient:
+    """feedback 服务的 HTTP 客户端。
+
+    下游不可用时直接抛出 503（由 ServiceClient 传播），网关不做重试或
+    静默丢弃——丢反馈比明明白白报错更难排查。
+    """
+
     def __init__(self, base_url: str, timeout: float = 10.0) -> None:
         self._client = ServiceClient(base_url, name="feedback", timeout=timeout)
 

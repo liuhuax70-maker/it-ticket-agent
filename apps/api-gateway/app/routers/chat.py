@@ -23,4 +23,5 @@ def _client(request: Request) -> OrchestratorClient:
 
 @router.post("", response_model=ChatResponse, summary="知识库问答")
 async def chat(req: ChatRequest, request: Request, identity: ChatCaller) -> ChatResponse:
+    """POST /chat：鉴权（chat）后转发到编排层；网关不参与 RAG 逻辑。"""
     return await _client(request).chat(req, identity)

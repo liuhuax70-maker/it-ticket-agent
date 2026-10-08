@@ -25,6 +25,7 @@ router = APIRouter(tags=["health"])
 
 
 async def _probe(client: Any) -> str:
+    """探测下游可达性：ping 成功返回 ``"ok"``，否则返回 ``"error: ..."``。"""
     try:
         return "ok" if await client.ping() else "unreachable"
     except Exception as exc:  # noqa: BLE001
@@ -33,6 +34,7 @@ async def _probe(client: Any) -> str:
 
 @router.get("/health", response_model=HealthResponse)
 async def health(request: Request) -> HealthResponse:
+    """GET /health：网关自身 + RAG 主链路下游可达性；下游不可达降为 degraded（不探测 OPA/Keycloak/Redis，见模块 docstring）。"""
     state = request.app.state
     settings = state.settings
 

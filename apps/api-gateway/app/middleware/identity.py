@@ -25,6 +25,11 @@ logger = get_logger("gateway.identity")
 
 
 class IdentityMiddleware(BaseHTTPMiddleware):
+    """身份中间件：只做解析（JWT→Identity），失败即 401；豁免路径（探针/静态）直接放行。
+
+    职责分离：本类不碰授权（OPA），授权放在路由依赖 ``require_action`` / ``require_admin``。
+    """
+
     def __init__(self, app, settings: Settings) -> None:  # noqa: ANN001
         super().__init__(app)
         self.settings = settings
@@ -61,6 +66,7 @@ class IdentityMiddleware(BaseHTTPMiddleware):
 
 
 def get_identity(request: Request) -> Identity:
+    """取出中间件注入的 ``Identity``；未注入则抛 ``Unauthorized``（中间件缺失时）。"""
     identity = getattr(request.state, "identity", None)
     if identity is None:  # pragma: no cover - 中间件缺失时才可能发生
         raise Unauthorized("身份未注入，请检查 IdentityMiddleware 是否已挂载")
@@ -92,6 +98,7 @@ def require_action(action: str) -> Callable[[Request], Awaitable[Identity]]:
 
 
 def require_admin(request: Request) -> Identity:
+    """管理员依赖：需 ``rag_admin`` 角色（鉴权开启时），否则 ``Forbidden``。"""
     identity = get_identity(request)
     if getattr(request.app.state, "opa", None) is not None and getattr(
         request.app.state.opa, "enabled", False

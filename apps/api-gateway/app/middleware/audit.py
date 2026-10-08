@@ -26,6 +26,11 @@ _QUIET_PATHS = {"/health", "/metrics", "/openapi.json", "/docs", "/redoc"}
 
 
 class AuditMiddleware(BaseHTTPMiddleware):
+    """审计中间件：记录「谁/何时/访问何资源/结果」，不记请求体与答案正文（避免审计成为泄密面）。
+
+    非豁免路径的访问记录经 ``AuditSink`` 落库（旁路、非阻塞，失败不影响返回）。
+    """
+
     def __init__(self, app, settings: Settings) -> None:  # noqa: ANN001
         super().__init__(app)
         self.enabled = settings.audit_enabled

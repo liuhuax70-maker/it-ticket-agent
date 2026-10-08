@@ -8,6 +8,13 @@ logger = get_logger("gateway.redis")
 
 
 class RedisCounter:
+    """固定窗口限流计数器。
+
+    所有方法在 Redis 不可用时返回 ``None`` 而非抛错，调用方（RateLimitMiddleware）
+    据此走 fail-open 放行——限流是可用性增强项，绝不能因 Redis 抖动把正常流量
+    全挡在门外。
+    """
+
     def __init__(self, url: str) -> None:
         self._url = url
         self._redis = None
