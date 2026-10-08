@@ -536,7 +536,7 @@
     var section = document.createElement('section');
     section.className = 'welcome';
     section.innerHTML = '<h1></h1><p>基于企业内部资料的问答，答案附带可回查的原文引用。</p>';
-    section.querySelector('h1').textContent = greeting() + '，有什么可以帮你的？';
+    section.querySelector('h1').textContent = greeting() + '，我是 permission-aware-rag';
 
     var grid = document.createElement('div');
     grid.className = 'suggestions';
