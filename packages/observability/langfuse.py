@@ -20,6 +20,7 @@ MAX_TEXT = 200
 
 
 def truncate(text: str, limit: int = MAX_TEXT) -> str:
+    """截断到 ``limit`` 字符（默认 200），避免把 chunk 原文等超长内容上报到 Langfuse。"""
     if text is None:
         return ""
     return text if len(text) <= limit else text[:limit] + "..."
@@ -44,21 +45,27 @@ class _NoopHandle:
     """无 Langfuse 时的占位句柄，接口与真实句柄一致。"""
 
     def update(self, **_: Any) -> None:
+        """no-op：未启用追踪时什么都不做。"""
         return None
 
     @contextmanager
     def span(self, name: str, **meta: Any) -> Iterator[_SpanHandle]:  # noqa: ARG002
+        """no-op：直接让出自身，调用方写法与真实句柄完全相同。"""
         yield self
 
     def end(self) -> None:
+        """no-op。"""
         return None
 
 
 class _TraceHandle:
+    """真实句柄：包装一个 Langfuse raw span，任何失败都静默忽略（观测不能影响业务）。"""
+
     def __init__(self, raw: Any) -> None:
         self._raw = raw
 
     def update(self, **kwargs: Any) -> None:
+        """更新 raw span 元数据；失败静默忽略。"""
         try:
             self._raw.update(**kwargs)
         except Exception as exc:  # noqa: BLE001
@@ -82,6 +89,7 @@ class _TraceHandle:
                     pass
 
     def end(self) -> None:
+        """no-op：真实 span 已在 ``span()`` 的 finally 中 end。"""
         return None
 
 
@@ -95,6 +103,7 @@ class Tracer:
         secret_key: str = "",
         service: str = "unknown",
     ) -> None:
+        """按 host/public_key/secret_key 初始化；任一缺失或 SDK 未装则降级 no-op（不阻塞业务）。"""
         self.service = service
         self._client: Any = None
         self.enabled = False
@@ -132,6 +141,7 @@ class Tracer:
             self.flush()
 
     def flush(self) -> None:
+        """刷新待上报事件；忽略所有异常（flush 失败不应影响业务请求）。"""
         if self._client is not None:
             try:
                 self._client.flush()

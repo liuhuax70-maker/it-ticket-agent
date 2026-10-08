@@ -51,6 +51,7 @@ class TokenProvider:
         return self._client
 
     def cached(self, username: str) -> str | None:
+        """返回进程内缓存的未过期令牌；过期或无缓存则返回 None（调用方据此决定是否重新换取）。"""
         item = self._cache.get(username)
         if item and item.expires_at - self.refresh_slack > time.time():
             return item.access_token

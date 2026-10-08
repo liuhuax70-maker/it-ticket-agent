@@ -24,6 +24,11 @@ _session_factories: dict[str, async_sessionmaker[AsyncSession]] = {}
 
 
 def get_engine(database_url: str, *, echo: bool = False) -> AsyncEngine:
+    """按 URL 键控缓存并复用引擎。
+
+    ⚠️ 必须是「按 URL 键控」：曾实现成「首个 URL 永久生效」的单例，导致进程里第二个库
+    的读写静默落到第一个库（详见模块顶部注释）。同一 URL 重复调用只返回已缓存的引擎。
+    """
     engine = _engines.get(database_url)
     if engine is None:
         engine = create_async_engine(
@@ -40,6 +45,7 @@ def get_engine(database_url: str, *, echo: bool = False) -> AsyncEngine:
 def get_session_factory(
     database_url: str, *, echo: bool = False
 ) -> async_sessionmaker[AsyncSession]:
+    """按 URL 键控缓存并复用会话工厂（绑定对应引擎）。"""
     factory = _session_factories.get(database_url)
     if factory is None:
         factory = async_sessionmaker(

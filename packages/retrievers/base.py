@@ -42,6 +42,13 @@ from packages.contracts import SearchHit
 
 
 class FilterDict(TypedDict, total=False):
+    """检索过滤契约：stores 与业务层之间的唯一约定，两个 store 必须 1:1 翻译。
+
+    ``must`` 全等、``visibility_clauses`` 任一命中、``doc_ids`` 限定文档、
+    ``must_not`` 排除——语义详见模块顶部注释（clause 间 OR、clause 内 AND、
+    ``must`` 对所有分支生效、``must_not`` 字段缺失视为通过）。
+    """
+
     must: dict[str, Any]
     visibility_clauses: list[dict[str, Any]]
     doc_ids: list[str]
@@ -49,6 +56,8 @@ class FilterDict(TypedDict, total=False):
 
 
 class Retriever(Protocol):
+    """检索器协议：任何 store 后端实现 ``retrieve``（带过滤）与 ``aclose`` 即可接入编排层。"""
+
     name: str
 
     async def retrieve(

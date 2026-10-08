@@ -16,6 +16,11 @@ logger = get_logger("embeddings.fastembed")
 
 
 class FastEmbedEmbedder(Embedder):
+    """默认本地 ONNX 向量化后端（fastembed）。
+
+    体积小（无 torch）、无需外部服务，足以支撑最小闭环；需要更强模型时切
+    ``sentence_transformers`` 或远端 ``litellm``。维度与 ``EMBED_DIM`` 不一致只告警不报错。
+    """
     def __init__(
         self,
         model_name: str,

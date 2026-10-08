@@ -34,6 +34,11 @@ class ModelTarget:
 
 @dataclass
 class CompletionResult:
+    """一次模型调用的归一化结果：答案文本、实际模型/供应商、token 用量与耗时。
+
+    不含任何密钥；``describe`` 返回的健康信息也遵循同样的「不泄露密钥」原则。
+    """
+
     text: str
     model: str
     provider: str
@@ -208,6 +213,10 @@ class LLMClient:
         max_tokens: int | None = None,
         allow_fallback: bool = True,
     ) -> CompletionResult:
+        """主调用入口：解析目标模型，按 fallback 链依次尝试，全部失败抛 ``UpstreamError``。
+
+        ``model`` 缺省用配置默认；``allow_fallback=False`` 时只打主模型（兜底由调用方决定）。
+        """
         primary = build_target(self.settings, model)
         errors: list[str] = []
         candidates: list[ModelTarget] = [primary]

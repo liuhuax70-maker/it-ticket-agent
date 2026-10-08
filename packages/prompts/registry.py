@@ -19,6 +19,11 @@ _DEFAULT_ROOT = Path(__file__).resolve().parents[2] / "configs" / "prompts"
 
 
 class PromptRegistry:
+    """提示模板注册表：按 ``(name, version)`` 加载 ``configs/prompts`` 下的模板并渲染。
+
+    渲染时强制变量校验——缺变量直接 ``ConfigError``，而不是把 ``{{var}}`` 原样发给模型。
+    """
+
     def __init__(self, root: Path | str | None = None) -> None:
         self.root = Path(root) if root else _DEFAULT_ROOT
 

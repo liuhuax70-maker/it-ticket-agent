@@ -23,4 +23,5 @@ def redact(text: str, mask: str = "***") -> str:
 
 
 def contains_pii(text: str) -> bool:
+    """是否含有任一已知 PII 模式（不返回命中类型，仅做布尔判定，用于"该不该脱敏"的快筛）。"""
     return any(pattern.search(text) for _, pattern in _PATTERNS)

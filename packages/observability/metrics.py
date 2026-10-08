@@ -97,11 +97,13 @@ class Counter:
         self._lock = threading.Lock()
 
     def inc(self, labels: Mapping[str, str] | None = None, value: float = 1.0) -> None:
+        """按标签递增计数（默认 +1）。"""
         key = _label_key(self.label_names, labels)
         with self._lock:
             self._values[key] = self._values.get(key, 0.0) + value
 
     def lines(self) -> list[str]:
+        """渲染为 ``# HELP`` / ``# TYPE`` / 各标签值行（Prometheus 文本格式）。"""
         out = [f"# HELP {self.name} {self.help}", f"# TYPE {self.name} counter"]
         with self._lock:
             items = sorted(self._values.items())
@@ -111,6 +113,7 @@ class Counter:
         return out
 
     def clear(self) -> None:
+        """清空该计数器所有标签值（仅测试用）。"""
         with self._lock:
             self._values.clear()
 
@@ -126,18 +129,22 @@ class Gauge:
         self._lock = threading.Lock()
 
     def set(self, labels: Mapping[str, str] | None = None, value: float = 0.0) -> None:  # noqa: A003
+        """直接设置瞬时值（覆盖，不是累加）。"""
         with self._lock:
             self._values[_label_key(self.label_names, labels)] = value
 
     def inc(self, labels: Mapping[str, str] | None = None, value: float = 1.0) -> None:
+        """递增（默认 +1）。"""
         key = _label_key(self.label_names, labels)
         with self._lock:
             self._values[key] = self._values.get(key, 0.0) + value
 
     def dec(self, labels: Mapping[str, str] | None = None, value: float = 1.0) -> None:
+        """递减（默认 -1）。"""
         self.inc(labels, -value)
 
     def lines(self) -> list[str]:
+        """渲染为 gauge 文本行。"""
         out = [f"# HELP {self.name} {self.help}", f"# TYPE {self.name} gauge"]
         with self._lock:
             items = sorted(self._values.items())
@@ -147,6 +154,7 @@ class Gauge:
         return out
 
     def clear(self) -> None:
+        """清空该仪表所有标签值（仅测试用）。"""
         with self._lock:
             self._values.clear()
 
@@ -175,6 +183,7 @@ class Histogram:
         self._lock = threading.Lock()
 
     def observe(self, value: float, labels: Mapping[str, str] | None = None) -> None:
+        """记录一次观测值：落入各上界桶、累加 sum 与 count。"""
         key = _label_key(self.label_names, labels)
         with self._lock:
             counts = self._counts.setdefault(key, [0] * len(self.buckets))
@@ -185,6 +194,7 @@ class Histogram:
             self._totals[key] = self._totals.get(key, 0) + 1
 
     def lines(self) -> list[str]:
+        """渲染为 ``_bucket`` / ``_sum`` / ``_count`` 文本行。"""
         out = [f"# HELP {self.name} {self.help}", f"# TYPE {self.name} histogram"]
         with self._lock:
             keys = sorted(self._counts)
@@ -205,6 +215,7 @@ class Histogram:
         return out
 
     def clear(self) -> None:
+        """清空该直方图全部累积值（仅测试用）。"""
         with self._lock:
             self._counts.clear()
             self._sums.clear()
@@ -221,12 +232,14 @@ class MetricsRegistry:
         self._lock = threading.Lock()
 
     def counter(self, name: str, help_text: str, label_names: tuple[str, ...] = ()) -> Counter:
+        """取或建一个命名计数器；同名复用（保证全进程只有一份）。"""
         with self._lock:
             if name not in self.counters:
                 self.counters[name] = Counter(name, help_text, label_names)
             return self.counters[name]
 
     def gauge(self, name: str, help_text: str, label_names: tuple[str, ...] = ()) -> Gauge:
+        """取或建一个命名仪表；同名复用。"""
         with self._lock:
             if name not in self.gauges:
                 self.gauges[name] = Gauge(name, help_text, label_names)
@@ -239,6 +252,7 @@ class MetricsRegistry:
         label_names: tuple[str, ...] = (),
         buckets: Iterable[float] = _LATENCY_BUCKETS,
     ) -> Histogram:
+        """取或建一个命名直方图；同名复用。"""
         with self._lock:
             if name not in self.histograms:
                 self.histograms[name] = Histogram(name, help_text, label_names, buckets)
@@ -252,6 +266,7 @@ class MetricsRegistry:
         return [*self.counters.values(), *self.gauges.values(), *self.histograms.values()]
 
     def expose(self) -> str:
+        """拼装全部指标为 Prometheus 文本（以换行结尾）。"""
         lines: list[str] = []
         for metric in self._all():
             lines.extend(metric.lines())

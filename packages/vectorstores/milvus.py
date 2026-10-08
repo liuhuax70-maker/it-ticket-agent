@@ -52,6 +52,11 @@ def _quote(value: str) -> str:
 
 
 def build_collection_schema(client: MilvusClient, dim: int, text_max_length: int) -> Any:
+    """按给定维度与 text 字节上限构造集合 schema（含 ACL 标量与 lifecycle 字段）。
+
+    主键 ``chunk_id``、向量 ``vector``、各源字段、四个 ACL 标量、``lifecycle`` 一并声明。
+    注意：schema 无 alter，**新增字段需重建集合**（见模块注释与 ``_ensure_collection_sync``）。
+    """
     schema = client.create_schema(auto_id=False, enable_dynamic_field=False)
     schema.add_field("chunk_id", DataType.VARCHAR, max_length=128, is_primary=True)
     schema.add_field("vector", DataType.FLOAT_VECTOR, dim=dim)
@@ -76,6 +81,7 @@ def build_collection_schema(client: MilvusClient, dim: int, text_max_length: int
 
 
 def build_index_params(client: MilvusClient, settings: MilvusSettings) -> Any:
+    """构造索引参数：向量走 HNSW（COSINE），各 ACL/生命周期标量走 INVERTED。"""
     params = client.prepare_index_params()
     params.add_index(
         field_name="vector",
@@ -92,6 +98,12 @@ def build_index_params(client: MilvusClient, settings: MilvusSettings) -> Any:
 
 
 class MilvusStore:
+    """向量检索存储：建表、幂等 upsert、余弦检索与按文档删除。
+
+    与 ``OpenSearchStore`` 并列实现 ``Retriever`` 协议，融合后构成混合检索的向量一路；
+    过滤语义必须与 ``OpenSearchStore._compile_filter`` 1:1 一致。
+    """
+
     name = "vector"
 
     def __init__(self, settings: MilvusSettings, dim: int) -> None:
@@ -135,6 +147,7 @@ class MilvusStore:
             raise DependencyUnavailable("Milvus", f"collection 初始化失败: {exc}") from exc
 
     async def health(self) -> tuple[bool, str]:
+        """返回 ``(是否可用, 诊断信息)``；探测失败返回 ``(False, 错误)`` 而非抛异常。"""
         try:
             collections = await asyncio.to_thread(self._client.list_collections)
             return True, f"uri={self._settings.milvus_uri} collections={len(collections)}"
@@ -147,6 +160,7 @@ class MilvusStore:
         await asyncio.to_thread(self._client.close)
 
     async def count(self) -> int:
+        """返回集合文档数；探测失败返回 0（不让计数拖垮健康检查）。"""
         try:
             rows = await asyncio.to_thread(
                 self._client.query,

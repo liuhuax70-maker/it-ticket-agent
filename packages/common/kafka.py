@@ -38,6 +38,7 @@ class KafkaPublisher:
         self._producer: Any = None
 
     async def start(self) -> None:
+        """启动生产者；未安装 aiokafka 时显式报错（而不是静默不工作）。"""
         if not KAFKA_AVAILABLE:
             raise RuntimeError("aiokafka 未安装，无法启用 Kafka 通道")
         self._producer = AIOKafkaProducer(
@@ -47,11 +48,13 @@ class KafkaPublisher:
         await self._producer.start()
 
     async def stop(self) -> None:
+        """停止生产者并释放底层连接。"""
         if self._producer is not None:
             await self._producer.stop()
             self._producer = None
 
     async def publish(self, payload: dict[str, Any], key: str | None = None) -> None:
+        """发布一条分块事件；``key`` 用于分区（建议用 doc_id 保证同文档顺序）。"""
         if self._producer is None:
             raise RuntimeError("KafkaPublisher 未启动")
         await self._producer.send_and_wait(

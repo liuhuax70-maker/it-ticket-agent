@@ -74,7 +74,11 @@ def build_index_body(analyzer: str) -> dict[str, Any]:
 
 
 class OpenSearchStore:
-    """BM25 全文检索存储。"""
+    """BM25 全文检索存储：索引管理、幂等写入与带 ACL 过滤的检索。
+
+    与 ``MilvusStore`` 并列实现 ``Retriever`` 协议，两者融合后构成混合检索的
+    关键词一路；过滤语义必须与 ``MilvusStore._compile_expr`` 1:1 一致。
+    """
 
     name = "bm25"
 
@@ -100,6 +104,7 @@ class OpenSearchStore:
         )
 
     async def aclose(self) -> None:
+        """关闭 OpenSearch 异步客户端连接。"""
         await self._client.close()
 
     # ---------------- 索引管理 ----------------
@@ -152,6 +157,7 @@ class OpenSearchStore:
             raise DependencyUnavailable("OpenSearch", f"索引初始化失败: {exc}") from exc
 
     async def health(self) -> tuple[bool, str]:
+        """返回 ``(是否可用, 诊断信息)``；探测失败返回 ``(False, 错误)`` 而非抛异常。"""
         try:
             info = await self._client.info()
             return (
@@ -162,6 +168,7 @@ class OpenSearchStore:
             return False, str(exc)
 
     async def count(self) -> int:
+        """返回当前索引文档数；探测失败返回 0（不让计数拖垮健康检查）。"""
         try:
             resp = await self._client.count(index=self.index)
             return int(resp.get("count", 0))
@@ -215,6 +222,7 @@ class OpenSearchStore:
         return int(success)
 
     async def delete_by_doc(self, doc_id: str) -> int:
+        """按 ``doc_id`` 删除该文档的全部分块（用于删除文档）；返回实际删除条数。"""
         try:
             resp = await self._client.delete_by_query(
                 index=self.index,
@@ -288,6 +296,10 @@ class OpenSearchStore:
         top_k: int = 20,
         filters: FilterDict | None = None,
     ) -> list[SearchHit]:
+        """BM25 检索：``multi_match`` 打分 + ``_compile_filter`` 过滤，返回 ``SearchHit`` 列表。
+
+        ``top_k`` 是召回上限（通常大于最终返回给用户的 top_k，留给 RRF/重排收敛）。
+        """
         body: dict[str, Any] = {
             "size": top_k,
             "track_total_hits": False,

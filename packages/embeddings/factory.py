@@ -53,6 +53,12 @@ def _build(settings: EmbedSettings) -> Embedder:
 
 
 def get_embedder(settings: EmbedSettings) -> Embedder:
+    """进程级单例获取向量化后端。
+
+    单例键为 ``(backend, model)``（见模块顶部注释）：改 ``query_instruction`` / ``dim``
+    等其它字段不会生成新实例，表现为「配置改了没效果」且不报错；切换需在测试里
+    ``reset_embedder_cache()``。
+    """
     key = (settings.embed_backend.lower(), settings.embed_model)
     if key not in _instances:
         _instances[key] = _build(settings)

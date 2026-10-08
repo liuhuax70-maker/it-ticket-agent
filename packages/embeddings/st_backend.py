@@ -9,6 +9,11 @@ from packages.embeddings.base import Embedder, l2_normalize
 
 
 class SentenceTransformerEmbedder(Embedder):
+    """本地 sentence-transformers 后端（可选）。
+
+    模型质量通常高于 fastembed，但依赖 torch、体积大；按业务需要启用，
+    不是默认最小闭环的一部分。
+    """
     def __init__(
         self,
         model_name: str,

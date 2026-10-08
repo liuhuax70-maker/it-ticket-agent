@@ -45,6 +45,7 @@ class ACL(BaseModel):
 
     @classmethod
     def default(cls, **overrides: Any) -> ACL:
+        """便捷构造：``ACL.default(tenant_id="x")`` 等价于 ``ACL(tenant_id="x")``。"""
         return cls(**overrides)
 
 
@@ -120,12 +121,20 @@ class Citation(BaseModel):
 
 
 class RetrieveMode(StrEnum):
+    """检索模式：纯向量 / 纯关键词(BM25) / 混合(二者 RRF 融合)。"""
+
     vector = "vector"
     keyword = "keyword"
     hybrid = "hybrid"
 
 
 class SearchRequest(BaseModel):
+    """发给 retrieval 服务的检索请求。
+
+    ``acl`` 由编排层从身份注入（网关是唯一鉴权点），``filters`` 为额外元数据过滤
+    如 ``{"doc_ids": [...]}``——检索服务会把 ``acl`` 编译为存储层过滤条件。
+    """
+
     query: str = Field(min_length=1)
     top_k: int = 5
     mode: RetrieveMode = RetrieveMode.hybrid
@@ -135,6 +144,12 @@ class SearchRequest(BaseModel):
 
 
 class SearchHit(BaseModel):
+    """单条召回结果：分块原文 + 相关度 + 来源定位信息。
+
+    ``retriever`` 标记它来自哪路召回（vector/bm25/hybrid/rerank），
+    便于排查「哪路召回贡献了这条结果」。
+    """
+
     chunk_id: str
     doc_id: str
     text: str
@@ -150,17 +165,23 @@ class SearchHit(BaseModel):
 
 
 class SearchResponse(BaseModel):
+    """检索响应：召回列表 + 各阶段耗时（毫秒）。"""
+
     hits: list[SearchHit] = Field(default_factory=list)
     timings_ms: dict[str, float] = Field(default_factory=dict)
 
 
 class RerankRequest(BaseModel):
+    """重排请求：对给定命中列表按query重排。"""
+
     query: str
     hits: list[SearchHit]
     top_k: int = 5
 
 
 class RerankResponse(BaseModel):
+    """重排响应。``reranker`` 如实回填实际使用的重排器（未启用时为 ``"rrf"``）。"""
+
     hits: list[SearchHit] = Field(default_factory=list)
     reranker: str = "rrf"
     timings_ms: dict[str, float] = Field(default_factory=dict)
@@ -191,6 +212,11 @@ class ChatMessage(BaseModel):
 
 
 class CompletionRequest(BaseModel):
+    """裸补全请求（不走 RAG 检索，直接拿 messages 调模型）。
+
+    用于改写/审核等内部子任务，与 ``GenerateRequest`` 的区别在于不带 contexts。
+    """
+
     messages: list[ChatMessage]
     model: str | None = None
     temperature: float | None = None
@@ -199,6 +225,8 @@ class CompletionRequest(BaseModel):
 
 
 class GenerateRequest(BaseModel):
+    """RAG 生成请求：query + 已检索的 contexts，由 model-gateway 生成带引用答案。"""
+
     query: str
     contexts: list[ContextItem] = Field(default_factory=list)
     system: str | None = None
@@ -210,6 +238,8 @@ class GenerateRequest(BaseModel):
 
 
 class GenerateResponse(BaseModel):
+    """生成响应：答案 + 实际模型/供应商 + token 用量 + 耗时。"""
+
     answer: str
     model: str
     provider: str = "unknown"
@@ -218,6 +248,8 @@ class GenerateResponse(BaseModel):
 
 
 class ModelInfo(BaseModel):
+    """模型清单项：名称、供应商、类型与可用性（供网关/前端展示与选型）。"""
+
     name: str
     provider: str
     kind: Literal["chat", "embedding"] = "chat"
@@ -256,6 +288,13 @@ class ChatRequest(BaseModel):
 
 
 class ChatResponse(BaseModel):
+    """对话响应（对外）。
+
+    ``refused`` 表示检索为空/相关性不足而走拒答（此时 ``citations`` 必为空，
+    ``cached`` 表示本响应是否来自查询缓存）。``contexts`` 仅当请求
+    ``include_contexts=true`` 时填充。
+    """
+
     answer: str
     citations: list[Citation] = Field(default_factory=list)
     timings_ms: dict[str, float] = Field(default_factory=dict)
@@ -284,6 +323,8 @@ class IngestRequest(BaseModel):
 
 
 class IngestResponse(BaseModel):
+    """接入响应：本次接入的文档数、分块数、成功入库数与派生的 doc_id 列表。"""
+
     job_id: str
     status: Literal["pending", "running", "succeeded", "failed"]
     documents: int = 0
@@ -295,11 +336,15 @@ class IngestResponse(BaseModel):
 
 
 class IndexRequest(BaseModel):
+    """入库请求：把一组已切分好的 Chunk 写入向量库 + 索引。"""
+
     chunks: list[Chunk]
     reindex: bool = False
 
 
 class IndexResponse(BaseModel):
+    """入库响应：各存储写入条数（milvus/opensearch/postgres）与整体状态。"""
+
     doc_id: str
     chunks_indexed: int
     milvus: int = 0
@@ -310,11 +355,15 @@ class IndexResponse(BaseModel):
 
 
 class EmbedRequest(BaseModel):
+    """向量化请求：``kind`` 区分 query / document 两路（部分后端两路用词不同）。"""
+
     texts: list[str]
     kind: Literal["query", "document"] = "document"
 
 
 class EmbedResponse(BaseModel):
+    """向量化响应：向量列表 + 维度 + 实际模型名。"""
+
     vectors: list[list[float]]
     dim: int
     model: str
@@ -326,6 +375,8 @@ class EmbedResponse(BaseModel):
 
 
 class HealthResponse(BaseModel):
+    """健康检查响应。``status`` 为 ok/degraded/error，``details`` 携带各依赖明细。"""
+
     status: Literal["ok", "degraded", "error"]
     service: str
     version: str = "0.1.0"
@@ -348,5 +399,7 @@ class FeedbackRequest(BaseModel):
 
 
 class FeedbackResponse(BaseModel):
+    """反馈响应。``status=duplicate`` 表示该 trace_id 的反馈已存在，未重复入库。"""
+
     id: str
     status: Literal["accepted", "duplicate"] = "accepted"

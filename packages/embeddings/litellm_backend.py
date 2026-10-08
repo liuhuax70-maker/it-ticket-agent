@@ -7,6 +7,11 @@ from packages.embeddings.base import Embedder, l2_normalize
 
 
 class LiteLLMEmbedder(Embedder):
+    """远端向量化后端（LiteLLM，OpenAI 兼容 ``/v1/embeddings``）。
+
+    适合用更强的线上嵌入模型；无 provider 前缀时按 ``openai/`` 处理。调用失败抛
+    ``UpstreamError``，让上游按依赖故障处理而非当作"空向量"。
+    """
     def __init__(
         self,
         model_name: str,

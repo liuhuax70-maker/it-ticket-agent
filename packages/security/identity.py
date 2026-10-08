@@ -22,6 +22,12 @@ logger = get_logger("security.identity")
 
 
 class Identity(BaseModel):
+    """解析出的请求方身份。
+
+    最小闭环下由 ``resolve_identity`` 返回固定值；打开鉴权时由 Keycloak 声明填充。
+    它是 ACL 的唯一来源（``to_acl`` 据此编译过滤契约），**绝不能由客户端指定**。
+    """
+
     user_id: str = "u_demo"
     tenant_id: str = "default"
     department_id: str = "default"
@@ -44,6 +50,11 @@ class Identity(BaseModel):
 
 
 class Unauthorized(RagError):
+    """未认证（401）：缺令牌 / 令牌格式非法 / 验签失败。
+
+    注意它是 RagError 家族——中间件统一转成 JSON 响应，不会泄漏栈信息。
+    """
+
     status_code = 401
 
 

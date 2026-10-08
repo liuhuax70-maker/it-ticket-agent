@@ -6,6 +6,12 @@ from packages.common.settings import BaseAppSettings
 
 
 class SecuritySettings(BaseAppSettings):
+    """鉴权与安全相关配置（api-gateway 使用）。
+
+    核心开关是 ``authz_enabled``：关 = 固定身份（最小闭环），开 = 校验 Keycloak JWT + OPA 决策。
+    所有 URL/超时都是可配置项，默认指向本机 Keycloak/OPA（见 ``docker-compose.yml`` 的 profile）。
+    """
+
     service_name: str = "api-gateway"
 
     # false = 使用固定身份（最小闭环）；true = 校验 Keycloak JWT + OPA 决策

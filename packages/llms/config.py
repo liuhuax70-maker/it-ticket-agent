@@ -44,4 +44,5 @@ class LLMSettings(BaseAppSettings):
     answer_prompt_version: str = "v4"
 
     def fallback_list(self) -> list[str]:
+        """解析逗号分隔的兜底模型列表；空串返回空列表（即不启用兜底）。"""
         return [m.strip() for m in self.llm_fallback_models.split(",") if m.strip()]

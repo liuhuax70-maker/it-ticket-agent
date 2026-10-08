@@ -20,6 +20,11 @@ def _key(model: str, kind: str, text: str) -> str:
 
 
 class EmbeddingCache:
+    """向量化结果 Redis 缓存：重跑索引时复用已算向量，避免重复计算。
+
+    默认关闭（``embed_cache_enabled=False``）：缓存会污染延迟观测、掩盖真正的性能问题，
+    必须先有干净基线（旧 P0 结论）。读取/写入故障均降级为「全量计算」，不阻断主流程。
+    """
     def __init__(self, redis_url: str, ttl_seconds: int = 3600) -> None:
         import redis.asyncio as aioredis
 

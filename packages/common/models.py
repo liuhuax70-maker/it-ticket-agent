@@ -38,6 +38,8 @@ class TimestampMixin:
 
 
 class Tenant(Base, TimestampMixin):
+    """租户表：多租户隔离的根，文档/分块/反馈/审计都按 tenant_id 归属。"""
+
     __tablename__ = "tenants"
 
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
@@ -48,6 +50,12 @@ class Tenant(Base, TimestampMixin):
 
 
 class Document(Base, TimestampMixin):
+    """文档台账：元数据、ACL、状态与分块数。
+
+    知识库管理界面（``GET /documents``）据此展示标题/来源/状态/分块数/大小/更新时间；
+    ``meta`` 列存放业务自定义元数据（注意不能叫 ``metadata``，那是 DeclarativeBase 保留名）。
+    """
+
     __tablename__ = "documents"
 
     doc_id: Mapped[str] = mapped_column(String(64), primary_key=True)
@@ -71,6 +79,14 @@ class Document(Base, TimestampMixin):
 
 
 class Chunk(Base, TimestampMixin):
+    """分块元数据表：定位信息 + ACL 冗余列。
+
+    ⚠️ 这里的 ``tenant_id/department_id/visibility`` 是**写入时**随 chunk 落库的冗余列，
+    当前没有任何读取点——检索侧读的是 Milvus / OpenSearch 里各自的冗余字段，
+    并没有代码比对这三列与索引侧是否一致。它们是"写而不读"的历史包袱，
+    不要以为"元数据与索引的一致性"已被保障；未来若做一致性校验，这三列即比对基准。
+    """
+
     __tablename__ = "chunks"
 
     chunk_id: Mapped[str] = mapped_column(String(128), primary_key=True)
@@ -97,6 +113,8 @@ class Chunk(Base, TimestampMixin):
 
 
 class IngestionJob(Base, TimestampMixin):
+    """接入任务表：跟踪单次接入的来源、状态、分块数与失败信息。"""
+
     __tablename__ = "ingestion_jobs"
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -108,6 +126,8 @@ class IngestionJob(Base, TimestampMixin):
 
 
 class Feedback(Base, TimestampMixin):
+    """用户反馈表：点赞/点踩评级与留言，按租户 + trace_id 关联（用于坏例导出）。"""
+
     __tablename__ = "feedback"
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)

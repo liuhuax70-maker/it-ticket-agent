@@ -56,6 +56,7 @@ class ServiceClient:
         )
 
     async def aclose(self) -> None:
+        """关闭底层 httpx 客户端，释放连接池。"""
         await self._client.aclose()
 
     async def _request(
@@ -114,6 +115,7 @@ class ServiceClient:
         response_model: type[M] | None = None,
         timeout: float | None = None,
     ) -> Any:
+        """GET 请求：统一超时、错误包装与契约校验（具体逻辑见 ``_request``）。"""
         return await self._request(
             "GET",
             path,
@@ -132,6 +134,7 @@ class ServiceClient:
         response_model: type[M] | None = None,
         timeout: float | None = None,
     ) -> Any:
+        """POST 请求：``payload`` 为 pydantic 或 dict，前者自动 ``model_dump(mode="json")``。"""
         body: dict[str, Any] | None
         if isinstance(payload, BaseModel):
             body = payload.model_dump(mode="json")
@@ -154,6 +157,7 @@ class ServiceClient:
         response_model: type[M] | None = None,
         timeout: float | None = None,
     ) -> Any:
+        """DELETE 请求。"""
         return await self._request(
             "DELETE", path, headers=headers, response_model=response_model, timeout=timeout
         )
@@ -182,6 +186,7 @@ class ServiceClient:
         )
 
     async def ping(self, path: str = "/health") -> bool:
+        """探测下游存活：连不通返回 ``False`` 而非抛异常（用于 /health 类探针）。"""
         try:
             await self._client.get(path, timeout=3.0)
             return True
