@@ -1063,18 +1063,33 @@
 
   function wireCollapse() {
     var app = document.querySelector('.app');
-    var btn = $('sidebarToggle');
-    var expand = $('sidebarExpand');
+    var btn = $('sidebarToggleTop');
     var KEY = 'par.sidebar';
     try {
       if (localStorage.getItem(KEY) === 'collapsed') app.classList.add('collapsed');
     } catch (err) { /* 忽略 */ }
-    function toggle() {
-      var collapsed = app.classList.toggle('collapsed');
-      try { localStorage.setItem(KEY, collapsed ? 'collapsed' : 'open'); } catch (err) { /* 忽略 */ }
+
+    // 收起/展开共用顶栏这一个按钮：位置固定不动，图标随状态翻转。
+    // 之前是"收起在侧栏底部、展开在顶栏"，收起后按钮整个换位置，
+    // 用户的肌肉记忆要重新对准——同一个动作的两个入口不在一处，是纯粹的噪音。
+    function sync() {
+      if (!btn) return;
+      var collapsed = app.classList.contains('collapsed');
+      btn.setAttribute('aria-label', collapsed ? '展开侧栏' : '收起侧栏');
+      btn.title = collapsed ? '展开侧栏' : '收起侧栏';
     }
-    if (btn) btn.addEventListener('click', toggle);
-    if (expand) expand.addEventListener('click', toggle);
+
+    function toggle() {
+      app.classList.toggle('collapsed');
+      var collapsed = app.classList.contains('collapsed');
+      try { localStorage.setItem(KEY, collapsed ? 'collapsed' : 'open'); } catch (err) { /* 忽略 */ }
+      sync();
+    }
+
+    if (btn) {
+      btn.addEventListener('click', toggle);
+      sync();
+    }
   }
 
   function openSidebar() {

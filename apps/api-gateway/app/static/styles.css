@@ -164,8 +164,6 @@ button { font: inherit; color: inherit; cursor: pointer; }
 }
 .foot-btn:hover { background: rgba(125, 140, 170, .12); }
 
-/* 收起按钮仅桌面端可见（移动端用汉堡展开覆盖式侧栏） */
-#sidebarToggle { display: flex; }
 
 .auth-row {
   display: flex; align-items: center; gap: 8px;
@@ -258,16 +256,15 @@ button { font: inherit; color: inherit; cursor: pointer; }
 }
 .icon-btn:hover { background: rgba(125, 140, 170, .12); color: var(--text); }
 
+/* 顶栏侧栏开关：同一个按钮两用，靠 .collapsed 切换箭头方向 */
+#sidebarToggleTop .i-expand { display: none; }
+.app.collapsed #sidebarToggleTop .i-collapse { display: none; }
+.app.collapsed #sidebarToggleTop .i-expand { display: block; }
+
 .only-mobile { display: none; }
 .only-desktop { display: none; }
 @media (min-width: 861px) {
   .only-desktop { display: grid; }
-}
-
-/* 收起状态下才显示「展开」按钮 */
-#sidebarExpand { display: none; }
-@media (min-width: 861px) {
-  .app.collapsed #sidebarExpand { display: grid; }
 }
 
 /* ---------------- 消息区 ---------------- */
@@ -843,7 +840,6 @@ button { font: inherit; color: inherit; cursor: pointer; }
   }
   .sidebar.open { transform: translateX(0); }
   .only-mobile { display: grid; }
-  #sidebarToggle { display: none; }
   .scrim {
     display: block; position: fixed; inset: 0; z-index: 20;
     background: rgba(10, 12, 18, .42);
