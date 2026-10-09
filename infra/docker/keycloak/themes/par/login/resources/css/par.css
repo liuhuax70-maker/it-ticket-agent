@@ -1,127 +1,226 @@
-/* permission-aware-rag 登录页视觉覆盖
+/* permission-aware-rag 登录页 —— 参考 QQ 邮箱登录页的版式
+ *
+ * 参考对象的特征（白底 + 居中卡片 + 蓝色全宽按钮 + 输入框带前置图标 +
+ * 「记住登录状态」复选框 + 底部注册/忘记密码链接）。
+ * mail.qq.com 是纯 JS 渲染的 SPA，抓不到它的 CSS，所以这里是按该版式复刻，
+ * 而不是逐像素比对。
  *
  * 策略：**优先改 PatternFly 5 的 CSS 变量**，而不是逐个选择器重写。
- * 原因有两个：
- *   1. 变量是官方扩展点，改它不会漏掉某个状态（hover / focus / disabled / 错误态）；
- *   2. 逐个重写选择器时，一旦 Keycloak 升级导致类名变化，页面会静默回到默认皮肤，
- *      而用变量时即使部分失效，也只会退化成"颜色没改"，不会破版。
- *
- * 主色与主应用保持一致（app/static/styles.css 的 --accent），
- * 否则从登录页跳到问答页会有明显的"两个产品"的割裂感。
+ *   1. 变量是官方扩展点，改它不会漏掉 hover / focus / disabled / 错误态；
+ *   2. 逐个重写选择器时，一旦 Keycloak 升级导致类名变化，页面会静默回到默认皮肤；
+ *      用变量时即使部分失效，也只退化成"颜色没改"，不会破版。
  */
 
 :root {
-  --par-accent: #4d6bfe;
-  --par-accent-hover: #3f5bf0;
-  --par-border: #e3e3e8;
-  --par-text: #1f2430;
-  --par-muted: #6b7280;
+  /* QQ 邮箱的蓝 */
+  --par-accent: #1a8cff;
+  --par-accent-hover: #0d7ae6;
+  --par-accent-soft: rgba(26, 140, 255, .12);
+  --par-border: #dcdfe6;
+  --par-border-hover: #c0c4cc;
+  --par-text: #303133;
+  --par-muted: #909399;
+  --par-placeholder: #a8abb2;
 
-  /* PatternFly 5 主色：按钮、链接、focus 描边都取它 */
-  --pf-v5-global--primary-color--100: #4d6bfe;
-  --pf-v5-global--primary-color--200: #3f5bf0;
-  --pf-v5-global--link--Color: #4d6bfe;
-  --pf-v5-global--link--Color--hover: #3f5bf0;
-  --pf-v5-global--active-color--100: #4d6bfe;
-  --pf-v5-global--FontFamily--text: -apple-system, BlinkMacSystemFont, "Segoe UI",
-    "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Helvetica Neue", Arial, sans-serif;
+  --pf-v5-global--primary-color--100: #1a8cff;
+  --pf-v5-global--primary-color--200: #0d7ae6;
+  --pf-v5-global--link--Color: #1a8cff;
+  --pf-v5-global--link--Color--hover: #0d7ae6;
+  --pf-v5-global--active-color--100: #1a8cff;
+  --pf-v5-global--FontFamily--text: "PingFang SC", "Microsoft YaHei",
+    -apple-system, BlinkMacSystemFont, "Segoe UI", "Hiragino Sans GB",
+    "Helvetica Neue", Arial, sans-serif;
   --pf-v5-global--FontFamily--heading: var(--pf-v5-global--FontFamily--text);
 }
 
-/* 页面底色：浅灰蓝，让白色卡片"浮"起来，而不是贴在纯白上看不出边界 */
+/* 白底：QQ 邮箱登录页是纯白，卡片靠阴影浮起来而不是靠底色对比 */
 html.login-pf,
 body,
 .pf-v5-c-login {
-  background: #f4f6fb;
+  background: #ffffff;
 }
 
-/* 卡片：圆角 + 轻阴影，去掉默认的硬边框 */
+/* 卡片：去掉重边框，用轻阴影 */
 .pf-v5-c-login__main,
 .card-pf {
   background: #ffffff;
-  border: 1px solid var(--par-border);
-  border-radius: 16px;
-  box-shadow: 0 8px 28px rgba(31, 36, 48, .07);
+  border: 0;
+  border-radius: 8px;
+  box-shadow: 0 2px 16px rgba(0, 0, 0, .08);
 }
 
-/* 顶部标题区 */
+/* 页头品牌：居中、稍大字号，替代 Keycloak 默认那个指向 keycloak.org 的外链 logo */
+.pf-v5-c-login__header,
+#kc-header {
+  text-align: center;
+  margin-bottom: 8px;
+}
+#kc-header-wrapper {
+  color: var(--par-text);
+  font-size: 22px;
+  font-weight: 600;
+  letter-spacing: .3px;
+  text-align: center;
+}
+/* Keycloak 默认把品牌渲染成指向 keycloak.org 的外链，本项目不需要，隐藏掉 */
+.pf-v5-c-login__header .kc-logo-text,
+#kc-header-wrapper .kc-logo-text,
+.kc-logo-text {
+  display: none;
+}
+
+/* 主标题（「登录 xxx」） */
 .pf-v5-c-login .pf-v5-c-title,
 .pf-v5-c-login__main-header .pf-v5-c-title {
   color: var(--par-text);
-  font-weight: 600;
-  letter-spacing: .2px;
+  font-size: 16px;
+  font-weight: 400;
+  text-align: center;
 }
 
-/* 主按钮：与 app 里的圆角按钮统一 */
-.pf-v5-c-button.pf-m-primary {
-  border-radius: 9px;
-  background-color: var(--par-accent);
-  font-weight: 500;
-}
-.pf-v5-c-button.pf-m-primary:hover,
-.pf-v5-c-button.pf-m-primary:focus {
-  background-color: var(--par-accent-hover);
+/* ---------- 表单 ---------- */
+
+.pf-v5-c-form__label,
+.pf-v5-c-form__label-text {
+  color: var(--par-text);
+  font-size: 13px;
+  font-weight: 400;
 }
 
-/* 次要按钮（如「返回」「取消」）同样圆角 */
-.pf-v5-c-button:not(.pf-m-primary):not(.pf-m-link) {
-  border-radius: 9px;
+/* 输入框：QQ 邮箱是 44px 高、小圆角、浅灰边框，聚焦时主色描边。
+   前置图标用 background-image 实现——Keycloak 的 login.ftl 里输入框外层
+   没有图标容器，加背景图是唯一不动模板的做法。 */
+.pf-v5-c-form-control,
+input.pf-v5-c-form-control {
+  height: 44px;
+  padding-left: 38px;
+  border: 1px solid var(--par-border);
+  border-radius: 4px;
+  background-color: #ffffff;
+  color: var(--par-text);
+  font-size: 14px;
+  background-repeat: no-repeat;
+  background-position: 12px center;
+  background-size: 16px 16px;
+  transition: border-color .15s, box-shadow .15s;
 }
-
-/* 输入框：圆角 + 更柔和的边框，focus 时用主色描边 */
-.pf-v5-c-form-control {
-  border-radius: 9px;
-  border-color: var(--par-border);
+.pf-v5-c-form-control::placeholder {
+  color: var(--par-placeholder);
+}
+.pf-v5-c-form-control:hover {
+  border-color: var(--par-border-hover);
 }
 .pf-v5-c-form-control:focus,
 .pf-v5-c-form-control:focus-within {
   border-color: var(--par-accent);
-  box-shadow: 0 0 0 3px rgba(77, 107, 254, .14);
+  box-shadow: 0 0 0 2px var(--par-accent-soft);
 }
 
-/* 表单标签与辅助文字 */
-.pf-v5-c-form__label,
-.pf-v5-c-form__label-text {
-  color: var(--par-text);
-  font-weight: 500;
+/* 账号框：人形图标 */
+input#username {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%23909399'%3E%3Cpath d='M12 12a5 5 0 100-10 5 5 0 000 10zm0 2c-4.42 0-8 2.24-8 5v1h16v-1c0-2.76-3.58-5-8-5z'/%3E%3C/svg%3E");
 }
+
+/* 密码框：锁图标；右侧留出「显示密码」按钮的位置 */
+input#password {
+  padding-right: 42px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%23909399'%3E%3Cpath d='M17 9h-1V7a4 4 0 10-8 0v2H7a1 1 0 00-1 1v9a1 1 0 001 1h10a1 1 0 001-1v-9a1 1 0 00-1-1zm-7-2a2 2 0 114 0v2h-4V7z'/%3E%3C/svg%3E");
+}
+
+/* 密码可见性按钮：贴在输入框内右侧 */
+.pf-v5-c-input-group {
+  position: relative;
+}
+.pf-v5-c-button.pf-m-control {
+  border: 0;
+  background: transparent;
+  color: var(--par-muted);
+}
+
+/* ---------- 按钮 ---------- */
+
+/* 主按钮：全宽、44px、小圆角（QQ 邮箱的登录按钮形制） */
+.pf-v5-c-button.pf-m-primary {
+  width: 100%;
+  height: 44px;
+  border-radius: 4px;
+  border: 0;
+  background-color: var(--par-accent);
+  color: #ffffff;
+  font-size: 16px;
+  font-weight: 400;
+  letter-spacing: 2px;
+  transition: background-color .15s, box-shadow .15s;
+}
+.pf-v5-c-button.pf-m-primary:hover,
+.pf-v5-c-button.pf-m-primary:focus {
+  background-color: var(--par-accent-hover);
+  box-shadow: 0 2px 10px rgba(26, 140, 255, .3);
+}
+.pf-v5-c-button.pf-m-primary:disabled {
+  background-color: #b8dcff;
+  color: #ffffff;
+}
+
+/* 次要按钮（返回/取消等） */
+.pf-v5-c-button:not(.pf-m-primary):not(.pf-m-link):not(.pf-m-control) {
+  border-radius: 4px;
+  border-color: var(--par-border);
+  color: var(--par-text);
+}
+
+/* ---------- 选项与链接 ---------- */
+
+/* 「记住登录状态」 */
+.pf-v5-c-check__label,
+label.pf-v5-c-check {
+  color: var(--par-muted);
+  font-size: 13px;
+}
+
+/* 链接（注册新账号 / 忘记密码） */
+a,
+.pf-v5-c-button.pf-m-link {
+  color: var(--par-accent);
+  font-size: 13px;
+}
+a:hover {
+  color: var(--par-accent-hover);
+}
+
 .pf-v5-c-form__helper-text,
 .pf-v5-c-helper-text__item {
   color: var(--par-muted);
 }
 
-/* 「记住我 / 忘记密码」那一行 */
+/* 底部注册引导区 */
 .pf-v5-c-login__main-footer,
 .pf-v5-c-login__main-footer-band {
   color: var(--par-muted);
+  font-size: 13px;
 }
-
-/* 底部「注册」引导区 */
-.pf-v5-c-login__main-footer .kc-social-links,
-.pf-v5-c-login__main-footer-links {
-  border-top: 1px solid var(--par-border);
+.pf-v5-c-login__main-footer-links,
+.kc-social-links {
+  border-top: 1px solid #f0f0f0;
   padding-top: 14px;
-  margin-top: 6px;
+  margin-top: 8px;
+  justify-content: center;
 }
 
-/* 品牌区：Keycloak 默认把 logo 设成指向 keycloak.org 的外链，
-   本项目不需要对外链——隐藏掉，避免用户点了跳到别处。 */
-.pf-v5-c-login__header .kc-logo-text,
-#kc-header-wrapper .kc-logo-text {
-  display: none;
+/* 语言切换下拉：弱化存在感，别抢视线 */
+.pf-v5-c-login__main-header-utilities,
+#kc-locale {
+  opacity: .75;
 }
 
-/* 响应式：窄屏上去掉卡片边框，让内容占满更易读 */
+/* ---------- 响应式：窄屏去掉卡片阴影，内容占满 ---------- */
 @media (max-width: 640px) {
   .pf-v5-c-login__main,
   .card-pf {
-    border: 0;
     box-shadow: none;
     border-radius: 0;
   }
-  html.login-pf,
-  body,
-  .pf-v5-c-login {
-    background: #ffffff;
+  .pf-v5-c-login__container {
+    padding: 0 20px;
   }
 }

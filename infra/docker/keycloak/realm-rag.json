@@ -14,6 +14,9 @@
   "displayName": "permission-aware-rag",
   "displayNameHtml": "permission-aware-rag",
   "loginTheme": "par",
+  "internationalizationEnabled": true,
+  "supportedLocales": ["zh-CN", "en"],
+  "defaultLocale": "zh-CN",
   "accessTokenLifespan": 1800,
   "roles": {
     "realm": [
