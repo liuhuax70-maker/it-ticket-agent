@@ -11,6 +11,9 @@
   "defaultRole": {
     "name": "rag_user"
   },
+  "displayName": "permission-aware-rag",
+  "displayNameHtml": "permission-aware-rag",
+  "loginTheme": "par",
   "accessTokenLifespan": 1800,
   "roles": {
     "realm": [

@@ -1,0 +1,127 @@
+/* permission-aware-rag 登录页视觉覆盖
+ *
+ * 策略：**优先改 PatternFly 5 的 CSS 变量**，而不是逐个选择器重写。
+ * 原因有两个：
+ *   1. 变量是官方扩展点，改它不会漏掉某个状态（hover / focus / disabled / 错误态）；
+ *   2. 逐个重写选择器时，一旦 Keycloak 升级导致类名变化，页面会静默回到默认皮肤，
+ *      而用变量时即使部分失效，也只会退化成"颜色没改"，不会破版。
+ *
+ * 主色与主应用保持一致（app/static/styles.css 的 --accent），
+ * 否则从登录页跳到问答页会有明显的"两个产品"的割裂感。
+ */
+
+:root {
+  --par-accent: #4d6bfe;
+  --par-accent-hover: #3f5bf0;
+  --par-border: #e3e3e8;
+  --par-text: #1f2430;
+  --par-muted: #6b7280;
+
+  /* PatternFly 5 主色：按钮、链接、focus 描边都取它 */
+  --pf-v5-global--primary-color--100: #4d6bfe;
+  --pf-v5-global--primary-color--200: #3f5bf0;
+  --pf-v5-global--link--Color: #4d6bfe;
+  --pf-v5-global--link--Color--hover: #3f5bf0;
+  --pf-v5-global--active-color--100: #4d6bfe;
+  --pf-v5-global--FontFamily--text: -apple-system, BlinkMacSystemFont, "Segoe UI",
+    "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Helvetica Neue", Arial, sans-serif;
+  --pf-v5-global--FontFamily--heading: var(--pf-v5-global--FontFamily--text);
+}
+
+/* 页面底色：浅灰蓝，让白色卡片"浮"起来，而不是贴在纯白上看不出边界 */
+html.login-pf,
+body,
+.pf-v5-c-login {
+  background: #f4f6fb;
+}
+
+/* 卡片：圆角 + 轻阴影，去掉默认的硬边框 */
+.pf-v5-c-login__main,
+.card-pf {
+  background: #ffffff;
+  border: 1px solid var(--par-border);
+  border-radius: 16px;
+  box-shadow: 0 8px 28px rgba(31, 36, 48, .07);
+}
+
+/* 顶部标题区 */
+.pf-v5-c-login .pf-v5-c-title,
+.pf-v5-c-login__main-header .pf-v5-c-title {
+  color: var(--par-text);
+  font-weight: 600;
+  letter-spacing: .2px;
+}
+
+/* 主按钮：与 app 里的圆角按钮统一 */
+.pf-v5-c-button.pf-m-primary {
+  border-radius: 9px;
+  background-color: var(--par-accent);
+  font-weight: 500;
+}
+.pf-v5-c-button.pf-m-primary:hover,
+.pf-v5-c-button.pf-m-primary:focus {
+  background-color: var(--par-accent-hover);
+}
+
+/* 次要按钮（如「返回」「取消」）同样圆角 */
+.pf-v5-c-button:not(.pf-m-primary):not(.pf-m-link) {
+  border-radius: 9px;
+}
+
+/* 输入框：圆角 + 更柔和的边框，focus 时用主色描边 */
+.pf-v5-c-form-control {
+  border-radius: 9px;
+  border-color: var(--par-border);
+}
+.pf-v5-c-form-control:focus,
+.pf-v5-c-form-control:focus-within {
+  border-color: var(--par-accent);
+  box-shadow: 0 0 0 3px rgba(77, 107, 254, .14);
+}
+
+/* 表单标签与辅助文字 */
+.pf-v5-c-form__label,
+.pf-v5-c-form__label-text {
+  color: var(--par-text);
+  font-weight: 500;
+}
+.pf-v5-c-form__helper-text,
+.pf-v5-c-helper-text__item {
+  color: var(--par-muted);
+}
+
+/* 「记住我 / 忘记密码」那一行 */
+.pf-v5-c-login__main-footer,
+.pf-v5-c-login__main-footer-band {
+  color: var(--par-muted);
+}
+
+/* 底部「注册」引导区 */
+.pf-v5-c-login__main-footer .kc-social-links,
+.pf-v5-c-login__main-footer-links {
+  border-top: 1px solid var(--par-border);
+  padding-top: 14px;
+  margin-top: 6px;
+}
+
+/* 品牌区：Keycloak 默认把 logo 设成指向 keycloak.org 的外链，
+   本项目不需要对外链——隐藏掉，避免用户点了跳到别处。 */
+.pf-v5-c-login__header .kc-logo-text,
+#kc-header-wrapper .kc-logo-text {
+  display: none;
+}
+
+/* 响应式：窄屏上去掉卡片边框，让内容占满更易读 */
+@media (max-width: 640px) {
+  .pf-v5-c-login__main,
+  .card-pf {
+    border: 0;
+    box-shadow: none;
+    border-radius: 0;
+  }
+  html.login-pf,
+  body,
+  .pf-v5-c-login {
+    background: #ffffff;
+  }
+}

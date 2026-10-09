@@ -183,6 +183,9 @@ services:
       KC_HOSTNAME_STRICT: "false"
     volumes:
       - ./infra/docker/keycloak/realm-rag.json:/opt/keycloak/data/import/realm-rag.json:ro
+      # 自定义登录主题（继承 keycloak.v2，只做视觉覆盖，见 themes/par/login/theme.properties）。
+      # 挂 /opt/keycloak/themes 而不是复制进镜像：改完重启容器即可生效，不用重建镜像。
+      - ./infra/docker/keycloak/themes:/opt/keycloak/themes:ro
     ports:
       - "${KEYCLOAK_PORT:-8180}:8180"
 
