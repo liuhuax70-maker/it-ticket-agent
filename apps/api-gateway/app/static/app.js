@@ -902,10 +902,9 @@
     var opts = options || {};
     var payload = { query: query };
 
-    // 选了具体模型才下发；留空表示"由网关挑默认模型"。
-    // mode / top_k / temperature 一律不传：由后端按 query 自行决定检索策略。
-    var model = $('modelSelect').value;
-    if (model) payload.model = model;
+    // mode / top_k / temperature / model 一律不传：
+    // 由后端按 query 自行决定检索策略、按部署配置挑选作答模型。
+    // （后端仍支持 ChatRequest.model 逐请求指定，只是 UI 不再暴露。）
 
     // 显式为 false 才下发；不传时后端默认允许读写缓存（「重新生成」需要绕过）
     if (opts.useCache === false) payload.use_cache = false;
@@ -965,11 +964,8 @@
           trace_id: data.trace_id || null,
           timings: data.timings_ms || {}
         });
-        // 不回写 modelSelect：下拉只表达"用户选了什么"，实际生效的模型由消息底部的
-        // meta 展示（见 buildMeta）。回写会造成两个真实故障——
-        // ① 用户选 B 但命中了 A 的缓存时，下拉被改成 A，用户的选择被静默吞掉；
-        // ② 留空（用网关默认/兜底）时首次响应就把下拉钉死，之后每请求都带 model，
-        //    等于把兜底链绕过去。
+        // 注意 message.model 是**服务端实际使用的**模型（可能因缓存命中或兜底链
+        // 落到别的模型上），不等于请求意图。它由消息底部的 meta 展示（见 buildMeta）。
       })
       .catch(function (err) {
         if (err && err.status === 401) {
@@ -1437,7 +1433,8 @@
   }
 
   function wireKnowledge() {
-    $('uploadOpen').addEventListener('click', function () { openModal('uploadModal'); });
+    // 上传入口只剩「知识库」弹窗内那一个（外加输入框的 + ）：
+    // 侧栏原先那个独立的「上传文档」与它是同一动作，删掉避免两个入口打架。
     $('kbUpload').addEventListener('click', function () { openModal('uploadModal'); });
     $('kbOpen').addEventListener('click', function () {
       openModal('kbModal');
@@ -1529,8 +1526,6 @@
       renderAuthState();
       refreshKbCount();
       if (storedToken()) loadKbListIfOpen();
-      // 模型清单依赖登录态（需 chat 权限），放在拿到令牌之后再拉
-      loadModels();
       scheduleRefresh();
     });
   }
@@ -1551,38 +1546,9 @@
     }, Math.max(5000, ttl - 60000));
   }
 
-  // 模型下拉只负责"用户选了什么"，不跟随服务端实际生效的模型变化。
-  // 实际作答的模型显示在每条回答底部的 meta 里。
-  function loadModels() {
-    authFetch('/chat/models')
-      .then(function (r) { return r.ok ? r.json() : null; })
-      .then(function (models) {
-        if (!models || !models.length) return;
-        // 只列对话模型：把 embedding 模型放进下拉是误导，选它做不了任何事
-        var chatModels = models.filter(function (m) {
-          return m.kind === 'chat' && m.available !== false;
-        });
-        if (!chatModels.length) return;
-
-        var select = $('modelSelect');
-        var current = select.value;
-        select.innerHTML = '';
-
-        var def = document.createElement('option');
-        def.value = '';
-        def.textContent = '默认';
-        select.appendChild(def);
-
-        chatModels.forEach(function (m) {
-          var opt = document.createElement('option');
-          opt.value = m.name;
-          opt.textContent = m.provider ? m.name + '（' + m.provider + '）' : m.name;
-          select.appendChild(opt);
-        });
-        select.value = current;
-      })
-      .catch(function () { /* 忽略：保持"默认" */ });
-  }
+  // 模型选择已从 UI 移除：由部署配置决定作答模型，用户不需要（也不应该）
+  // 逐个请求地挑选。后端仍支持 ChatRequest.model，需要时可由其他调用方指定。
+  // 实际作答的模型仍然显示在每条回答底部的 meta 里（见 buildMeta），保留可观测性。
 
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', init);

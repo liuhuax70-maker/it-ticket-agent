@@ -1,11 +1,11 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
 <title>permission-aware-rag</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%234d6bfe'/%3E%3Ctext x='16' y='22' font-family='Arial' font-size='17' font-weight='700' fill='%23fff' text-anchor='middle'%3EP%3C/text%3E%3C/svg%3E" />
-<link rel="stylesheet" href="styles.css?v=17" />
+<link rel="stylesheet" href="styles.css?v=18" />
 </head>
 <body>
 <div class="app">
@@ -23,10 +23,6 @@
     </button>
 
     <div class="kb-actions">
-      <button class="kb-btn" id="uploadOpen" type="button">
-        <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path d="M12 16V4m0 0L8 8m4-4 4 4M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></svg>
-        <span>上传文档</span>
-      </button>
       <button class="kb-btn" id="kbOpen" type="button">
         <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path d="M4 5.5A1.5 1.5 0 0 1 5.5 4H10l2 2h6.5A1.5 1.5 0 0 1 20 7.5v9A1.5 1.5 0 0 1 18.5 18h-13A1.5 1.5 0 0 1 4 16.5v-11Z" fill="none" stroke="currentColor" stroke-width="1.7"/></svg>
         <span>知识库</span>
@@ -60,12 +56,6 @@
         <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
       </button>
       <div class="topbar-title" id="topTitle">新对话</div>
-      <label class="model-picker" title="选择生成模型">
-        <span class="model-label">模型</span>
-        <select id="modelSelect" aria-label="选择生成模型">
-          <option value="">默认</option>
-        </select>
-      </label>
     </header>
 
     <div class="messages" id="messages" role="log" aria-live="polite"></div>
@@ -168,6 +158,6 @@
 
 <div class="toasts" id="toasts" aria-live="polite"></div>
 
-<script src="app.js?v=17"></script>
+<script src="app.js?v=18"></script>
 </body>
 </html>

@@ -222,8 +222,6 @@ button { font: inherit; color: inherit; cursor: pointer; }
   white-space: nowrap;
 }
 
-/* 顶栏模型下拉：药丸外形，与 DeepSeek 的模型选择器一致 */
-.model-picker {
   display: inline-flex; align-items: center; gap: 7px;
   padding: 3px 8px 3px 11px;
   border: 1px solid var(--border);
@@ -234,8 +232,6 @@ button { font: inherit; color: inherit; cursor: pointer; }
   white-space: nowrap;
   max-width: 260px;
 }
-.model-label { flex: 0 0 auto; }
-.model-picker select {
   min-width: 0; max-width: 190px;
   border: 0; background: transparent;
   color: var(--text);
@@ -243,7 +239,6 @@ button { font: inherit; color: inherit; cursor: pointer; }
   cursor: pointer;
   outline: none;
 }
-.model-picker:focus-within { border-color: var(--accent); }
 
 .icon-btn {
   display: grid; place-items: center;
